@@ -1,0 +1,8 @@
+ipyleaflet>=0.17.0
+shinywidgets>=0.2.0
+streamlit>=1.20.0
+pandas
+shiny
+leafmap
+streamlit-anywidget
+pytest
