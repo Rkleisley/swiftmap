@@ -1,65 +1,84 @@
 # swiftmap
 
-`swiftmap` is a Python mapping package designed to **enhance `ipyleaflet` with existing Leaflet addons and make them fully usable in Shiny**. 
+`swiftmap` is a high-performance Python mapping library built on top of `anywidget` and Leaflet JS, optimized for interactive data visualization in **Shiny for Python**.
 
-Rather than reinventing the wheel, `swiftmap` follows an **open-source-first philosophy**: we actively search for and integrate existing Leaflet plugins and addons. If a feature does not exist in the open-source ecosystem, only then do we design and build it by hand.
-
----
-
-## Project Mission & Core Philosophy
-
-1. **Leverage the Leaflet Ecosystem:** The JavaScript Leaflet community has built thousands of rich addons (e.g., grouped layer controls, advanced drawing tools, heatmaps, and routing engines). `swiftmap` bridges these directly into Python.
-2. **First-Class Shiny Integration:** `ipyleaflet` is highly interactive, but utilizing its plugins within reactive frameworks like **Shiny for Python** can be complex. `swiftmap` wraps these addons with state synchronization and event handlers tailored for Shiny (e.g., using `shinywidgets`).
-3. **Open Source First, Custom Second:** 
-   * **Rule 1:** *Always* search for an existing open-source Leaflet addon first.
-   * **Rule 2:** If and only if no suitable open-source addon is found, build the feature by hand (custom Leaflet JS + Python `ipywidgets`/`ipyleaflet` integration).
+It replaces standard Leaflet vector drawing layers with custom **WebGL rendering pipelines**, allowing the map to render millions of data points, complex polylines, and shapes smoothly at 60 FPS.
 
 ---
 
 ## Key Features
 
-*   **Leaflet Addon Wrappers:** Seamlessly wrap existing Leaflet JS plugins into Python classes.
-*   **Reactive Shiny Bindings:** Bidirectional traitlets allow Shiny apps to react to map interactions (clicks, bounds changes, addon events) without full map re-renders.
-*   **Custom Fallback Engine:** A clean developer interface for building custom Leaflet addons from scratch when open-source options are missing.
-*   **Grouped & Customized Controls:** Dynamic layer management, custom legends, and controls synced with Shiny inputs.
+### 1. High-Performance WebGL Pipelines
+*   **Hardware Acceleration:** Overlays (markers, circle markers, polylines, polygons, circles, and GeoJSON shapes) are rendered via WebGL using a customized integration of `Leaflet.glify`.
+*   **Custom Shaders:** Markers use custom GLSL shaders (e.g., a hardware-rendered, anti-aliased pin icon shader with drop-shadow overlays) to ensure beautiful rendering at scale.
+
+### 2. Nested Sidebar Control & Hierarchical Visibility
+*   **Arbitrary Folder Pathing:** Organizes map layers into infinite directory paths (e.g., `layer_group=["Sensor Feeds", category_col, "Active"]`) which are resolved automatically into nested tree-views in the sidebar.
+*   **Group Radio Toggle Support:** Configure specific group paths to display radio buttons instead of checkboxes (e.g., for mutually exclusive basemaps or specific overlay groups).
+*   **Propagated Visibility:** Toggling a folder checkbox automatically turns its nested child layers on and off, with parent visibility states cleanly inherited by WebGL draw passes.
+
+### 3. Top-Down Event Coordination
+*   **Overlapping Priority Picker:** If a marker, polyline, and polygon overlap, mouse clicks and hover events are resolved through a top-down priority transaction queue (Points > Lines > Polygons), ensuring only the topmost layer triggers event callbacks.
+*   **Strict Distance Thresholds:** Uses precise pixel-distance picking thresholds (25px for markers, 12px for circle markers) to eliminate ghost picks or misfires on empty map space.
+
+### 4. Interactive State Synchronization
+*   **Bidirectional Sync:** Automatically tracks and updates map center, zoom level, layer visibilities, and selection events (`clicked_layer_id` and `selected_index`) reactively to Python/Shiny.
+*   **Automatic Data Buffering:** Point/shape coordinates are converted to optimized binary buffers on the Python side for fast serialization to the client widget.
 
 ---
 
 ## Installation
 
 ```bash
-pip install swiftmap
+pip install -e .
 ```
-
-## Developer Workflow: Integrating an Addon
-
-When adding a feature or control to `swiftmap`, always follow these steps:
-
-1. **Search Open Source First:** Check Leaflet's plugin directory or npm for existing packages (e.g., `leaflet-groupedlayercontrol`, `Leaflet.draw`).
-2. **Bridge to Python:** Create a wrapper that subclasses/integrates with `ipyleaflet` and syncs events via Traitlets.
-3. **Optimize for Shiny:** Ensure the addon state is bound to Shiny inputs so developers can access map selections, draw events, and settings reactively.
-4. **Fallback to Custom:** If no addon exists, write clean CSS/JS and bundle it using `ipywidgets`' package infrastructure.
 
 ---
 
-## Quick Example (Shiny Integration)
+## Quick Example
 
 ```python
+import polars as pl
 from shiny import App, ui
 from shinywidgets import output_widget, render_widget
 from swiftmap import Map
 
 app_ui = ui.page_fluid(
-    ui.h2("swiftmap + Shiny"),
-    output_widget("map")
+    ui.h2("Swiftmap WebGL Plot"),
+    output_widget("map_widget")
 )
 
 def server(input, output, session):
     @render_widget
-    def map():
-        # Create map and add enhanced controls/addons
-        m = Map(center=[39.82, -98.57], zoom=4)
-        m.add_layer_control()  # Enhanced grouped layers control
+    def map_widget():
+        # Instantiate map
+        m = Map(center=[36.0, -5.35], zoom=10)
+        
+        # Load sample coordinates
+        df = pl.DataFrame({
+            "lat": [36.01, 36.02, 36.03],
+            "lon": [-5.36, -5.35, -5.34],
+            "name": ["Point A", "Point B", "Point C"],
+            "value": [12.4, 8.2, 15.1],
+            "status": ["Active", "Inactive", "Active"]
+        })
+        
+        # Plot with automatic path grouping
+        m.add_markers(
+            data=df,
+            lat_col="lat",
+            lon_col="lon",
+            name="name",
+            layer_group=["Points", "status"],
+            color="blue"
+        )
+        
+        # Set mutually exclusive radio buttons for the status sub-folders
+        m.group_configs = {
+            "Points/Active": {"multi_select": False},
+            "Points/Inactive": {"multi_select": False}
+        }
+        
         return m
 
 app = App(app_ui, server)

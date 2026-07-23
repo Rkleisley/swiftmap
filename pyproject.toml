@@ -5,14 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "swiftmap"
 version = "0.1.0"
-description = "Enhancing ipyleaflet with existing Leaflet addons for Shiny"
+description = "Enhancing Leaflet maps with high-performance WebGL overlays and hierarchical controls for Shiny"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "ipyleaflet>=0.17.0",
-    "shinywidgets>=0.2.0",
-    "streamlit>=1.20.0",
-    "pandas",
+    "anywidget>=0.4.0",
+    "numpy",
 ]
 
 [project.optional-dependencies]
@@ -21,3 +19,6 @@ dev = [
     "black",
     "isort",
 ]
+
+[tool.setuptools.packages.find]
+include = ["swiftmap*"]
