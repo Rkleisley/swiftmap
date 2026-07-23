@@ -1,4 +1,4 @@
-# 🗺️ swiftmap
+# swiftmap
 
 `swiftmap` is a Python mapping package designed to **enhance `ipyleaflet` with existing Leaflet addons and make them fully usable in Shiny**. 
 
@@ -6,7 +6,7 @@ Rather than reinventing the wheel, `swiftmap` follows an **open-source-first phi
 
 ---
 
-## 🎯 Project Mission & Core Philosophy
+## Project Mission & Core Philosophy
 
 1. **Leverage the Leaflet Ecosystem:** The JavaScript Leaflet community has built thousands of rich addons (e.g., grouped layer controls, advanced drawing tools, heatmaps, and routing engines). `swiftmap` bridges these directly into Python.
 2. **First-Class Shiny Integration:** `ipyleaflet` is highly interactive, but utilizing its plugins within reactive frameworks like **Shiny for Python** can be complex. `swiftmap` wraps these addons with state synchronization and event handlers tailored for Shiny (e.g., using `shinywidgets`).
@@ -16,22 +16,22 @@ Rather than reinventing the wheel, `swiftmap` follows an **open-source-first phi
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-*   🔌 **Leaflet Addon Wrappers:** Seamlessly wrap existing Leaflet JS plugins into Python classes.
-*   ⚡ **Reactive Shiny Bindings:** Bidirectional traitlets allow Shiny apps to react to map interactions (clicks, bounds changes, addon events) without full map re-renders.
-*   🛠️ **Custom Fallback Engine:** A clean developer interface for building custom Leaflet addons from scratch when open-source options are missing.
-*   📦 **Grouped & Customized Controls:** Dynamic layer management, custom legends, and controls synced with Shiny inputs.
+*   **Leaflet Addon Wrappers:** Seamlessly wrap existing Leaflet JS plugins into Python classes.
+*   **Reactive Shiny Bindings:** Bidirectional traitlets allow Shiny apps to react to map interactions (clicks, bounds changes, addon events) without full map re-renders.
+*   **Custom Fallback Engine:** A clean developer interface for building custom Leaflet addons from scratch when open-source options are missing.
+*   **Grouped & Customized Controls:** Dynamic layer management, custom legends, and controls synced with Shiny inputs.
 
 ---
 
-## 💻 Installation
+## Installation
 
 ```bash
 pip install swiftmap
 ```
 
-## 🛠️ Developer Workflow: Integrating an Addon
+## Developer Workflow: Integrating an Addon
 
 When adding a feature or control to `swiftmap`, always follow these steps:
 
@@ -42,7 +42,7 @@ When adding a feature or control to `swiftmap`, always follow these steps:
 
 ---
 
-## 📖 Quick Example (Shiny Integration)
+## Quick Example (Shiny Integration)
 
 ```python
 from shiny import App, ui
