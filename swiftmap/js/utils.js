@@ -8,8 +8,13 @@ export function loadCSS(id, url) {
     }
 }
 
+var activeLoaders = typeof activeLoaders !== "undefined" ? activeLoaders : {};
+
 export function loadJS(id, url) {
-    return new Promise((resolve, reject) => {
+    if (activeLoaders[id]) {
+        return activeLoaders[id];
+    }
+    const promise = new Promise((resolve, reject) => {
         if (document.getElementById(id)) {
             resolve();
             return;
@@ -21,9 +26,11 @@ export function loadJS(id, url) {
         script.onerror = () => reject(new Error(`Failed to load script: ${url}`));
         document.head.appendChild(script);
     });
+    activeLoaders[id] = promise;
+    return promise;
 }
 
-const COLOR_NAMES = {
+var COLOR_NAMES = typeof COLOR_NAMES !== "undefined" ? COLOR_NAMES : {
     red: { r: 0.9, g: 0.1, b: 0.15 },
     green: { r: 0.1, g: 0.8, b: 0.2 },
     blue: { r: 0.2, g: 0.5, b: 1.0 },

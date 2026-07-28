@@ -43,7 +43,7 @@ def _load_esm():
     utils_clean = utils_code.replace("export function ", "function ")
     sidebar_clean = sidebar_code.replace("export function ", "function ")
     
-    shaders_clean = shaders_code.replace("export const ", "const ")
+    shaders_clean = shaders_code.replace("export var ", "var ").replace("export const ", "var ")
     for line in shaders_clean.splitlines():
         if "import " in line:
             shaders_clean = shaders_clean.replace(line, "")

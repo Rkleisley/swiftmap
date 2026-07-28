@@ -108,23 +108,32 @@ class Map(anywidget.AnyWidget):
         self.group_configs = new_configs
         return self
 
-    def remove_layer(self, name_or_id: Any) -> "Map":
-        """Removes a layer from the map by name or ID."""
-        if isinstance(name_or_id, dict):
-            target_id = name_or_id.get("id")
-            target_name = name_or_id.get("name")
-        else:
-            target_id = getattr(name_or_id, "id", name_or_id)
-            target_name = getattr(name_or_id, "name", name_or_id)
-        
+    def remove_layers(self, identifiers: List[Any]) -> "Map":
+        """Removes multiple layers from the map by name or ID in a single atomic transaction."""
+        target_ids = set()
+        target_names = set()
+        for item in identifiers:
+            if isinstance(item, dict):
+                target_ids.add(item.get("id"))
+                target_names.add(item.get("name"))
+            else:
+                target_ids.add(getattr(item, "id", item))
+                target_names.add(getattr(item, "name", item))
+                
         self.layers = [
             l for l in self.layers
-            if l.get("id") != target_id and l.get("name") != target_name
+            if l.get("id") not in target_ids and l.get("name") not in target_names
         ]
-        # Clean up any associated binary buffer
-        if target_id in self.coordinate_buffers:
-            del self.coordinate_buffers[target_id]
+        
+        # Clean up associated binary buffers
+        for tid in target_ids:
+            if tid in self.coordinate_buffers:
+                del self.coordinate_buffers[tid]
         return self
+
+    def remove_layer(self, name_or_id: Any) -> "Map":
+        """Removes a layer from the map by name or ID."""
+        return self.remove_layers([name_or_id])
 
     def fit_bounds(self, bounds: List[List[float]]) -> "Map":
         """Sets the center/zoom viewport in the client to fit the given bounds."""
@@ -181,6 +190,43 @@ class Map(anywidget.AnyWidget):
             self.layers = updated_layers
         return self
 
+    def set_layers_visibility(self, visibility_map: Dict[Any, bool]) -> "Map":
+        """Sets visibility for multiple layers at once in a single atomic transaction."""
+        if not visibility_map:
+            return self
+            
+        lookup = {}
+        for identifier, visible in visibility_map.items():
+            target_id = getattr(identifier, "id", identifier)
+            target_name = getattr(identifier, "name", identifier)
+            lookup[target_id] = visible
+            lookup[target_name] = visible
+
+        updated_layers = []
+        changed = False
+        
+        for l in self.layers:
+            lid = l.get("id")
+            lname = l.get("name")
+            
+            target_visible = None
+            if lid in lookup:
+                target_visible = lookup[lid]
+            elif lname in lookup:
+                target_visible = lookup[lname]
+                
+            if target_visible is not None and l.get("visible") != target_visible:
+                from ._infra import LayerConfig
+                new_dict = {**l.to_dict(), "visible": target_visible}
+                updated_layers.append(LayerConfig(**new_dict))
+                changed = True
+            else:
+                updated_layers.append(l)
+                
+        if changed:
+            self.layers = updated_layers
+        return self
+
     def set_layer_visibility(self, identifier: Union[str, Any], visible: bool, name: Optional[str] = None) -> "Map":
         """Sets the visibility of a layer and synchronizes the change to the client."""
         return self.update_layer(identifier, name=name, visible=visible)
@@ -189,3 +235,7 @@ class Map(anywidget.AnyWidget):
         """Manually synchronizes the map state and forces a render on the frontend."""
         self.sync_trigger += 1
         return self
+
+    def batch(self):
+        """Context manager to batch multiple map operations into a single WebSocket sync message."""
+        return self.hold_trait_notifications()

@@ -1,20 +1,41 @@
 import { loadCSS, loadJS } from "./utils.js";
-import { renderSidebarControls } from "./sidebar.js";
+import { renderSidebarControls, normalizeRadioLayers } from "./sidebar.js";
 import { renderLayer, renderMergedGlLayer } from "./layers.js";
 
 export default {
     async render({ model, el }) {
-        // Intercept console.error, console.warn, and window.onerror for debugging and warning cleanup
         const originalError = console.error;
+        const originalWarn = console.warn;
+
+        // Helper to safely write back to Python only if the widget view is active and attached
+        function safeSetAndSave(key, value) {
+            if (model.comm && document.body.contains(el)) {
+                try {
+                    model.set(key, value);
+                    model.save_changes();
+                } catch (e) {
+                    originalWarn.call(console, "[SwiftMap] Suppressed sync write error:", e);
+                }
+            }
+        }
+
+        function safeSaveChanges() {
+            if (model.comm && document.body.contains(el)) {
+                try {
+                    model.save_changes();
+                } catch (e) {
+                    originalWarn.call(console, "[SwiftMap] Suppressed sync save error:", e);
+                }
+            }
+        }
+
         console.error = function(...args) {
             originalError.apply(console, args);
             const logs = model.get("js_console_logs") || [];
             logs.push("CONSOLE.ERROR: " + args.map(a => String(a)).join(" "));
-            model.set("js_console_logs", [...logs]);
-            model.save_changes();
+            safeSetAndSave("js_console_logs", [...logs]);
         };
         
-        const originalWarn = console.warn;
         let loggedReprojected = false;
         console.warn = function(...args) {
             const msg = args.map(a => String(a)).join(" ");
@@ -27,8 +48,7 @@ export default {
                     
                     const logs = model.get("js_console_logs") || [];
                     logs.push(cleanMsg);
-                    model.set("js_console_logs", [...logs]);
-                    model.save_changes();
+                    safeSetAndSave("js_console_logs", [...logs]);
                 }
                 return; // suppress duplicate console warnings
             }
@@ -38,8 +58,7 @@ export default {
         window.onerror = function(message, source, lineno, colno, error) {
             const logs = model.get("js_console_logs") || [];
             logs.push(`WINDOW.ONERROR: ${message} at ${source}:${lineno}:${colno}`);
-            model.set("js_console_logs", [...logs]);
-            model.save_changes();
+            safeSetAndSave("js_console_logs", [...logs]);
         };
 
         // Load CSS and Leaflet libraries (including WebGL glify)
@@ -80,10 +99,12 @@ export default {
 
         const activeTileLayers = {};
         const activeOverlayLayers = {};
-        let activeSharedCircleMarkersGlLayer = null;
-        let activeSharedMarkersGlLayer = null;
-        let activeSharedPolylinesGlLayer = null;
-        let activeSharedPolygonsGlLayer = null;
+        const glStates = {
+            circle_markers: { layer: null, ids: "", meta: "" },
+            markers: { layer: null, ids: "", meta: "" },
+            polyline: { layer: null, ids: "", meta: "" },
+            polygon: { layer: null, ids: "", meta: "" }
+        };
 
         // Sidebar Layers Control UI
         const sidebar = document.createElement("div");
@@ -133,8 +154,18 @@ export default {
         }
 
         async function syncMapState() {
+            console.time("[Performance] syncMapState Total");
             const layers = model.get("layers") || [];
+            const groupConfigs = model.get("group_configs") || {};
             const coordinateBuffers = model.get("coordinate_buffers") || {};
+
+            // Enforce mutually exclusive radio group visibility before collecting or rendering WebGL layers
+            const radioChanged = normalizeRadioLayers(layers, groupConfigs);
+            if (radioChanged && model.comm && document.body.contains(el)) {
+                model.set("layers", [...layers]);
+                model.set("group_configs", groupConfigs);
+                model.save_changes();
+            }
 
             logoDiv.style.display = model.get("show_logo") ? "block" : "none";
 
@@ -143,8 +174,6 @@ export default {
             const webglMarkerLayers = [];
             const webglPolylineLayers = [];
             const webglPolygonLayers = [];
-
-            const groupConfigs = model.get("group_configs") || {};
 
             function isLayerEffectiveVisible(l) {
                 if (l.visible === false) return false;
@@ -324,85 +353,50 @@ export default {
                 }
             }
 
-            // Render/update merged WebGL circle markers
-            if (webglCircleMarkerLayers.length > 0) {
-                if (activeSharedCircleMarkersGlLayer) {
-                    activeSharedCircleMarkersGlLayer.remove();
-                }
-                activeSharedCircleMarkersGlLayer = await renderMergedGlLayer(
-                    map,
-                    "circle_markers",
-                    webglCircleMarkerLayers,
-                    coordinateBuffers,
-                    model
-                );
-            } else {
-                if (activeSharedCircleMarkersGlLayer) {
-                    activeSharedCircleMarkersGlLayer.remove();
-                    activeSharedCircleMarkersGlLayer = null;
+            // Helper to sync WebGL layer states and rebuild only if changed
+            async function syncGlLayer(type, visibleLayers) {
+                const idsString = visibleLayers.map(l => l.id).sort().join(",");
+                const metaString = JSON.stringify(visibleLayers.map(l => ({
+                    id: l.id,
+                    color: l.color,
+                    radius: l.radius,
+                    weight: l.weight,
+                    opacity: l.opacity,
+                    fillOpacity: l.fillOpacity,
+                    bufLen: coordinateBuffers[l.id]?.byteLength || 0,
+                    locLen: l.locations?.length || 0,
+                    geojson: l.type === "geojson" ? JSON.stringify(l.geojson) : null
+                })));
+
+                const state = glStates[type];
+                const stateChanged = state.ids !== idsString || state.meta !== metaString;
+
+                if (stateChanged) {
+                    if (state.layer) {
+                        state.layer.remove();
+                    }
+                    if (visibleLayers.length > 0) {
+                        state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, model);
+                        if (state.layer) {
+                            state.layer.addTo(map);
+                        }
+                    } else {
+                        state.layer = null;
+                    }
+                    state.ids = idsString;
+                    state.meta = metaString;
                 }
             }
 
-            // Render/update merged WebGL markers
-            if (webglMarkerLayers.length > 0) {
-                if (activeSharedMarkersGlLayer) {
-                    activeSharedMarkersGlLayer.remove();
-                }
-                activeSharedMarkersGlLayer = await renderMergedGlLayer(
-                    map,
-                    "markers",
-                    webglMarkerLayers,
-                    coordinateBuffers,
-                    model
-                );
-            } else {
-                if (activeSharedMarkersGlLayer) {
-                    activeSharedMarkersGlLayer.remove();
-                    activeSharedMarkersGlLayer = null;
-                }
-            }
-
-            // Render/update merged WebGL polylines
-            if (webglPolylineLayers.length > 0) {
-                if (activeSharedPolylinesGlLayer) {
-                    activeSharedPolylinesGlLayer.remove();
-                }
-                activeSharedPolylinesGlLayer = await renderMergedGlLayer(
-                    map,
-                    "polyline",
-                    webglPolylineLayers,
-                    coordinateBuffers,
-                    model
-                );
-            } else {
-                if (activeSharedPolylinesGlLayer) {
-                    activeSharedPolylinesGlLayer.remove();
-                    activeSharedPolylinesGlLayer = null;
-                }
-            }
-
-            // Render/update merged WebGL polygons/circles
-            if (webglPolygonLayers.length > 0) {
-                if (activeSharedPolygonsGlLayer) {
-                    activeSharedPolygonsGlLayer.remove();
-                }
-                activeSharedPolygonsGlLayer = await renderMergedGlLayer(
-                    map,
-                    "polygon",
-                    webglPolygonLayers,
-                    coordinateBuffers,
-                    model
-                );
-            } else {
-                if (activeSharedPolygonsGlLayer) {
-                    activeSharedPolygonsGlLayer.remove();
-                    activeSharedPolygonsGlLayer = null;
-                }
-            }
+            await syncGlLayer("circle_markers", webglCircleMarkerLayers);
+            await syncGlLayer("markers", webglMarkerLayers);
+            await syncGlLayer("polyline", webglPolylineLayers);
+            await syncGlLayer("polygon", webglPolygonLayers);
 
             renderSidebarControls(sidebar, layers, model, map, () => {
                 performSync();
             });
+            console.timeEnd("[Performance] syncMapState Total");
         }
 
         let isUpdatingCenterFromMap = false;
@@ -433,7 +427,7 @@ export default {
                     model.set("zoom", currentZoom);
                 }
                 if (centerChanged || zoomChanged) {
-                    model.save_changes();
+                    safeSaveChanges();
                 }
             } catch (err) {
                 console.error("Error in moveend handler:", err);

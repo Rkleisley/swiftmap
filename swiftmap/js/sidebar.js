@@ -1,4 +1,4 @@
-const collapsedPaths = {}; // Stores collapsed state: path -> boolean
+var collapsedPaths = typeof collapsedPaths !== "undefined" ? collapsedPaths : {}; // Stores collapsed state: path -> boolean
 
 function getLayerBounds(l, coordinateBuffers) {
     if (!l) return null;
@@ -93,6 +93,77 @@ function getLayerBounds(l, coordinateBuffers) {
     return null;
 }
 
+export function normalizeRadioLayers(layers, groupConfigs) {
+    const tree = { name: "Root", path: "", children: {}, layers: [], isGroup: true };
+    if (!groupConfigs[""]) {
+        groupConfigs[""] = { multi_select: true, visible: true };
+    }
+    layers.forEach(l => {
+        const pathStr = l.layer_group || "Layers";
+        const parts = pathStr.split("/");
+        let curr = tree;
+        let runningPath = "";
+        parts.forEach(part => {
+            runningPath = runningPath ? `${runningPath}/${part}` : part;
+            if (!curr.children[part]) {
+                curr.children[part] = {
+                    name: part,
+                    path: runningPath,
+                    children: {},
+                    layers: [],
+                    isGroup: true
+                };
+            }
+            curr = curr.children[part];
+        });
+        curr.layers.push(l);
+    });
+
+    let modelNeedsUpdate = false;
+    function enforceRadioToggles(node) {
+        const conf = groupConfigs[node.path] || { multi_select: true };
+        const isRadioGroup = conf.multi_select === false;
+        if (isRadioGroup) {
+            let foundActive = false;
+            Object.keys(node.children).forEach(key => {
+                const childGroup = node.children[key];
+                if (!groupConfigs[childGroup.path]) {
+                    groupConfigs[childGroup.path] = { visible: true, multi_select: true };
+                }
+                const isVisible = groupConfigs[childGroup.path].visible !== false;
+                if (isVisible) {
+                    if (foundActive) {
+                        groupConfigs[childGroup.path].visible = false;
+                        collapsedPaths[childGroup.path] = true;
+                        modelNeedsUpdate = true;
+                    } else {
+                        foundActive = true;
+                        collapsedPaths[childGroup.path] = false;
+                    }
+                } else {
+                    collapsedPaths[childGroup.path] = true;
+                }
+            });
+            node.layers.forEach(lyr => {
+                const isVisible = lyr.visible !== false;
+                if (isVisible) {
+                    if (foundActive) {
+                        lyr.visible = false;
+                        modelNeedsUpdate = true;
+                    } else {
+                        foundActive = true;
+                    }
+                }
+            });
+        }
+        Object.keys(node.children).forEach(key => {
+            enforceRadioToggles(node.children[key]);
+        });
+    }
+    enforceRadioToggles(tree);
+    return modelNeedsUpdate;
+}
+
 export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle) {
     sidebar.innerHTML = "<b style='font-size: 13px; border-bottom: 2px solid #eee; padding-bottom: 4px; display: block; margin-bottom: 8px;'>Layers Control</b>";
     
@@ -128,21 +199,22 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
     });
 
     // 2. Recursive function to render a tree node
-    function renderNode(node, parentEl, depth, parentNode) {
+    function renderNode(node, parentEl, depth, parentNode, parentEffectiveVisible) {
+
         if (node.path === "") {
             // Render root's child groups and child layers directly without header
             Object.keys(node.children).forEach(key => {
-                renderNode(node.children[key], parentEl, depth, node);
+                renderNode(node.children[key], parentEl, depth, node, true);
             });
             node.layers.forEach(lyr => {
-                renderNode(lyr, parentEl, depth, node);
+                renderNode(lyr, parentEl, depth, node, true);
             });
             return;
         }
 
         const isGroup = node.isGroup === true;
         const path = isGroup ? node.path : null;
-        const name = isGroup ? node.name : node.name;
+        const name = node.name;
         const id = isGroup ? null : node.id;
 
         // Determine selection type (checkbox vs radio) based on parent's multi_select config
@@ -153,6 +225,14 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
         const nodeDiv = document.createElement("div");
         nodeDiv.style.marginBottom = "4px";
 
+        let selfVisible = true;
+        if (isGroup) {
+            selfVisible = path === "Basemaps" ? true : (groupConfigs[path]?.visible !== false);
+        } else {
+            selfVisible = node.visible !== false;
+        }
+        const selfEffectiveVisible = parentEffectiveVisible && selfVisible;
+
         const headerDiv = document.createElement("div");
         headerDiv.style.display = "flex";
         headerDiv.style.alignItems = "center";
@@ -160,6 +240,11 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
         headerDiv.style.userSelect = "none";
         headerDiv.style.webkitUserSelect = "none";
         headerDiv.style.fontSize = "12px";
+        
+        if (!parentEffectiveVisible) {
+            headerDiv.style.opacity = "0.5";
+            headerDiv.style.color = "#888";
+        }
 
         // Toggle Expand/Collapse arrow
         let toggleEl = null;
@@ -229,10 +314,10 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
 
             // Render sub-groups and layers recursively
             Object.keys(node.children).forEach(key => {
-                renderNode(node.children[key], childrenDiv, depth + 1, node);
+                renderNode(node.children[key], childrenDiv, depth + 1, node, selfEffectiveVisible);
             });
             node.layers.forEach(lyr => {
-                renderNode(lyr, childrenDiv, depth + 1, node);
+                renderNode(lyr, childrenDiv, depth + 1, node, selfEffectiveVisible);
             });
 
             nodeDiv.appendChild(childrenDiv);
@@ -287,6 +372,7 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
                             ...groupConfigs[sibGroup.path], 
                             visible: active 
                         };
+                        collapsedPaths[sibGroup.path] = !active;
                     });
                     parentNode.layers.forEach(sibLyr => {
                         const active = sibLyr.id === id;
@@ -304,6 +390,7 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
                             ...groupConfigs[path], 
                             visible: isChecked 
                         };
+                        collapsedPaths[path] = !isChecked;
                     } else {
                         updatedLayers = updatedLayers.map(origLayer => {
                             if (origLayer.id === id) {
@@ -335,5 +422,5 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
     }
 
     // Render tree from root node
-    renderNode(tree, sidebar, 0, null);
+    renderNode(tree, sidebar, 0, null, true);
 }

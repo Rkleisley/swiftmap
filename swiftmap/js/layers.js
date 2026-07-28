@@ -137,9 +137,11 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             if (feature && feature.properties && feature.properties.layer) {
                                 const layer = feature.properties.layer;
                                 bindPopup(map, e.latlng, layer.properties, layer);
-                                model.set("clicked_layer_id", layer.id);
-                                model.set("selected_index", 0);
-                                model.save_changes();
+                                if (model.comm) {
+                                    model.set("clicked_layer_id", layer.id);
+                                    model.set("selected_index", 0);
+                                    model.save_changes();
+                                }
                             }
                         });
                     },
@@ -257,9 +259,11 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             if (feature && feature.properties && feature.properties.layer) {
                                 const layer = feature.properties.layer;
                                 bindPopup(map, e.latlng, layer.properties, layer);
-                                model.set("clicked_layer_id", layer.id);
-                                model.set("selected_index", 0);
-                                model.save_changes();
+                                if (model.comm) {
+                                    model.set("clicked_layer_id", layer.id);
+                                    model.set("selected_index", 0);
+                                    model.save_changes();
+                                }
                             }
                         });
                     },
@@ -386,9 +390,11 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             const originalIndex = info.originalIndex;
                             const props = getIndexedProperties(layer.properties, originalIndex);
                             bindPopup(map, point, props, layer);
-                            model.set("clicked_layer_id", layer.id);
-                            model.set("selected_index", originalIndex);
-                            model.save_changes();
+                            if (model.comm) {
+                                model.set("clicked_layer_id", layer.id);
+                                model.set("selected_index", originalIndex);
+                                model.save_changes();
+                            }
                         }
                     });
                 },
