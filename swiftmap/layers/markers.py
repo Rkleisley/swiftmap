@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional, Any
-from .._parser import _parse_coordinates
+from ..parsers.points import parse_points as _parse_coordinates
 
 def add_markers(
     self,

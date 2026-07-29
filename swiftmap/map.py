@@ -13,6 +13,7 @@ from .layers.markers import add_markers
 from .layers.polyline import add_polyline
 from .layers.polygon import add_polygon
 from .layers.geojson import add_geojson
+from .layers.geostructures import add_geostructures
 from .layers.circle import add_circle
 
 def _layers_from_json(value, widget):
@@ -31,6 +32,7 @@ class Map(anywidget.AnyWidget):
     add_polyline = add_polyline
     add_polygon = add_polygon
     add_geojson = add_geojson
+    add_geostructures = add_geostructures
     add_circle = add_circle
 
     # Synchronized traits
@@ -82,6 +84,18 @@ class Map(anywidget.AnyWidget):
         else:
             self.add_basemap("Open Street Map", layer_group="Basemaps", group_multi_select=False, visible=True)
             self.add_basemap("Dark Matter", layer_group="Basemaps", group_multi_select=False, visible=False)
+
+    @property
+    def legend_html(self) -> str:
+        """Returns HTML string representation of legend for active map layers."""
+        if not self.show_legend:
+            return ""
+        items = []
+        for l in self.layers:
+            name = l.get("name", "Layer")
+            color = l.get("color", "#3388ff")
+            items.append(f"<div><span style='background:{color};width:10px;height:10px;display:inline-block;margin-right:5px;'></span>{name}</div>")
+        return "".join(items)
 
     def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optional[str] = None, group_multi_select: Optional[bool] = None) -> "Map":
         """Adds a layer or configuration metadata config directly to the map's layers list."""

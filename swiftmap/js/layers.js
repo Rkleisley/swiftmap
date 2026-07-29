@@ -61,7 +61,7 @@ export async function renderLayer(map, layer, coordBuffer, model) {
         const group = L.layerGroup();
         const coordinateBuffers = model.get("coordinate_buffers") || {};
         for (const sub of layer.layers) {
-            if (sub.type === "circle_markers" || sub.type === "markers" || sub.type === "polyline" || sub.type === "polygon" || sub.type === "circle" || sub.type === "geojson") {
+            if (sub.type === "circle_markers" || sub.type === "markers" || sub.type === "polyline" || sub.type === "polygon" || sub.type === "circle") {
                 continue;
             }
             const instance = await renderLayer(map, sub, coordinateBuffers[sub.id], model);

@@ -56,8 +56,8 @@ def test_add_geojson():
     m.add_geojson(data, name="test_geojson")
     layer = m.layers[-1]
     assert layer.name == "test_geojson"
-    assert layer.type == "geojson"
-    assert layer.geojson == data
+    assert layer.type == "markers"
+    assert layer.id in m.coordinate_buffers
 
 def test_add_polyline_and_polygon():
     m = Map()
@@ -136,13 +136,13 @@ def test_markers_bounds():
     layer2 = m.layers[-1]
     assert layer2.bounds == [[5.0, 15.0], [25.0, 35.0]]
 
-    # Test empty markers
+    # Test empty markers (should not append a layer when empty)
+    initial_count = len(m.layers)
     m.add_markers(
         data=[],
         name="Empty Markers"
     )
-    layer3 = m.layers[-1]
-    assert layer3.bounds is None
+    assert len(m.layers) == initial_count
 
 def test_map_crs():
     m = Map()

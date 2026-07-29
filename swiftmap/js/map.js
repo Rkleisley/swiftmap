@@ -202,76 +202,7 @@ export default {
                 
                 if (!isSubLayer && l.visible === false) return;
 
-                if (l.type === "geojson" && l.geojson) {
-                    const features = [];
-                    if (l.geojson.type === "FeatureCollection") {
-                        features.push(...(l.geojson.features || []));
-                    } else if (l.geojson.type === "Feature") {
-                        features.push(l.geojson);
-                    } else if (l.geojson.type === "Polygon" || l.geojson.type === "MultiPolygon" || l.geojson.type === "LineString" || l.geojson.type === "Point" || l.geojson.type === "MultiPoint") {
-                        features.push({ geometry: l.geojson, properties: {} });
-                    }
-                    
-                    features.forEach(f => {
-                        const geom = f.geometry;
-                        if (!geom) return;
-                        
-                        if (geom.type === "Polygon") {
-                            const locations = geom.coordinates[0].map(c => [c[1], c[0]]);
-                            webglPolygonLayers.push({
-                                ...l,
-                                type: "polygon",
-                                locations: locations,
-                                properties: f.properties || {}
-                            });
-                        } else if (geom.type === "MultiPolygon") {
-                            geom.coordinates.forEach(polyCoords => {
-                                const locations = polyCoords[0].map(c => [c[1], c[0]]);
-                                webglPolygonLayers.push({
-                                    ...l,
-                                    type: "polygon",
-                                    locations: locations,
-                                    properties: f.properties || {}
-                                });
-                            });
-                        } else if (geom.type === "LineString") {
-                            const locations = geom.coordinates.map(c => [c[1], c[0]]);
-                            webglPolylineLayers.push({
-                                ...l,
-                                type: "polyline",
-                                locations: locations,
-                                properties: f.properties || {}
-                            });
-                        } else if (geom.type === "MultiLineString") {
-                            geom.coordinates.forEach(lineCoords => {
-                                const locations = lineCoords.map(c => [c[1], c[0]]);
-                                webglPolylineLayers.push({
-                                    ...l,
-                                    type: "polyline",
-                                    locations: locations,
-                                    properties: f.properties || {}
-                                });
-                            });
-                        } else if (geom.type === "Point") {
-                            webglMarkerLayers.push({
-                                ...l,
-                                type: "markers",
-                                location: [geom.coordinates[1], geom.coordinates[0]],
-                                properties: f.properties || {}
-                            });
-                        } else if (geom.type === "MultiPoint") {
-                            geom.coordinates.forEach(ptCoords => {
-                                webglMarkerLayers.push({
-                                    ...l,
-                                    type: "markers",
-                                    location: [ptCoords[1], ptCoords[0]],
-                                    properties: f.properties || {}
-                                });
-                            });
-                        }
-                    });
-                    return;
-                }
+
                 
                 if (l.type === "circle_markers") {
                     webglCircleMarkerLayers.push(l);
@@ -364,8 +295,7 @@ export default {
                     opacity: l.opacity,
                     fillOpacity: l.fillOpacity,
                     bufLen: coordinateBuffers[l.id]?.byteLength || 0,
-                    locLen: l.locations?.length || 0,
-                    geojson: l.type === "geojson" ? JSON.stringify(l.geojson) : null
+                    locLen: l.locations?.length || 0
                 })));
 
                 const state = glStates[type];

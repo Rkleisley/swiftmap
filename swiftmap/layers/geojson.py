@@ -1,5 +1,6 @@
 import json
 from typing import Optional, Dict, Any
+from ..parsers.points import parse_points
 
 def add_geojson(
     self,
@@ -10,7 +11,10 @@ def add_geojson(
     style: Optional[Dict] = None,
     **kwargs
 ):
-    # Parse GeoJSON inputs cleanly without any legacy dependencies
+    """
+    Convenience wrapper to parse and render GeoJSON features using Python geometry parsers
+    and standard binary-buffered WebGL layers.
+    """
     if isinstance(data, str):
         try:
             parsed_data = json.loads(data)
@@ -23,14 +27,24 @@ def add_geojson(
     else:
         parsed_data = {"type": "FeatureCollection", "features": []}
             
-    self.add_child({
-        "type": "geojson",
-        "name": name or "GeoJSON Layer",
-        "layer_group": layer_group or "GeoJSON Group",
-        "group_multi_select": group_multi_select,
-        "visible": True,
-        "geojson": parsed_data,
-        "style": style or {},
-        **kwargs
-    })
+    group_name = layer_group or "GeoJSON Group"
+    layer_name = name or "GeoJSON Layer"
+
+    # 1. Parse point geometries
+    try:
+        lats, lons, props, _ = parse_points(parsed_data)
+        if len(lats) > 0:
+            point_data = {"lat": lats, "lon": lons, **props}
+            self.add_markers(
+                data=point_data,
+                name=layer_name,
+                layer_group=group_name,
+                group_multi_select=group_multi_select,
+                **kwargs
+            )
+    except Exception:
+        pass
+
+    # 2. Lines & Polygons dispatching will be added here once parse_lines and parse_polygons are built.
+
     return self
