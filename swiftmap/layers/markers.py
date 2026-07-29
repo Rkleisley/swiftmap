@@ -11,7 +11,45 @@ def add_markers(
     layer_group: Optional[str] = None,
     group_multi_select: Optional[bool] = None,
     **kwargs
-):
+) -> "Map":
+    """
+    Adds hardware-accelerated WebGL pin icon markers to the map.
+
+    Uses a custom GLSL fragment shader (hardware-rendered, anti-aliased pin icon 
+    with drop-shadow overlays) capable of rendering hundreds of thousands of markers at 60 FPS.
+
+    Parameters
+    ----------
+    data : Any
+        Input dataset (Pandas/Polars DataFrame, GeoPandas, GeoJSON, GeoStructures, or list of dicts/coords).
+    lat_col : str, optional
+        Column name for latitude coordinates. Auto-detected if omitted.
+    lon_col : str, optional
+        Column name for longitude coordinates. Auto-detected if omitted.
+    name : str, optional
+        Layer name displayed in sidebar control. Can refer to a column name in `data` for dynamic naming.
+    layer_group : str or list of str, optional
+        Directory path string (e.g., "Sensors/Active") or list of column names to dynamically
+        group points into hierarchical sidebar folders.
+    group_multi_select : bool, optional
+        If False, configures the parent layer group to act as mutually exclusive radio buttons.
+    **kwargs
+        Additional attributes:
+        - color : str, default 'red' - Pin icon color.
+        - popup : bool or dict, default True - Enables popups on click.
+        - tooltip : bool or dict, default True - Enables tooltips on hover.
+
+    Returns
+    -------
+    Map
+        Self reference for method chaining.
+
+    Examples
+    --------
+    >>> m = Map()
+    >>> df = pd.DataFrame({"lat": [34.05, 37.77], "lon": [-118.24, -122.41], "city": ["LA", "SF"]})
+    >>> m.add_markers(df, name="California Cities", color="red")
+    """
     group_multi_select = kwargs.pop("multi_select", group_multi_select)
 
     # 1. Parse all coordinates and properties first

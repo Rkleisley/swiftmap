@@ -57,8 +57,41 @@ BASEMAPS = {
     }
 }
 
-def add_basemap(self, name: str, layer_group: str = "Basemaps", group_multi_select: Optional[bool] = None, visible: bool = False, **kwargs):
-    """Adds a basemap configuration layer with URL metadata resolved in Python."""
+def add_basemap(
+    self,
+    name: str,
+    layer_group: str = "Basemaps",
+    group_multi_select: Optional[bool] = None,
+    visible: bool = False,
+    **kwargs
+) -> "Map":
+    """
+    Adds a tile basemap configuration layer to the map.
+
+    Parameters
+    ----------
+    name : str
+        Preset basemap name ('OpenStreetMap', 'Dark Matter', 'Positron', 'Esri WGS84')
+        or a custom tile URL template (e.g. 'https://{s}.tile.../{z}/{x}/{y}.png').
+    layer_group : str, default 'Basemaps'
+        Folder name in sidebar controls.
+    group_multi_select : bool, optional
+        If False, configures the basemap group as mutually exclusive radio buttons (default for Basemaps).
+    visible : bool, default False
+        Initial visibility state of the basemap.
+    **kwargs
+        Custom tile attributes (attribution, max_zoom, max_native_zoom).
+
+    Returns
+    -------
+    Map
+        Self reference for method chaining.
+
+    Examples
+    --------
+    >>> m = Map()
+    >>> m.add_basemap("Dark Matter", visible=True)
+    """
     info = BASEMAPS.get(name)
     if info:
         url = info["url"]

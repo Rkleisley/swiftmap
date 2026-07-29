@@ -37,6 +37,13 @@ def is_geostructures(data: Any) -> bool:
     except ImportError:
         return False
 
+def is_geopandas_dataframe(data: Any) -> bool:
+    try:
+        import geopandas as gpd
+        return isinstance(data, (gpd.GeoDataFrame, gpd.GeoSeries))
+    except ImportError:
+        return False
+
 def is_pandas_dataframe(data: Any) -> bool:
     try:
         import pandas as pd

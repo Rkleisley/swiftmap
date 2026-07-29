@@ -73,6 +73,94 @@ def test_add_polyline_and_polygon():
     assert layer2.type == "polygon"
     assert layer2.locations == [[10, 20], [30, 40], [50, 60]]
 
+def test_parse_lines_geojson_and_df():
+    geojson_line = {
+        "type": "FeatureCollection",
+        "features": [{
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[-118.24, 34.05], [-122.41, 37.77]]
+            },
+            "properties": {"route": "LA to SF"}
+        }]
+    }
+    m = Map()
+    m.add_polyline(geojson_line, name="California Route")
+    layer = m.layers[-1]
+    assert layer.type == "polyline"
+    assert layer.locations == [[34.05, -118.24], [37.77, -122.41]]
+
+    df_track = pd.DataFrame({
+        "lat": [10.0, 11.0, 20.0, 21.0],
+        "lon": [30.0, 31.0, 40.0, 41.0],
+        "track_id": ["T1", "T1", "T2", "T2"]
+    })
+    m2 = Map()
+    m2.add_polyline(df_track, name="Track")
+    polyline_layers = [l for l in m2.layers if l.type == "polyline"]
+    assert len(polyline_layers) == 2
+
+def test_geopandas_points_and_lines():
+    try:
+        import geopandas as gpd
+        from shapely.geometry import Point, LineString
+    except ImportError:
+        return
+
+    gdf_points = gpd.GeoDataFrame(
+        {"city": ["LA", "SF"]},
+        geometry=[Point(-118.24, 34.05), Point(-122.41, 37.77)]
+    )
+    m = Map()
+    m.add_markers(gdf_points, name="GPD Cities")
+    layer = m.layers[-1]
+    assert layer.name == "GPD Cities"
+    assert layer.type == "markers"
+    assert layer.id in m.coordinate_buffers
+
+    gdf_lines = gpd.GeoDataFrame(
+        {"route": ["Route 1"]},
+        geometry=[LineString([(-118.24, 34.05), (-122.41, 37.77)])]
+    )
+    m2 = Map()
+    m2.add_polyline(gdf_lines, name="GPD Route")
+    layer2 = m2.layers[-1]
+    assert layer2.type == "polyline"
+    assert layer2.locations == [[34.05, -118.24], [37.77, -122.41]]
+
+def test_add_line_patterns():
+    # 1. WKT string column test
+    df_wkt = pd.DataFrame({
+        "route_name": ["Pacific Highway"],
+        "wkt": ["LINESTRING (-118.24 34.05, -122.41 37.77)"]
+    })
+    m = Map()
+    m.add_line(df_wkt, name="WKT Line")
+    layer = m.layers[-1]
+    assert layer.type == "polyline"
+    assert layer.locations == [[34.05, -118.24], [37.77, -122.41]]
+
+    # 2. Wide vertex columns test (lat1, lon1, lat2, lon2)
+    df_wide = pd.DataFrame({
+        "lat1": [34.05], "lon1": [-118.24],
+        "lat2": [37.77], "lon2": [-122.41]
+    })
+    m2 = Map()
+    m2.add_line(df_wide, name="Wide Line")
+    layer2 = m2.layers[-1]
+    assert layer2.type == "polyline"
+    assert layer2.locations == [[34.05, -118.24], [37.77, -122.41]]
+
+    # 3. Explicit coord_order test
+    df_order = pd.DataFrame({
+        "coords": ["-118.24, 34.05; -122.41, 37.77"]
+    })
+    m3 = Map()
+    m3.add_line(df_order, coord_order="lon_lat", name="Explicit LonLat")
+    layer3 = m3.layers[-1]
+    assert layer3.locations == [[34.05, -118.24], [37.77, -122.41]]
+
 def test_legend_and_geostructures():
     from geostructures import GeoPoint, Coordinate
     m = Map(show_legend=True)

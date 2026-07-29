@@ -3,6 +3,7 @@ from typing import Optional, Any, Tuple
 from .base import (
     GeometryParserRegistry,
     find_column_or_key,
+    is_geopandas_dataframe,
     is_geostructures,
     is_pandas_dataframe,
     is_polars_dataframe,
@@ -11,6 +12,59 @@ from .base import (
     is_coordinate_list,
     is_dict,
 )
+
+def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
+    """Parses GeoPandas GeoDataFrame/GeoSeries containing Point / MultiPoint geometries."""
+    try:
+        import geopandas as gpd
+        from shapely.geometry import Point, MultiPoint
+    except ImportError:
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}, np.array([], dtype=np.float64)
+
+    if isinstance(data, gpd.GeoSeries):
+        gdf = gpd.GeoDataFrame(geometry=data)
+    else:
+        gdf = data
+
+    geom_col = gdf.geometry.name
+    non_geom_cols = [c for c in gdf.columns if c != geom_col]
+
+    lats_list = []
+    lons_list = []
+    props_list = []
+    intensities_list = []
+
+    for _, row in gdf.iterrows():
+        geom = row[geom_col]
+        if geom is None or geom.is_empty:
+            continue
+
+        row_props = {col: row[col] for col in non_geom_cols}
+        intensity_val = float(row_props.get(intensity_col, 1.0)) if intensity_col else 1.0
+
+        if isinstance(geom, Point):
+            lats_list.append(float(geom.y))
+            lons_list.append(float(geom.x))
+            props_list.append(row_props)
+            intensities_list.append(intensity_val)
+        elif isinstance(geom, MultiPoint):
+            for pt in geom.geoms:
+                lats_list.append(float(pt.y))
+                lons_list.append(float(pt.x))
+                props_list.append(row_props)
+                intensities_list.append(intensity_val)
+
+    lats = np.array(lats_list, dtype=np.float64)
+    lons = np.array(lons_list, dtype=np.float64)
+    intensities = np.array(intensities_list, dtype=np.float64)
+
+    props = {}
+    if props_list:
+        for k in props_list[0].keys():
+            props[k] = [p.get(k) for p in props_list]
+
+    return lats, lons, props, intensities
+
 
 def parse_geostructures_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
     try:
@@ -181,6 +235,7 @@ def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optiona
 
 # --- REGISTRATION ---
 points_registry = GeometryParserRegistry("points")
+points_registry.register(is_geopandas_dataframe, parse_geopandas_points)
 points_registry.register(is_geostructures, parse_geostructures_points)
 points_registry.register(is_pandas_dataframe, parse_pandas_points)
 points_registry.register(is_polars_dataframe, parse_polars_points)

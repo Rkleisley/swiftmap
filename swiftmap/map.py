@@ -1,4 +1,4 @@
-# Swiftmap Custom AnyWidget Map Controller (Reloaded JS version v39)
+# Swiftmap Custom AnyWidget Map Controller
 import anywidget
 import traitlets
 import numpy as np
@@ -10,7 +10,7 @@ from ._infra import LayerConfig, _load_esm
 from .layers.basemap import add_basemap
 from .layers.circle_markers import add_circle_markers
 from .layers.markers import add_markers
-from .layers.polyline import add_polyline
+from .layers.polyline import add_line, add_polyline
 from .layers.polygon import add_polygon
 from .layers.geojson import add_geojson
 from .layers.geostructures import add_geostructures
@@ -22,6 +22,38 @@ def _layers_from_json(value, widget):
     return [LayerConfig(**item) if isinstance(item, dict) else item for item in value]
 
 class Map(anywidget.AnyWidget):
+    """
+    High-performance Leaflet map controller with WebGL rendering pipelines for Shiny for Python.
+
+    Extends `anywidget.AnyWidget` to seamlessly sync map viewports, layers, selection events,
+    and hierarchical sidebar tree controls reactively between Python and JavaScript.
+
+    Parameters
+    ----------
+    center : List[float], default [36.0, -5.35]
+        Initial map center coordinates `[latitude, longitude]`.
+    zoom : int, default 10
+        Initial map zoom level (0 to 22).
+    show_legend : bool, default False
+        If True, displays an interactive layer legend overlay.
+    show_logo : bool, default True
+        If True, displays branding logos on the map viewport.
+    height : str, optional
+        Custom CSS height string for the map widget container (e.g. '600px', '100%').
+    crs : str, default 'EPSG:3857'
+        Coordinate Reference System projection:
+        - 'EPSG:3857': Web Mercator (standard web tiles).
+        - 'EPSG:4326': WGS84 Equirectangular / Plate Carrée.
+    auto_sync : bool, default True
+        If True, automatically syncs trait changes to the frontend JavaScript widget view.
+
+    Examples
+    --------
+    >>> from swiftmap import Map
+    >>> m = Map(center=[34.05, -118.24], zoom=12, crs="EPSG:3857")
+    >>> m.add_basemap("Dark Matter", visible=True)
+    """
+
     _esm = _load_esm()
     _css = pathlib.Path(__file__).parent / "js" / "map.css"
 
@@ -29,6 +61,7 @@ class Map(anywidget.AnyWidget):
     add_basemap = add_basemap
     add_circle_markers = add_circle_markers
     add_markers = add_markers
+    add_line = add_line
     add_polyline = add_polyline
     add_polygon = add_polygon
     add_geojson = add_geojson
@@ -97,18 +130,83 @@ class Map(anywidget.AnyWidget):
             items.append(f"<div><span style='background:{color};width:10px;height:10px;display:inline-block;margin-right:5px;'></span>{name}</div>")
         return "".join(items)
 
-    def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optional[str] = None, group_multi_select: Optional[bool] = None) -> "Map":
-        """Adds a layer or configuration metadata config directly to the map's layers list."""
+    def add_child(
+        self,
+        child: Any,
+        name: Optional[str] = None,
+        layer_group: Optional[str] = None,
+        group_multi_select: Optional[bool] = None
+    ) -> "Map":
+        """
+        Adds a raw layer configuration dictionary or `LayerConfig` object directly to `map.layers`.
+
+        Handles automatic layer ID generation, folder pathing resolution, and sub-layer merging.
+
+        Parameters
+        ----------
+        child : Any
+            Layer dictionary or LayerConfig instance.
+        name : str, optional
+            Layer display name.
+        layer_group : str, optional
+            Directory path string for sidebar folder tree (e.g. "Feeds/Active").
+        group_multi_select : bool, optional
+            If False, configures parent group to use mutually exclusive radio buttons.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
         from .layers._add_child import add_child as add_child_fn
         return add_child_fn(self, child, name=name, layer_group=layer_group, group_multi_select=group_multi_select)
 
     def add_layer(self, layer: Any) -> "Map":
-        """Compatibility wrapper for standard Leaflet add_layer syntax."""
+        """
+        Compatibility wrapper for standard Leaflet `add_layer(layer)` syntax.
+
+        Parameters
+        ----------
+        layer : Any
+            Layer configuration object or dictionary.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
         self.add_child(layer)
         return self
 
     def configure_group(self, group_name: str, **kwargs) -> "Map":
-        """Configures properties (such as multi_select, visible) for a layer group."""
+        """
+        Configures properties and UI controls for a layer group folder in the sidebar.
+
+        Parameters
+        ----------
+        group_name : str
+            The folder path name of the target group (e.g., "Basemaps", "Sensor Feeds/Active").
+        **kwargs
+            Supported configuration keywords:
+            - multi_select (bool) : If False, configures the group to render mutually exclusive 
+                                    radio buttons instead of checkboxes.
+            - group_multi_select (bool) : Alias for `multi_select`.
+            - visible (bool) : Default initial visibility state for all layers in this group.
+            - collapsed (bool) : Initial collapsed/expanded state of folder in sidebar tree.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+
+        Examples
+        --------
+        >>> m = Map()
+        >>> # Configure Basemaps folder as mutually exclusive radio buttons
+        >>> m.configure_group("Basemaps", multi_select=False)
+        >>> # Force a group to be visible by default
+        >>> m.configure_group("Sensor Feeds/Active", visible=True)
+        """
         new_configs = dict(self.group_configs)
         group_conf = dict(new_configs.get(group_name, {}))
         
@@ -123,7 +221,21 @@ class Map(anywidget.AnyWidget):
         return self
 
     def remove_layers(self, identifiers: List[Any]) -> "Map":
-        """Removes multiple layers from the map by name or ID in a single atomic transaction."""
+        """
+        Removes multiple layers from the map by layer name or ID in a single atomic transaction.
+
+        Also cleans up associated binary coordinate float buffers from trait memory.
+
+        Parameters
+        ----------
+        identifiers : List[Any]
+            List of layer IDs, layer names, or LayerConfig objects to remove.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
         target_ids = set()
         target_names = set()
         for item in identifiers:
@@ -146,16 +258,54 @@ class Map(anywidget.AnyWidget):
         return self
 
     def remove_layer(self, name_or_id: Any) -> "Map":
-        """Removes a layer from the map by name or ID."""
+        """
+        Removes a single layer from the map by name or ID.
+
+        Parameters
+        ----------
+        name_or_id : Any
+            Layer ID string, layer name string, or LayerConfig object.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
         return self.remove_layers([name_or_id])
 
     def fit_bounds(self, bounds: List[List[float]]) -> "Map":
-        """Sets the center/zoom viewport in the client to fit the given bounds."""
+        """
+        Sets the map viewport bounds in the client widget.
+
+        Parameters
+        ----------
+        bounds : List[List[float]]
+            Bounding box coordinates `[[min_lat, min_lon], [max_lat, max_lon]]`.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
         self.fit_bounds_coords = bounds
         return self
 
     def get_layer(self, identifier: Union[str, Any], name: Optional[str] = None) -> Optional[LayerConfig]:
-        """Finds and returns a layer matching by ID, name, or group + name."""
+        """
+        Finds and returns a LayerConfig object matching by ID, name, or (layer_group, name).
+
+        Parameters
+        ----------
+        identifier : Union[str, Any]
+            Layer ID, layer name, or layer_group folder string.
+        name : str, optional
+            If specified, searches for a layer matching `layer_group == identifier` and `name == name`.
+
+        Returns
+        -------
+        Optional[LayerConfig]
+            The matching LayerConfig object, or None if not found.
+        """
         target_id = getattr(identifier, "id", identifier)
         target_name = getattr(identifier, "name", identifier)
         
@@ -172,8 +322,21 @@ class Map(anywidget.AnyWidget):
 
     def update_layer(self, identifier: Union[str, Any], name: Optional[str] = None, **kwargs) -> "Map":
         """
-        Updates attributes of a layer (e.g. visible, color) and forces a traitlets sync.
-        Automatically handles replacing the LayerConfig with a new instance.
+        Updates attributes of an existing layer (e.g. `visible`, `color`, `weight`) and triggers a sync.
+
+        Parameters
+        ----------
+        identifier : Union[str, Any]
+            Layer ID, layer name, or layer_group folder string.
+        name : str, optional
+            If specified, matches layer by `(layer_group, name)`.
+        **kwargs
+            Key-value attribute pairs to update on the target layer (e.g. `visible=False`, `color="blue"`).
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
         """
         target_id = getattr(identifier, "id", identifier)
         target_name = getattr(identifier, "name", identifier)
@@ -205,7 +368,19 @@ class Map(anywidget.AnyWidget):
         return self
 
     def set_layers_visibility(self, visibility_map: Dict[Any, bool]) -> "Map":
-        """Sets visibility for multiple layers at once in a single atomic transaction."""
+        """
+        Sets visibility states for multiple layers at once in a single atomic transaction.
+
+        Parameters
+        ----------
+        visibility_map : Dict[Any, bool]
+            Dictionary mapping layer names/IDs to boolean visibility states `{"Layer 1": True, "Layer 2": False}`.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
         if not visibility_map:
             return self
             
@@ -242,14 +417,47 @@ class Map(anywidget.AnyWidget):
         return self
 
     def set_layer_visibility(self, identifier: Union[str, Any], visible: bool, name: Optional[str] = None) -> "Map":
-        """Sets the visibility of a layer and synchronizes the change to the client."""
+        """
+        Sets the visibility of a layer and synchronizes the change to the client widget.
+
+        Parameters
+        ----------
+        identifier : Union[str, Any]
+            Layer ID or name.
+        visible : bool
+            Target visibility state.
+        name : str, optional
+            Optional layer name if matching by group.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
         return self.update_layer(identifier, name=name, visible=visible)
 
     def sync(self) -> "Map":
-        """Manually synchronizes the map state and forces a render on the frontend."""
+        """
+        Manually triggers a map state synchronization and forces a WebGL re-render on the frontend.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
         self.sync_trigger += 1
         return self
 
     def batch(self):
-        """Context manager to batch multiple map operations into a single WebSocket sync message."""
+        """
+        Context manager to batch multiple map layer mutations into a single Traitlets WebSocket sync message.
+
+        Examples
+        --------
+        >>> m = Map()
+        >>> with m.batch():
+        ...     m.add_markers(df1, name="Points")
+        ...     m.add_line(df2, name="Tracks")
+        ...     m.configure_group("Tracks", multi_select=False)
+        """
         return self.hold_trait_notifications()

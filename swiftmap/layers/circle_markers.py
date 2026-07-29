@@ -12,7 +12,48 @@ def add_circle_markers(
     layer_group: Optional[str] = None,
     group_multi_select: Optional[bool] = None,
     **kwargs
-):
+) -> "Map":
+    """
+    Adds hardware-accelerated WebGL circle point markers to the map.
+
+    Parameters
+    ----------
+    data : Any
+        Input dataset (Pandas/Polars DataFrame, GeoPandas, GeoJSON, GeoStructures, or list of dicts/coords).
+    lat_col : str, optional
+        Column name for latitude coordinates. Auto-detected if omitted.
+    lon_col : str, optional
+        Column name for longitude coordinates. Auto-detected if omitted.
+    radius : int, default 10
+        Circle marker radius in screen pixels.
+    name : str, optional
+        Layer name displayed in sidebar control. Can refer to a column name in `data` for dynamic naming.
+    layer_group : str or list of str, optional
+        Directory path string (e.g., "Sensors/Active") or list of column names to dynamically
+        group points into hierarchical sidebar folders.
+    group_multi_select : bool, optional
+        If False, configures the parent layer group to act as mutually exclusive radio buttons.
+    **kwargs
+        Additional visual attributes:
+        - color : str, default '#3388ff' - Circle stroke color.
+        - fill_color : str, default '#3388ff' - Circle fill color.
+        - fill_opacity : float, default 0.2 - Circle fill opacity (0.0 to 1.0).
+        - weight : int, default 3 - Stroke line width in pixels.
+        - opacity : float, default 1.0 - Stroke opacity.
+        - popup : bool or dict, default True - Enables popups on click.
+        - tooltip : bool or dict, default True - Enables tooltips on hover.
+
+    Returns
+    -------
+    Map
+        Self reference for method chaining.
+
+    Examples
+    --------
+    >>> m = Map()
+    >>> df = pd.DataFrame({"lat": [36.01, 36.02], "lon": [-5.36, -5.35], "status": ["Active", "Inactive"]})
+    >>> m.add_circle_markers(df, radius=8, color="blue", layer_group=["Status", "status"])
+    """
     group_multi_select = kwargs.pop("multi_select", group_multi_select)
 
     # 1. Parse all coordinates and properties first
