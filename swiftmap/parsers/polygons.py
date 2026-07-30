@@ -114,42 +114,60 @@ def parse_geopandas_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]
 
 
 def parse_geostructures_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    """Parses geostructures shapes (GeoPolygon, GeoBox, GeoCircle, GeoEllipse, GeoWedge, CollectionBase, Track)."""
-    try:
-        from geostructures.typing import GeoShape, CollectionBase
-    except ImportError:
-        return [], {}
-
-    if isinstance(data, CollectionBase):
-        shapes = data.geoshapes
-    elif isinstance(data, GeoShape):
-        shapes = [data]
+    """Parses geostructures shapes (GeoPolygon, GeoBox, GeoCircle, GeoEllipse, GeoRing, GeoWedge, MultiGeoPolygon, collections)."""
+    raw_shapes = []
+    if isinstance(data, (list, tuple)):
+        raw_shapes = list(data)
+    elif hasattr(data, "geoshapes"):
+        raw_shapes = list(data.geoshapes)
+    elif hasattr(data, "__iter__") and not isinstance(data, (str, bytes, dict)):
+        raw_shapes = list(data)
     else:
-        shapes = data
+        raw_shapes = [data]
+
+    # Flatten any MultiGeoPolygon or nested collections
+    shapes = []
+    for s in raw_shapes:
+        if hasattr(s, "geoshapes"):
+            shapes.extend(s.geoshapes)
+        else:
+            shapes.append(s)
 
     polygons = []
     props_list = []
 
     for shape in shapes:
+        shape_props = getattr(shape, 'properties', {}) or {}
+        if hasattr(shape, 'to_polygon'):
+            try:
+                rings = shape.to_polygon().linear_rings()
+                for ring in rings:
+                    coords = [[float(pt.latitude), float(pt.longitude)] for pt in ring]
+                    if len(coords) >= 3:
+                        polygons.append(_ensure_closed_ring(coords))
+                        props_list.append(shape_props)
+                continue
+            except Exception:
+                pass
+
+        # Fallback to outline/boundary
         coords = []
-        if hasattr(shape, 'boundary'):
-            raw_coords = shape.boundary
-            for pt in raw_coords:
-                if hasattr(pt, 'latitude') and hasattr(pt, 'longitude'):
-                    coords.append([float(pt.latitude), float(pt.longitude)])
-                elif isinstance(pt, (list, tuple)) and len(pt) >= 2:
-                    coords.append([float(pt[1]), float(pt[0])])
-        elif hasattr(shape, 'coordinates'):
-            raw_coords = shape.coordinates
-            for pt in raw_coords:
-                if hasattr(pt, 'latitude') and hasattr(pt, 'longitude'):
-                    coords.append([float(pt.latitude), float(pt.longitude)])
-                elif isinstance(pt, (list, tuple)) and len(pt) >= 2:
-                    coords.append([float(pt[1]), float(pt[0])])
+        raw_pts = getattr(shape, 'outline', getattr(shape, 'boundary', getattr(shape, 'coordinates', [])))
+        if callable(raw_pts):
+            try:
+                raw_pts = raw_pts()
+            except Exception:
+                raw_pts = []
+
+        for pt in raw_pts:
+            if hasattr(pt, 'latitude') and hasattr(pt, 'longitude'):
+                coords.append([float(pt.latitude), float(pt.longitude)])
+            elif isinstance(pt, (list, tuple)) and len(pt) >= 2:
+                coords.append([float(pt[1]), float(pt[0])])
 
         if len(coords) >= 3:
             polygons.append(_ensure_closed_ring(coords))
-            props_list.append(getattr(shape, 'properties', {}) or {})
+            props_list.append(shape_props)
 
     props = {}
     if props_list:

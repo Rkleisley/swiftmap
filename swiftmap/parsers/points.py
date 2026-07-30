@@ -67,29 +67,26 @@ def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Op
 
 
 def parse_geostructures_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
-    try:
-        from geostructures.typing import GeoShape, CollectionBase
-    except ImportError:
-        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}, np.array([], dtype=np.float64)
-        
-    if isinstance(data, CollectionBase):
-        shapes = data.geoshapes
-    elif isinstance(data, GeoShape):
-        shapes = [data]
+    shapes = []
+    if isinstance(data, (list, tuple)):
+        shapes = list(data)
+    elif hasattr(data, "__iter__") and not isinstance(data, (str, bytes, dict)):
+        shapes = list(data)
     else:
-        shapes = data
+        shapes = [data]
         
-    lats = np.array([shape.centroid.latitude for shape in shapes], dtype=np.float64)
-    lons = np.array([shape.centroid.longitude for shape in shapes], dtype=np.float64)
+    valid_shapes = [s for s in shapes if hasattr(s, "centroid")]
+    lats = np.array([s.centroid.latitude for s in valid_shapes], dtype=np.float64)
+    lons = np.array([s.centroid.longitude for s in valid_shapes], dtype=np.float64)
     
     props = {}
-    if shapes:
-        first_props = getattr(shapes[0], 'properties', {}) or {}
-        props = {k: [getattr(s, 'properties', {}).get(k) for s in shapes] for k in first_props.keys()}
+    if valid_shapes:
+        first_props = getattr(valid_shapes[0], 'properties', {}) or {}
+        props = {k: [getattr(s, 'properties', {}).get(k) for s in valid_shapes] for k in first_props.keys()}
         
     intensities = np.array([
-        getattr(shape, 'properties', {}).get(intensity_col, 1.0) if (intensity_col and getattr(shape, 'properties', {})) else 1.0 
-        for shape in shapes
+        getattr(s, 'properties', {}).get(intensity_col, 1.0) if (intensity_col and getattr(s, 'properties', {})) else 1.0 
+        for s in valid_shapes
     ], dtype=np.float64)
     
     return lats, lons, props, intensities

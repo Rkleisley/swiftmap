@@ -198,11 +198,27 @@ def test_polygon_and_shapes_patterns():
         pass
 
 def test_legend_and_geostructures():
-    from geostructures import GeoPoint, Coordinate
+    from geostructures import Coordinate, GeoPoint, GeoLineString, GeoPolygon, GeoBox, GeoCircle, GeoRing, MultiGeoPolygon
     m = Map(show_legend=True)
-    point = GeoPoint(Coordinate(-118.24, 34.05), properties={'name': 'LA', 'pop': '4M'})
-    m.add_geostructures([point], name="LA Point", layer_group="City Points")
+    c1 = Coordinate(-118.24, 34.05)
+    c2 = Coordinate(-122.41, 37.77)
+
+    point = GeoPoint(c1, properties={'name': 'LA Point', 'pop': '4M'})
+    line = GeoLineString([c1, c2], properties={'name': 'Flight Route'})
+    poly = GeoPolygon([c1, Coordinate(-118.20, 34.05), Coordinate(-118.20, 34.10), Coordinate(-118.24, 34.10), c1], properties={'name': 'Zone Area'})
+    circle = GeoCircle(c1, radius=1000, properties={'name': 'Circle Zone'})
+    box = GeoBox(c1, c2, properties={'name': 'Box Area'})
+    ring = GeoRing(c1, inner_radius=500, outer_radius=1000, properties={'name': 'Ring Zone'})
+    multipoly = MultiGeoPolygon([poly], properties={'name': 'Multi Zone'})
+
+    m.add_markers([point], name="LA Point", layer_group="City Points")
     assert any(l.name == "LA Point" for l in m.layers)
+
+    m.add_line([line], name="Flight Route", layer_group="Routes")
+    assert any(l.name == "Flight Route" for l in m.layers)
+
+    m.add_polygon([poly, circle, box, ring, multipoly], name="Geostructure Shapes", layer_group="Zones")
+    assert len(m.layers) >= 4
     assert m.legend_html != ""
 
 def test_remove_layer():

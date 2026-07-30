@@ -110,27 +110,24 @@ def parse_geopandas_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]],
 
 
 def parse_geostructures_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    """Parses geostructures GeoLine, GeoPath, or collections containing line shapes."""
-    try:
-        from geostructures.typing import GeoShape, CollectionBase
-    except ImportError:
-        return [], {}
-
-    if isinstance(data, CollectionBase):
-        shapes = data.geoshapes
-    elif isinstance(data, GeoShape):
-        shapes = [data]
+    """Parses geostructures GeoLineString, GeoPath, or collections containing line shapes."""
+    shapes = []
+    if isinstance(data, (list, tuple)):
+        shapes = list(data)
+    elif hasattr(data, "__iter__") and not isinstance(data, (str, bytes, dict)):
+        shapes = list(data)
     else:
-        shapes = data
+        shapes = [data]
 
     lines = []
     props_list = []
 
     for shape in shapes:
         coords = []
-        if hasattr(shape, 'coordinates'):
-            raw_coords = shape.coordinates
-            for pt in raw_coords:
+        if hasattr(shape, 'vertices'):
+            coords = [[float(pt.latitude), float(pt.longitude)] for pt in shape.vertices]
+        elif hasattr(shape, 'coordinates'):
+            for pt in shape.coordinates:
                 if hasattr(pt, 'latitude') and hasattr(pt, 'longitude'):
                     coords.append([float(pt.latitude), float(pt.longitude)])
                 elif isinstance(pt, (list, tuple)) and len(pt) >= 2:
