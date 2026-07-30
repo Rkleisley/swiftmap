@@ -27,7 +27,7 @@ def add_line(
     - DataFrames with wide vertex columns (`lat1, lon1, lat2, lon2, ...`)
     - GeoPandas GeoDataFrames / GeoSeries (`LineString`, `MultiLineString`)
     - GeoJSON objects / FeatureCollections
-    - GeoStructures objects (`GeoLine`, `GeoPath`, `Track`, `CollectionBase`)
+    - GeoStructures objects (`GeoLineString`, `MultiGeoLineString`, `Track`, `FeatureCollection`)
 
     Parameters
     ----------

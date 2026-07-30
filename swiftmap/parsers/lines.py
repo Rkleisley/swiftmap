@@ -110,7 +110,7 @@ def parse_geopandas_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]],
 
 
 def parse_geostructures_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    """Parses geostructures GeoLineString, GeoPath, or collections containing line shapes."""
+    """Parses geostructures GeoLineString, MultiGeoLineString, or collections containing line shapes."""
     shapes = []
     if isinstance(data, (list, tuple)):
         shapes = list(data)
