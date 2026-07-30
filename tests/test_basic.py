@@ -71,7 +71,7 @@ def test_add_polyline_and_polygon():
     layer2 = m.layers[-1]
     assert layer2.name == "My Polygon"
     assert layer2.type == "polygon"
-    assert layer2.locations == [[10, 20], [30, 40], [50, 60]]
+    assert layer2.locations == [[10, 20], [30, 40], [50, 60], [10, 20]]
 
 def test_parse_lines_geojson_and_df():
     geojson_line = {
@@ -160,6 +160,42 @@ def test_add_line_patterns():
     m3.add_line(df_order, coord_order="lon_lat", name="Explicit LonLat")
     layer3 = m3.layers[-1]
     assert layer3.locations == [[34.05, -118.24], [37.77, -122.41]]
+
+def test_polygon_and_shapes_patterns():
+    # 1. WKT Polygon test
+    df_wkt = pd.DataFrame({
+        "zone": ["Zone A"],
+        "wkt": ["POLYGON ((-118.24 34.05, -118.20 34.05, -118.20 34.10, -118.24 34.10, -118.24 34.05))"]
+    })
+    m = Map()
+    m.add_polygon(df_wkt, name="WKT Zone")
+    layer = m.layers[-1]
+    assert layer.type == "polygon"
+    assert len(layer.locations) >= 4
+
+    # 2. Aliases test (add_polygons, add_shape, add_shapes)
+    m.add_polygons([[36.0, -5.35], [36.05, -5.30], [36.02, -5.25]], name="Poly Test")
+    assert m.layers[-1].name == "Poly Test"
+
+    m.add_shape([[36.0, -5.35], [36.05, -5.30], [36.02, -5.25]], name="Shape Test")
+    assert m.layers[-1].name == "Shape Test"
+
+    m.add_shapes([[36.0, -5.35], [36.05, -5.30], [36.02, -5.25]], name="Shapes Test")
+    assert m.layers[-1].name == "Shapes Test"
+
+    # 3. GeoPandas Polygon test
+    try:
+        import geopandas as gpd
+        from shapely.geometry import Polygon
+        gdf_poly = gpd.GeoDataFrame(
+            {"zone": ["Zone 1"]},
+            geometry=[Polygon([(-118.24, 34.05), (-118.20, 34.05), (-118.20, 34.10), (-118.24, 34.05)])]
+        )
+        m2 = Map()
+        m2.add_shapes(gdf_poly, name="GPD Polygon")
+        assert m2.layers[-1].type == "polygon"
+    except ImportError:
+        pass
 
 def test_legend_and_geostructures():
     from geostructures import GeoPoint, Coordinate

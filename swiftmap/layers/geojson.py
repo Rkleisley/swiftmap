@@ -2,6 +2,7 @@ import json
 from typing import Optional, Dict, Any
 from ..parsers.points import parse_points
 from ..parsers.lines import parse_lines
+from ..parsers.polygons import parse_polygons
 
 def add_geojson(
     self,
@@ -29,25 +30,12 @@ def add_geojson(
     style : dict, optional
         Optional style overrides dictionary.
     **kwargs
-        Additional visual styling options passed to sub-layer builders (color, weight, opacity).
+        Additional visual styling options passed to sub-layer builders.
 
     Returns
     -------
     Map
         Self reference for method chaining.
-
-    Examples
-    --------
-    >>> m = Map()
-    >>> geojson_data = {
-    ...     "type": "FeatureCollection",
-    ...     "features": [{
-    ...         "type": "Feature",
-    ...         "geometry": {"type": "Point", "coordinates": [-118.24, 34.05]},
-    ...         "properties": {"city": "Los Angeles"}
-    ...     }]
-    ... }
-    >>> m.add_geojson(geojson_data, name="LA Point", color="blue")
     """
     if isinstance(data, str):
         try:
@@ -85,6 +73,20 @@ def add_geojson(
         if len(lines) > 0:
             self.add_polyline(
                 data=lines,
+                name=layer_name,
+                layer_group=group_name,
+                group_multi_select=group_multi_select,
+                **kwargs
+            )
+    except Exception:
+        pass
+
+    # 3. Parse polygon geometries
+    try:
+        polygons, poly_props = parse_polygons(parsed_data)
+        if len(polygons) > 0:
+            self.add_polygon(
+                data=polygons,
                 name=layer_name,
                 layer_group=group_name,
                 group_multi_select=group_multi_select,

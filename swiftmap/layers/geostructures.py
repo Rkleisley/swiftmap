@@ -1,6 +1,7 @@
 from typing import Optional, Any
 from ..parsers.points import parse_points
 from ..parsers.lines import parse_lines
+from ..parsers.polygons import parse_polygons
 
 def add_geostructures(
     self,
@@ -31,13 +32,6 @@ def add_geostructures(
     -------
     Map
         Self reference for method chaining.
-
-    Examples
-    --------
-    >>> from geostructures import GeoPoint, Coordinate
-    >>> m = Map()
-    >>> pt = GeoPoint(Coordinate(-118.24, 34.05), properties={'name': 'LA'})
-    >>> m.add_geostructures([pt], name="City Point")
     """
     group_name = layer_group or "Geostructures Group"
     layer_name = name or "Geostructures Layer"
@@ -63,6 +57,20 @@ def add_geostructures(
         if len(lines) > 0:
             self.add_polyline(
                 data=lines,
+                name=layer_name,
+                layer_group=group_name,
+                group_multi_select=group_multi_select,
+                **kwargs
+            )
+    except Exception:
+        pass
+
+    # 3. Parse polygon geometries
+    try:
+        polygons, poly_props = parse_polygons(data)
+        if len(polygons) > 0:
+            self.add_polygon(
+                data=polygons,
                 name=layer_name,
                 layer_group=group_name,
                 group_multi_select=group_multi_select,

@@ -11,7 +11,7 @@ from .layers.basemap import add_basemap
 from .layers.circle_markers import add_circle_markers
 from .layers.markers import add_markers
 from .layers.polyline import add_line, add_polyline
-from .layers.polygon import add_polygon
+from .layers.polygon import add_polygon, add_polygons, add_shape, add_shapes
 from .layers.geojson import add_geojson
 from .layers.geostructures import add_geostructures
 from .layers.circle import add_circle
@@ -64,6 +64,9 @@ class Map(anywidget.AnyWidget):
     add_line = add_line
     add_polyline = add_polyline
     add_polygon = add_polygon
+    add_polygons = add_polygons
+    add_shape = add_shape
+    add_shapes = add_shapes
     add_geojson = add_geojson
     add_geostructures = add_geostructures
     add_circle = add_circle
