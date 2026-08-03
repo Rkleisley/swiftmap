@@ -1,6 +1,9 @@
 from typing import Optional, List, Dict, Any
-from ..parsers.polygons import parse_polygons
+from ..parsers import parse_polygons
+from ._display import extract_display_config
+from ._batching import batched
 
+@batched
 def add_polygon(
     self,
     data: Any,
@@ -69,7 +72,17 @@ def add_polygon(
     properties : dict, optional
         Feature attribute metadata dictionary for popups and tooltips.
     **kwargs
-        Additional layer metadata attributes.
+        Additional layer metadata attributes:
+        - popup_fields / tooltip_fields : list of str - Property names to display.
+          Defaults to every property.
+        - popup_names / tooltip_names : list of str - Display labels for those fields,
+          matched by position (e.g. fields=["pop_2020"], names=["Population"]).
+          Requires the matching `*_fields`.
+        - popup_template / tooltip_template : str - HTML template. `{column}` inserts one
+          value, `{*}` inserts the default field list. Data values are HTML-escaped; your
+          markup is not (e.g. "<img src='{photo}' width=300><br>{*}").
+        - popup_style / tooltip_style : str - Inline CSS for the content container.
+        - popup_max_width : int - Popup width in pixels (Leaflet default 300).
 
     Returns
     -------
@@ -87,6 +100,7 @@ def add_polygon(
     """
     popup = kwargs.pop("popup", True)
     tooltip = kwargs.pop("tooltip", True)
+    display_config = extract_display_config(kwargs)
     fill_color_resolved = fill_color or kwargs.pop("fill_color", kwargs.pop("fillColor", color))
 
     # Parse polygon coordinates
@@ -129,6 +143,7 @@ def add_polygon(
             "properties": poly_props,
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
+            **display_config,
             **kwargs
         })
 

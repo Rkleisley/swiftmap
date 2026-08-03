@@ -1,4 +1,4 @@
-export var pinShader = `
+export const pinShader = `
 precision mediump float;
 varying vec4 _color;
 void main() {

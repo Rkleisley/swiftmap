@@ -33,6 +33,10 @@ It replaces standard Leaflet vector drawing layers with custom **WebGL rendering
 pip install -e .
 ```
 
+The bundled JavaScript ships with the package, so installing never requires Node. If you
+intend to modify the frontend, see [CONTRIBUTING.md](CONTRIBUTING.md) — the JS lives in
+`src/` and must be rebuilt after changes.
+
 ---
 
 ## Quick Example
@@ -83,3 +87,71 @@ def server(input, output, session):
 
 app = App(app_ui, server)
 ```
+
+---
+
+## Core API
+
+Beyond `add_markers`, `Map` exposes:
+
+*   **Layers:** `add_line` / `add_polyline`, `add_polygon` / `add_polygons` / `add_shape` / `add_shapes`, `add_circle`, `add_circle_markers`, `add_geojson`, `add_geostructures`, `add_basemap` — each accepts the same range of input formats as `add_markers` (Pandas, Polars, GeoPandas, GeoStructures, GeoJSON, or raw dicts/lists/coordinates).
+*   **Sidebar groups:** `configure_group(name, multi_select=False, visible=True, collapsed=False)` — control radio-vs-checkbox behavior, default visibility, and collapsed state for a folder path.
+*   **Finding layers:** `get_layer(id_or_name)` or `get_layer(group, name)` — returns the live layer config, so attributes you set on it persist.
+*   **Updating existing layers:** `update_layer(id_or_name, **kwargs)`, `set_layer_visibility` / `set_layers_visibility`, `remove_layer` / `remove_layers`. `add_layer(layer)` is a Leaflet-compatible alias for adding a prebuilt config.
+*   **Viewport:** `fit_bounds([[min_lat, min_lon], [max_lat, max_lon]])`.
+*   **Syncing:** `sync()` pushes a render when `auto_sync=False`; `resync()` replaces the client's entire state, useful if a view may have missed updates.
+*   **Batching:** `with m.batch(): ...` collapses multiple mutations into one message. Every `add_*` already batches internally, so this is for grouping several calls; it is reentrant, so nesting is safe.
+
+Full parameter documentation lives in each method's docstring (e.g. `help(Map.add_markers)`).
+
+---
+
+## Popups & Tooltips
+
+By default every property is listed as `name: value`. Narrow the list with `*_fields`, and give
+columns readable labels with `*_names`:
+
+```python
+m.add_markers(
+    df,
+    popup_fields=["city", "pop_2020"],
+    popup_names=["City", "Population"],     # matched to fields by position
+    tooltip_style="background: white; border: 1px solid #333; font-size: 10px;",
+)
+```
+
+For images, links, or custom layout, supply a template. `{column}` inserts a single value and
+`{*}` expands the default field list, so you can add markup without enumerating every column:
+
+```python
+m.add_markers(
+    df,
+    popup_template="<img src='{photo_url}' width=300><br>{*}<br><a href='{source_url}'>source</a>",
+    popup_fields=["city", "pop_2020"],
+    popup_names=["City", "Population"],
+    popup_max_width=800,
+)
+```
+
+**Your markup renders as HTML; values pulled from the data are escaped.** That means a value
+containing `<script>` displays as text instead of executing — which matters as soon as your map
+shows data you didn't author yourself (uploads, shared tables, third-party APIs). Values landing
+in an `href` or `src` are additionally checked for a safe URL scheme.
+
+If you need raw HTML stored *inside* the data itself to render as markup, that is an explicit
+opt-in and should only be used with data you control.
+
+---
+
+## Contributing
+
+Want to add support for a new data source, fix a bug, or improve the docs? See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## Development Notes
+
+[Claude Code](https://claude.com/claude-code) is used during development of this project —
+for refactoring, building test harnesses, and working through architecture decisions.
+Direction, review, and acceptance are human-owned: changes are verified against the test
+suite and exercised in a real application before they land.

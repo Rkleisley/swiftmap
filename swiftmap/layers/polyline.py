@@ -1,6 +1,9 @@
 from typing import Optional, List, Dict, Any
-from ..parsers.lines import parse_lines
+from ..parsers import parse_lines
+from ._display import extract_display_config
+from ._batching import batched
 
+@batched
 def add_line(
     self,
     data: Any,
@@ -61,7 +64,19 @@ def add_line(
     opacity : float, default 1.0
         Line opacity (0.0 to 1.0).
     **kwargs
-        Additional layer metadata attributes.
+        Additional layer metadata attributes:
+        - popup : bool, default True - Enables popups on click.
+        - tooltip : bool, default True - Enables tooltips on hover.
+        - popup_fields / tooltip_fields : list of str - Property names to display.
+          Defaults to every property.
+        - popup_names / tooltip_names : list of str - Display labels for those fields,
+          matched by position (e.g. fields=["pop_2020"], names=["Population"]).
+          Requires the matching `*_fields`.
+        - popup_template / tooltip_template : str - HTML template. `{column}` inserts one
+          value, `{*}` inserts the default field list. Data values are HTML-escaped; your
+          markup is not (e.g. "<img src='{photo}' width=300><br>{*}").
+        - popup_style / tooltip_style : str - Inline CSS for the content container.
+        - popup_max_width : int - Popup width in pixels (Leaflet default 300).
 
     Returns
     -------
@@ -86,6 +101,10 @@ def add_line(
     >>> # 3. GeoPandas GeoDataFrame with GIS lon/lat standard
     >>> m.add_line(gdf, coord_order="lon_lat", layer_group="GIS Feeds/Routes")
     """
+    popup = kwargs.pop("popup", True)
+    tooltip = kwargs.pop("tooltip", True)
+    display_config = extract_display_config(kwargs)
+
     lines_coords, props = parse_lines(
         data,
         lat_col=lat_col,
@@ -119,6 +138,9 @@ def add_line(
             "weight": weight,
             "opacity": opacity,
             "properties": line_props,
+            "autobind_popup": bool(popup),
+            "autobind_tooltip": bool(tooltip),
+            **display_config,
             **kwargs
         })
 

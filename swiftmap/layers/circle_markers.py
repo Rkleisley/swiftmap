@@ -1,7 +1,10 @@
 import numpy as np
 from typing import Optional, Any
-from ..parsers.points import parse_points
+from ..parsers import parse_points
+from ._display import extract_display_config
+from ._batching import batched
 
+@batched
 def add_circle_markers(
     self,
     data: Any,
@@ -42,6 +45,16 @@ def add_circle_markers(
         - opacity : float, default 1.0 - Stroke opacity.
         - popup : bool or dict, default True - Enables popups on click.
         - tooltip : bool or dict, default True - Enables tooltips on hover.
+        - popup_fields / tooltip_fields : list of str - Property names to display.
+          Defaults to every property.
+        - popup_names / tooltip_names : list of str - Display labels for those fields,
+          matched by position (e.g. fields=["pop_2020"], names=["Population"]).
+          Requires the matching `*_fields`.
+        - popup_template / tooltip_template : str - HTML template. `{column}` inserts one
+          value, `{*}` inserts the default field list. Data values are HTML-escaped; your
+          markup is not (e.g. "<img src='{photo}' width=300><br>{*}").
+        - popup_style / tooltip_style : str - Inline CSS for the content container.
+        - popup_max_width : int - Popup width in pixels (Leaflet default 300).
 
     Returns
     -------
@@ -72,6 +85,7 @@ def add_circle_markers(
     # Extract popup and tooltip settings
     popup = kwargs.pop("popup", True)
     tooltip = kwargs.pop("tooltip", True)
+    display_config = extract_display_config(kwargs)
 
     # Resolve colors, weight, opacity etc from kwargs
     color = kwargs.pop("color", "#3388ff")
@@ -125,7 +139,7 @@ def add_circle_markers(
 
         # Compile coordinate buffer
         sub_coords = np.column_stack((sub_lats, sub_lons)).flatten().astype(np.float64)
-        self.coordinate_buffers = {**self.coordinate_buffers, sub_layer_id: sub_coords.tobytes()}
+        self._set_layer_buffer(sub_layer_id, sub_coords.tobytes())
 
         # Bounding box
         min_lat = float(np.min(sub_lats))
@@ -151,6 +165,7 @@ def add_circle_markers(
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
             "bounds": sub_bounds,
+            **display_config,
             **kwargs
         }
         self.add_child(layer_meta)

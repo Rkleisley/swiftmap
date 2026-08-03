@@ -1,8 +1,9 @@
 from typing import Optional, Any
-from ..parsers.points import parse_points
-from ..parsers.lines import parse_lines
-from ..parsers.polygons import parse_polygons
+from ..parsers import split_geostructures_by_geometry
+from ._geometry import add_parsed_geometries
+from ._batching import batched
 
+@batched
 def add_geostructures(
     self,
     data: Any,
@@ -15,10 +16,15 @@ def add_geostructures(
     Convenience wrapper to parse and render geostructures objects, shapes, tracks, or collections
     using Python geometry parsers and high-performance WebGL binary-buffered layers.
 
+    Shapes are classified by geometry kind before parsing, so a polygon renders only as a polygon
+    and a line only as a line. Classification uses the geostructures type mixins directly rather
+    than converting through `to_geojson()`, which is both faster and avoids a lossy round trip.
+
     Parameters
     ----------
     data : Any
-        `geostructures` object (`GeoPoint`, `GeoLine`, `GeoPolygon`, `GeoBox`, `Track`, `CollectionBase`) or list of shapes.
+        `geostructures` object (`GeoPoint`, `GeoLineString`, `GeoPolygon`, `GeoBox`, `GeoCircle`,
+        `GeoRing`, `GeoEllipse`, any `MultiGeo*`), a `FeatureCollection`/`Track`, or a list of shapes.
     name : str, optional
         Layer name displayed in sidebar controls.
     layer_group : str, optional
@@ -26,57 +32,22 @@ def add_geostructures(
     group_multi_select : bool, optional
         If False, configures parent folder controls as mutually exclusive radio buttons.
     **kwargs
-        Additional visual styling options passed to sub-layer builders.
+        Additional visual styling and popup/tooltip options passed to sub-layer builders.
 
     Returns
     -------
     Map
         Self reference for method chaining.
     """
-    group_name = layer_group or "Geostructures Group"
-    layer_name = name or "Geostructures Layer"
+    points, lines, polygons = split_geostructures_by_geometry(data)
 
-    # 1. Parse point geometries
-    try:
-        lats, lons, props, _ = parse_points(data)
-        if len(lats) > 0:
-            point_data = {"lat": lats, "lon": lons, **props}
-            self.add_markers(
-                data=point_data,
-                name=layer_name,
-                layer_group=group_name,
-                group_multi_select=group_multi_select,
-                **kwargs
-            )
-    except Exception:
-        pass
-
-    # 2. Parse line geometries
-    try:
-        lines, line_props = parse_lines(data)
-        if len(lines) > 0:
-            self.add_polyline(
-                data=lines,
-                name=layer_name,
-                layer_group=group_name,
-                group_multi_select=group_multi_select,
-                **kwargs
-            )
-    except Exception:
-        pass
-
-    # 3. Parse polygon geometries
-    try:
-        polygons, poly_props = parse_polygons(data)
-        if len(polygons) > 0:
-            self.add_polygon(
-                data=polygons,
-                name=layer_name,
-                layer_group=group_name,
-                group_multi_select=group_multi_select,
-                **kwargs
-            )
-    except Exception:
-        pass
-
-    return self
+    return add_parsed_geometries(
+        self,
+        point_data=points or None,
+        line_data=lines or None,
+        polygon_data=polygons or None,
+        name=name or "Geostructures Layer",
+        layer_group=layer_group or "Geostructures Group",
+        group_multi_select=group_multi_select,
+        **kwargs
+    )

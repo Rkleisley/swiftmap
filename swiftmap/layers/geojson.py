@@ -1,9 +1,10 @@
 import json
 from typing import Optional, Dict, Any
-from ..parsers.points import parse_points
-from ..parsers.lines import parse_lines
-from ..parsers.polygons import parse_polygons
+from ..parsers import is_geostructures
+from ._geometry import add_parsed_geometries
+from ._batching import batched
 
+@batched
 def add_geojson(
     self,
     data: Any,
@@ -20,7 +21,8 @@ def add_geojson(
     Parameters
     ----------
     data : Any
-        GeoJSON dictionary, JSON string, or object with a `.to_geojson()` method.
+        GeoJSON dictionary or JSON string. Geostructures objects are forwarded to
+        `add_geostructures`, which parses them directly rather than converting to GeoJSON first.
     name : str, optional
         Layer name displayed in sidebar controls.
     layer_group : str, optional
@@ -30,69 +32,40 @@ def add_geojson(
     style : dict, optional
         Optional style overrides dictionary.
     **kwargs
-        Additional visual styling options passed to sub-layer builders.
+        Additional visual styling and popup/tooltip options passed to sub-layer builders.
 
     Returns
     -------
     Map
         Self reference for method chaining.
     """
+    # Geostructures shapes parse faster natively and need per-kind classification to avoid
+    # rendering a polygon as both a polygon and a centroid marker.
+    if is_geostructures(data):
+        return self.add_geostructures(
+            data,
+            name=name,
+            layer_group=layer_group,
+            group_multi_select=group_multi_select,
+            **kwargs
+        )
+
     if isinstance(data, str):
         try:
             parsed_data = json.loads(data)
-        except Exception:
-            parsed_data = {"type": "FeatureCollection", "features": []}
-    elif isinstance(data, dict) and "type" in data:
-        parsed_data = data
-    elif hasattr(data, "to_geojson"):
-        parsed_data = data.to_geojson()
+        except ValueError as exc:
+            raise ValueError(f"add_geojson received a string that is not valid JSON: {exc}") from exc
     else:
-        parsed_data = {"type": "FeatureCollection", "features": []}
-            
-    group_name = layer_group or "GeoJSON Group"
-    layer_name = name or "GeoJSON Layer"
+        parsed_data = data
 
-    # 1. Parse point geometries
-    try:
-        lats, lons, props, _ = parse_points(parsed_data)
-        if len(lats) > 0:
-            point_data = {"lat": lats, "lon": lons, **props}
-            self.add_markers(
-                data=point_data,
-                name=layer_name,
-                layer_group=group_name,
-                group_multi_select=group_multi_select,
-                **kwargs
-            )
-    except Exception:
-        pass
-
-    # 2. Parse line geometries
-    try:
-        lines, line_props = parse_lines(parsed_data)
-        if len(lines) > 0:
-            self.add_polyline(
-                data=lines,
-                name=layer_name,
-                layer_group=group_name,
-                group_multi_select=group_multi_select,
-                **kwargs
-            )
-    except Exception:
-        pass
-
-    # 3. Parse polygon geometries
-    try:
-        polygons, poly_props = parse_polygons(parsed_data)
-        if len(polygons) > 0:
-            self.add_polygon(
-                data=polygons,
-                name=layer_name,
-                layer_group=group_name,
-                group_multi_select=group_multi_select,
-                **kwargs
-            )
-    except Exception:
-        pass
-
-    return self
+    # GeoJSON parsers filter on feature type, so each one returns only its own geometries.
+    return add_parsed_geometries(
+        self,
+        point_data=parsed_data,
+        line_data=parsed_data,
+        polygon_data=parsed_data,
+        name=name or "GeoJSON Layer",
+        layer_group=layer_group or "GeoJSON Group",
+        group_multi_select=group_multi_select,
+        **kwargs
+    )

@@ -1,4 +1,4 @@
-var collapsedPaths = typeof collapsedPaths !== "undefined" ? collapsedPaths : {}; // Stores collapsed state: path -> boolean
+const collapsedPaths = {};  // path -> collapsed?
 
 function getLayerBounds(l, coordinateBuffers) {
     if (!l) return null;

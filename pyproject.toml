@@ -22,3 +22,8 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["swiftmap*"]
+
+# The built JS bundle. Produced by `npm run build` from src/ and committed, so
+# installing the Python package never requires Node.
+[tool.setuptools.package-data]
+swiftmap = ["static/*"]

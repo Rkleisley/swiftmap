@@ -2,6 +2,45 @@ import { loadCSS, loadJS } from "./utils.js";
 import { renderSidebarControls, normalizeRadioLayers } from "./sidebar.js";
 import { renderLayer, renderMergedGlLayer } from "./layers.js";
 
+// Applies incremental patch ops to {layers, buffers}, returning the new state.
+//
+// Ops are addressed by layer id and applied idempotently: "add" upserts rather than
+// appending blindly, so a patch that races the initial trait snapshot cannot duplicate
+// a layer, and a "remove" for something already gone is a no-op.
+export function applySwiftmapPatch(state, ops, buffers) {
+    let layers = state.layers || [];
+    let bufferMap = state.buffers || {};
+
+    for (const op of ops) {
+        if (op.op === "snapshot") {
+            layers = op.layers || [];
+            bufferMap = {};
+            (op.buffer_ids || []).forEach((id, i) => {
+                if (buffers && buffers[i]) bufferMap[id] = buffers[i];
+            });
+        } else if (op.op === "add" || op.op === "replace") {
+            const incoming = op.layer;
+            const id = incoming ? incoming.id : op.id;
+            const idx = layers.findIndex(l => l.id === id);
+            if (idx === -1) {
+                layers = [...layers, incoming];
+            } else {
+                layers = layers.map((l, i) => (i === idx ? incoming : l));
+            }
+        } else if (op.op === "remove") {
+            layers = layers.filter(l => l.id !== op.id);
+        } else if (op.op === "buffer") {
+            const buf = buffers && buffers[op.buffer_index];
+            if (buf) bufferMap = { ...bufferMap, [op.id]: buf };
+        } else if (op.op === "buffer_remove") {
+            bufferMap = { ...bufferMap };
+            delete bufferMap[op.id];
+        }
+    }
+
+    return { layers, buffers: bufferMap };
+}
+
 export default {
     async render({ model, el }) {
         const originalError = console.error;
@@ -97,6 +136,22 @@ export default {
         map.createPane("pointsPane");
         map.getPane("pointsPane").style.zIndex = "430";
 
+        // Local mirrors of the layer list and coordinate buffers.
+        //
+        // Python updates these incrementally via "swiftmap_patch" messages instead of
+        // reassigning the traits, because a trait reassignment re-serializes and re-sends
+        // the entire map on every mutation. The traits still carry the initial snapshot
+        // when a view attaches, and the sidebar still writes `layers` back on toggle, so
+        // both are seeded here and kept in step by the change handlers further down.
+        let layerState = model.get("layers") || [];
+        let bufferState = { ...(model.get("coordinate_buffers") || {}) };
+
+        function applyPatchOps(ops, buffers) {
+            const next = applySwiftmapPatch({ layers: layerState, buffers: bufferState }, ops, buffers);
+            layerState = next.layers;
+            bufferState = next.buffers;
+        }
+
         const activeTileLayers = {};
         const activeOverlayLayers = {};
         const glStates = {
@@ -155,9 +210,9 @@ export default {
 
         async function syncMapState() {
             console.time("[Performance] syncMapState Total");
-            const layers = model.get("layers") || [];
+            const layers = layerState;
             const groupConfigs = model.get("group_configs") || {};
-            const coordinateBuffers = model.get("coordinate_buffers") || {};
+            const coordinateBuffers = bufferState;
 
             // Enforce mutually exclusive radio group visibility before collecting or rendering WebGL layers
             const radioChanged = normalizeRadioLayers(layers, groupConfigs);
@@ -448,10 +503,33 @@ export default {
             performSync();
         });
 
-        model.on("change:layers", queueSync);
+        // Incremental updates from Python. Applied even when auto_sync is off so the mirror
+        // stays current; queueSync decides whether to actually re-render.
+        model.on("msg:custom", (msg, buffers) => {
+            if (!msg || msg.kind !== "swiftmap_patch") return;
+            applyPatchOps(msg.ops || [], buffers);
+            queueSync();
+        });
+
+        // Full-snapshot paths: the initial state message, and the sidebar writing `layers`
+        // back after a toggle. Either way the trait becomes authoritative again.
+        model.on("change:layers", () => {
+            layerState = model.get("layers") || [];
+            queueSync();
+        });
+        model.on("change:coordinate_buffers", () => {
+            bufferState = { ...(model.get("coordinate_buffers") || {}) };
+            queueSync();
+        });
         model.on("change:group_configs", queueSync);
-        model.on("change:coordinate_buffers", queueSync);
         model.on("change:show_logo", queueSync);
+
+        // Announce this view so Python replies with a full snapshot. Layers added before
+        // the view attached would otherwise be missing: their patches were emitted into a
+        // window where nothing was listening.
+        if (model.comm) {
+            model.send({ kind: "swiftmap_ready" });
+        }
 
         // Respect initial auto_sync state or manual sync requests sent during map building
         if (model.get("auto_sync") || model.get("sync_trigger") > 0) {

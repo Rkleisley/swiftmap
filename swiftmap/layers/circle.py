@@ -1,5 +1,8 @@
 from typing import Optional, List, Dict, Any
+from ._display import extract_display_config
+from ._batching import batched
 
+@batched
 def add_circle(
     self,
     location: List[float],
@@ -34,6 +37,16 @@ def add_circle(
         - fill_opacity : float, default 0.2 - Interior fill opacity (0.0 to 1.0).
         - popup : bool, default True - Enables popups on click.
         - tooltip : bool, default True - Enables tooltips on hover.
+        - popup_fields / tooltip_fields : list of str - Property names to display.
+          Defaults to every property.
+        - popup_names / tooltip_names : list of str - Display labels for those fields,
+          matched by position (e.g. fields=["pop_2020"], names=["Population"]).
+          Requires the matching `*_fields`.
+        - popup_template / tooltip_template : str - HTML template. `{column}` inserts one
+          value, `{*}` inserts the default field list. Data values are HTML-escaped; your
+          markup is not (e.g. "<img src='{photo}' width=300><br>{*}").
+        - popup_style / tooltip_style : str - Inline CSS for the content container.
+        - popup_max_width : int - Popup width in pixels (Leaflet default 300).
 
     Returns
     -------
@@ -47,7 +60,8 @@ def add_circle(
     """
     popup = kwargs.pop("popup", True)
     tooltip = kwargs.pop("tooltip", True)
-    
+    display_config = extract_display_config(kwargs)
+
     self.add_child({
         "type": "circle",
         "name": name or "Circle",
@@ -59,6 +73,7 @@ def add_circle(
         "properties": properties or {},
         "autobind_popup": bool(popup),
         "autobind_tooltip": bool(tooltip),
+        **display_config,
         **kwargs
     })
     return self

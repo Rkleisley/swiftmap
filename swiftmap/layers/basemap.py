@@ -1,4 +1,5 @@
 from typing import Optional
+from ._batching import batched
 
 BASEMAPS = {
     "OpenStreetMap": {
@@ -57,6 +58,7 @@ BASEMAPS = {
     }
 }
 
+@batched
 def add_basemap(
     self,
     name: str,

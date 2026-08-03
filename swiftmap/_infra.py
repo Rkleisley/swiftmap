@@ -32,48 +32,25 @@ class LayerConfig:
     def __contains__(self, key):
         return key in self.__dict__
 
+_STATIC_DIR = pathlib.Path(__file__).parent / "static"
+
+
+def _widget_css_path():
+    return _STATIC_DIR / "widget.css"
+
+
 def _load_esm():
-    js_dir = pathlib.Path(__file__).parent / "js"
-    map_code = (js_dir / "map.js").read_text(encoding="utf-8")
-    utils_code = (js_dir / "utils.js").read_text(encoding="utf-8")
-    sidebar_code = (js_dir / "sidebar.js").read_text(encoding="utf-8")
-    shaders_code = (js_dir / "shaders.js").read_text(encoding="utf-8")
-    layers_code = (js_dir / "layers.js").read_text(encoding="utf-8")
-    
-    utils_clean = utils_code.replace("export function ", "function ")
-    sidebar_clean = sidebar_code.replace("export function ", "function ")
-    
-    shaders_clean = shaders_code.replace("export var ", "var ").replace("export const ", "var ")
-    for line in shaders_clean.splitlines():
-        if "import " in line:
-            shaders_clean = shaders_clean.replace(line, "")
-            
-    layers_clean = layers_code
-    for line in layers_clean.splitlines():
-        if "import {" in line and ("utils.js" in line or "shaders.js" in line):
-            layers_clean = layers_clean.replace(line, "")
-    layers_clean = layers_clean.replace("export async function ", "async function ")
-    
-    map_lines = []
-    for line in map_code.splitlines():
-        if "import " in line and ("utils.js" in line or "sidebar.js" in line or "layers.js" in line):
-            continue
-        map_lines.append(line)
-    map_clean = "\n".join(map_lines)
-    
-    return f"""
-// --- UTILS ---
-{utils_clean}
+    """
+    Returns the built anywidget bundle.
 
-// --- SHADERS ---
-{shaders_clean}
-
-// --- SIDEBAR ---
-{sidebar_clean}
-
-// --- LAYERS ---
-{layers_clean}
-
-// --- MAIN ENTRY ---
-{map_clean}
-"""
+    The JS is a real ES module graph under src/ and is bundled by esbuild (`npm run build`),
+    which writes the artifact here. The same source also builds to dist/ for npm consumers,
+    so the browser bundle and the Python widget are never separate implementations.
+    """
+    bundle = _STATIC_DIR / "widget.js"
+    if not bundle.exists():
+        raise FileNotFoundError(
+            f"swiftmap's JavaScript bundle is missing at {bundle}.\n"
+            "It is a build artifact -- run `npm install && npm run build` in the repo root."
+        )
+    return bundle.read_text(encoding="utf-8")

@@ -1,5 +1,16 @@
 from typing import Any, Optional
 from .._infra import LayerConfig
+from ._display import DISPLAY_KEYS
+
+# Per-layer attributes relocated onto a sub-layer when same-name layers merge into a group.
+_SUB_LAYER_ATTRS = (
+    "radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity",
+    "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations",
+    "location", "geojson",
+) + DISPLAY_KEYS
+
+# Same set, plus the flags that are carried down but not stripped from the group.
+_COPY_ATTRS = _SUB_LAYER_ATTRS + ("autobind_popup", "autobind_tooltip")
 
 def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optional[str] = None, group_multi_select: Optional[bool] = None) -> "Map":
     """Adds a layer or configuration metadata config directly to the map's layers list."""
@@ -93,7 +104,7 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
                 "visible": new_config.get("visible", True),
             }
             # Copy other attributes
-            for attr in ("radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity", "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations", "location", "geojson", "autobind_popup", "autobind_tooltip"):
+            for attr in _COPY_ATTRS:
                 val = new_config.get(attr)
                 if val is not None:
                     sub_layer[attr] = val
@@ -102,7 +113,7 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
             new_config.type = "group"
             new_config.layers = [sub_layer]
             # Remove individual layer attributes from group level
-            for attr in ("radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity", "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations", "location", "geojson"):
+            for attr in _SUB_LAYER_ATTRS:
                 if attr in new_config.__dict__:
                     del new_config.__dict__[attr]
         
@@ -116,15 +127,15 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
                 "name": child_config.name,
                 "visible": child_config.visible,
             }
-            for attr in ("radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity", "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations", "location", "geojson", "autobind_popup", "autobind_tooltip"):
+            for attr in _COPY_ATTRS:
                 val = getattr(child_config, attr, None)
                 if val is not None:
                     sub_layer[attr] = val
             new_config.layers = new_config.layers + [sub_layer]
             
         # Replace the old reference inside the layers list with our new instance
-        self.layers = [l if l is not existing else new_config for l in self.layers]
+        self._layers_replace(existing, new_config)
         return self
 
-    self.layers = self.layers + [child_config]
+    self._layers_append(child_config)
     return self

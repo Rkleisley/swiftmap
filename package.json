@@ -1,0 +1,22 @@
+{
+  "name": "swiftmap-core",
+  "version": "0.1.0",
+  "description": "High-performance Leaflet + WebGL map rendering core, usable standalone or via the swiftmap Python widget",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./anywidget": "./dist/anywidget.js"
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "node build.mjs",
+    "build:watch": "node build.mjs --watch",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

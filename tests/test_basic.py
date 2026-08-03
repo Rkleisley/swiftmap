@@ -197,6 +197,33 @@ def test_polygon_and_shapes_patterns():
     except ImportError:
         pass
 
+def test_polars_and_dict_lines_polygons():
+    import polars as pl
+    df_line = pl.DataFrame({
+        "track_id": [1, 1, 2, 2],
+        "step": [1, 2, 1, 2],
+        "lat": [34.05, 34.06, 37.77, 37.78],
+        "lon": [-118.24, -118.25, -122.41, -122.42]
+    })
+    m = Map()
+    m.add_line(df_line, line_id_col="track_id", order_col="step", name="Polars Tracks")
+    assert len(m.layers) == 4
+    assert m.layers[-1].type == "polyline"
+
+    df_poly = pl.DataFrame({
+        "zone": ["Zone A"],
+        "wkt": ["POLYGON ((-118.24 34.05, -118.20 34.05, -118.20 34.10, -118.24 34.10, -118.24 34.05))"]
+    })
+    m2 = Map()
+    m2.add_shapes(df_poly, name="Polars WKT Zone")
+    assert m2.layers[-1].type == "polygon"
+
+    # Dict line test
+    dict_line = {"lat": [34.05, 37.77], "lon": [-118.24, -122.41]}
+    m3 = Map()
+    m3.add_line(dict_line, name="Dict Line")
+    assert m3.layers[-1].type == "polyline"
+
 def test_legend_and_geostructures():
     from geostructures import Coordinate, GeoPoint, GeoLineString, GeoPolygon, GeoBox, GeoCircle, GeoRing, MultiGeoPolygon
     m = Map(show_legend=True)
