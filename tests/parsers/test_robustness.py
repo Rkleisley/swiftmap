@@ -154,10 +154,10 @@ def test_wide_columns_with_a_gap_use_the_matching_pairs(mk):
 
 
 @pytest.mark.parametrize("mk", FRAMES)
-def test_wide_columns_without_a_matching_pair_fall_through(mk):
-    """lat1/lat2/lon1: only index 1 pairs up, too few for a line, so other tiers decide."""
-    with pytest.raises(ValueError):
-        parse_lines(mk({"lat1": [A[0]], "lat2": [B[0]], "lon1": [A[1]]}))
+def test_wide_columns_without_a_matching_pair_yield_nothing(mk):
+    """lat1/lat2/lon1: only index 1 pairs up, too few for a line, and no other tier matches."""
+    lines, props = parse_lines(mk({"lat1": [A[0]], "lat2": [B[0]], "lon1": [A[1]]}))
+    assert lines == [] and props == {}
 
 
 # --- mixed-geometry capability ----------------------------------------------------

@@ -1,7 +1,16 @@
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
 from ._utils import find_column_or_key, _ensure_closed_ring
-from ._tabular import LAT_CANDIDATES, LON_CANDIDATES
+from ._tabular import (
+    LAT_CANDIDATES,
+    LON_CANDIDATES,
+    RowsView,
+    group_rows_into_paths,
+    parse_tabular_lines_by_coord_column,
+    parse_tabular_lines_by_wide_columns,
+    parse_tabular_polygons_by_coord_column,
+    parse_tabular_polygons_by_wide_columns,
+)
 
 def is_list_of_dicts(data: Any) -> bool:
     return isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict)
@@ -26,16 +35,21 @@ def parse_list_of_dicts_points(data: Any, lat_col: Optional[str] = None, lon_col
     actual_lon = lon_col or find_column_or_key(list(data[0].keys()), LON_CANDIDATES)
 
     if not actual_lat or not actual_lon:
-        raise ValueError(f"Could not auto-detect lat/lon keys from dictionaries. Keys: {list(data[0].keys())}")
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}
         
-    lats = np.array([float(item[actual_lat]) for item in data], dtype=np.float64)
-    lons = np.array([float(item[actual_lon]) for item in data], dtype=np.float64)
-    
-    props = {}
-    for k in data[0].keys():
-        if k not in (actual_lat, actual_lon):
-            props[k] = [item[k] for item in data]
-            
+    rows = [r for r in data if r.get(actual_lat) is not None and r.get(actual_lon) is not None]
+    lats = np.array([float(r[actual_lat]) for r in rows], dtype=np.float64)
+    lons = np.array([float(r[actual_lon]) for r in rows], dtype=np.float64)
+
+    # Union of keys in first-seen order: rows need not share a schema, and indexing with
+    # [k] instead of .get(k) raised KeyError as soon as one row differed.
+    keys = {}
+    for row in rows:
+        for key in row:
+            if key not in (actual_lat, actual_lon):
+                keys[key] = None
+
+    props = {k: [r.get(k) for r in rows] for k in keys}
     return lats, lons, props
 
 
@@ -44,7 +58,7 @@ def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optiona
     actual_lon = lon_col or find_column_or_key(list(data.keys()), LON_CANDIDATES)
 
     if not actual_lat or not actual_lon:
-        raise ValueError(f"Could not auto-detect lat/lon keys from dictionary. Keys: {list(data.keys())}")
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}
         
     lats = np.asarray(data[actual_lat], dtype=np.float64)
     lons = np.asarray(data[actual_lon], dtype=np.float64)
@@ -161,25 +175,62 @@ def parse_coordinate_list_polygons(data: Any, coord_order: str = "auto", **kwarg
     return polygons, {}
 
 
+def _parse_rows(
+    data: Any,
+    close_rings: bool,
+    lat_col: Optional[str] = None,
+    lon_col: Optional[str] = None,
+    line_id_col: Optional[str] = None,
+    shape_id_col: Optional[str] = None,
+    order_col: Optional[str] = None,
+    coord_order: str = "auto",
+    **kwargs
+) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
+    """
+    Runs the tabular tiers over dict / list-of-dicts input.
+
+    The input is already tabular, so it is wrapped in a RowsView rather than converted
+    into a DataFrame: no copy is made, and pandas is not required for data that is plain
+    Python to begin with.
+    """
+    view = RowsView(data)
+    cols = view.columns
+
+    by_coord = (parse_tabular_polygons_by_coord_column if close_rings
+                else parse_tabular_lines_by_coord_column)
+    by_wide = (parse_tabular_polygons_by_wide_columns if close_rings
+               else parse_tabular_lines_by_wide_columns)
+
+    result = by_coord(view, cols, lat_col, lon_col, coord_order)
+    if result is not None:
+        return result
+
+    result = by_wide(view, cols, lat_col, lon_col)
+    if result is not None:
+        return result
+
+    result = group_rows_into_paths(
+        view, cols, lat_col, lon_col,
+        group_col=shape_id_col if close_rings else line_id_col,
+        order_col=order_col,
+        coord_order=coord_order,
+        min_vertices=3 if close_rings else 2,
+        close_rings=close_rings,
+    )
+    return result if result is not None else ([], {})
+
+
 def parse_dict_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    import pandas as pd
-    from .pandas import parse_pandas_lines
-    return parse_pandas_lines(pd.DataFrame(data), **kwargs)
+    return _parse_rows(data, close_rings=False, **kwargs)
 
 
 def parse_list_of_dicts_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    import pandas as pd
-    from .pandas import parse_pandas_lines
-    return parse_pandas_lines(pd.DataFrame(data), **kwargs)
+    return _parse_rows(data, close_rings=False, **kwargs)
 
 
 def parse_dict_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    import pandas as pd
-    from .pandas import parse_pandas_polygons
-    return parse_pandas_polygons(pd.DataFrame(data), **kwargs)
+    return _parse_rows(data, close_rings=True, **kwargs)
 
 
 def parse_list_of_dicts_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    import pandas as pd
-    from .pandas import parse_pandas_polygons
-    return parse_pandas_polygons(pd.DataFrame(data), **kwargs)
+    return _parse_rows(data, close_rings=True, **kwargs)

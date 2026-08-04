@@ -51,9 +51,13 @@ def test_points_explicit_columns_override_autodetect(mk):
 
 
 @pytest.mark.parametrize("mk", FRAMES)
-def test_points_without_coordinates_raises(mk):
-    with pytest.raises(ValueError, match="lat/lon"):
-        parse_points(mk({"name": ["nowhere"], "value": [1]}))
+def test_points_without_coordinates_yield_nothing(mk):
+    """
+    Parsers report absence by returning empty, never by raising. The calling add_* decides
+    whether that is worth a warning -- it knows whether points were actually asked for.
+    """
+    lats, lons, props = parse_points(mk({"name": ["nowhere"], "value": [1]}))
+    assert len(lats) == 0 and len(lons) == 0 and props == {}
 
 
 # --- lines ------------------------------------------------------------------------

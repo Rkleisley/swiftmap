@@ -1,5 +1,6 @@
 import pytest
 from swiftmap import Map
+from swiftmap._warnings import EmptyLayerWarning
 import pandas as pd
 import numpy as np
 
@@ -305,12 +306,14 @@ def test_markers_bounds():
     layer2 = m.layers[-1]
     assert layer2.bounds == [[5.0, 15.0], [25.0, 35.0]]
 
-    # Test empty markers (should not append a layer when empty)
+    # Test empty markers (should not append a layer when empty). It warns rather than
+    # raising, so a bad call cannot discard the layers already on the map.
     initial_count = len(m.layers)
-    m.add_markers(
-        data=[],
-        name="Empty Markers"
-    )
+    with pytest.warns(EmptyLayerWarning):
+        m.add_markers(
+            data=[],
+            name="Empty Markers"
+        )
     assert len(m.layers) == initial_count
 
 def test_map_crs():

@@ -87,9 +87,9 @@ def test_dict_as_a_line():
     assert_coords(lines[0], LINE, label="dict line")
 
 
-def test_dict_without_coordinates_raises():
-    with pytest.raises(ValueError, match="lat/lon"):
-        parse_points({"name": ["nowhere"]})
+def test_dict_without_coordinates_yields_nothing():
+    lats, _, _ = parse_points({"name": ["nowhere"]})
+    assert len(lats) == 0
 
 
 # --- list of row dicts ------------------------------------------------------------
@@ -111,9 +111,18 @@ def test_list_of_row_dicts_grouped_into_lines():
     assert props["track_id"] == ["T1", "T2"]
 
 
-def test_list_of_row_dicts_without_coordinates_raises():
-    with pytest.raises(ValueError, match="lat/lon"):
-        parse_points([{"name": "nowhere"}])
+def test_list_of_row_dicts_without_coordinates_yields_nothing():
+    lats, _, _ = parse_points([{"name": "nowhere"}])
+    assert len(lats) == 0
+
+
+def test_dict_lines_do_not_require_pandas():
+    """Dict input is already tabular; it is viewed in place, not converted to a DataFrame."""
+    import swiftmap.parsers.sources.lists_dicts as module
+    import inspect
+    source = inspect.getsource(module)
+    assert "pd.DataFrame(" not in source, "dict input must not be copied into a DataFrame"
+    assert "import pandas" not in source, "plain-Python input must not require pandas"
 
 
 # --- dispatch precedence ----------------------------------------------------------
@@ -124,3 +133,37 @@ def test_geojson_dict_is_not_captured_by_the_plain_dict_parser():
          "properties": {}}]}
     lats, lons, _ = parse_points(gj)
     assert_points(lats, lons, [A])
+
+
+# --- multi-row grouping without pandas ---------------------------------------------
+def test_dict_of_columns_grouped_and_sorted_into_lines():
+    """The pure-Python grouping tier: group by id, order by a sort column."""
+    data = {"track_id": ["T1", "T2", "T1", "T2"],
+            "step": [2, 2, 1, 1],
+            "lat": [B[0], SECOND_LINE[1][0], A[0], SECOND_LINE[0][0]],
+            "lon": [B[1], SECOND_LINE[1][1], A[1], SECOND_LINE[0][1]]}
+    lines, props = parse_lines(data)
+    assert len(lines) == 2
+    ordered = dict(zip(props["track_id"], lines))
+    assert_coords(ordered["T1"], [list(A), list(B)], label="T1 sorted by step")
+    assert_coords(ordered["T2"], SECOND_LINE, label="T2 sorted by step")
+
+
+def test_list_of_row_dicts_grouped_into_polygons():
+    rows = [{"zone_id": "Z1", **{"lat": p[0], "lon": p[1]}} for p in RING_OPEN]
+    polygons, props = parse_polygons(rows)
+    assert len(polygons) == 1
+    assert_closed(polygons[0])
+    assert props["zone_id"] == ["Z1"]
+
+
+def test_dict_wkt_column_without_pandas():
+    from geometry import wkt_line
+    lines, _ = parse_lines({"wkt": [wkt_line(LINE)], "n": ["a"]})
+    assert_coords(lines[0], LINE, label="dict WKT line")
+
+
+def test_rows_with_differing_keys_are_unioned():
+    lats, _, props = parse_points([{"lat": A[0], "lon": A[1], "a": 1},
+                                   {"lat": B[0], "lon": B[1], "b": 2}])
+    assert len(lats) == 2

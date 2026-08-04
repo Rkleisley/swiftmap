@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Any
 from ..parsers import parse_polygons
 from ._display import extract_display_config
 from ._batching import batched
+from .._warnings import warn, EmptyLayerWarning
 
 @batched
 def add_polygon(
@@ -115,6 +116,11 @@ def add_polygon(
         **kwargs
     )
     if not polygons_coords:
+        warn(
+            f"add_polygon found no polygon geometry in the supplied {type(data).__name__}. "
+            f"No layer was added.",
+            EmptyLayerWarning,
+        )
         return self
 
     is_multi = len(polygons_coords) > 1

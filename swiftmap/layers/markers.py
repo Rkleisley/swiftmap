@@ -3,6 +3,7 @@ from typing import Optional, Any
 from ..parsers import parse_points
 from ._display import extract_display_config
 from ._batching import batched
+from .._warnings import warn, EmptyLayerWarning
 
 @batched
 def add_markers(
@@ -70,6 +71,11 @@ def add_markers(
     lats, lons, props = parse_points(data, lat_col, lon_col)
     num_points = len(lats)
     if num_points == 0:
+        warn(
+            f"add_markers found no point geometry in the supplied {type(data).__name__}. "
+            f"No layer was added.",
+            EmptyLayerWarning,
+        )
         return self
 
     # 2. Determine which components of layer_group are dynamic column names vs static strings

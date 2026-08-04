@@ -53,6 +53,127 @@ def find_wkt_column(data: Any) -> Optional[str]:
     return None
 
 
+class _Column:
+    """A column of a RowsView, exposing the accessors the tabular parsers use."""
+    __slots__ = ("_values",)
+
+    def __init__(self, values):
+        self._values = values
+
+    def to_list(self):
+        return list(self._values)
+
+    def to_numpy(self):
+        return np.asarray(self._values)
+
+
+class RowsView:
+    """
+    Read-only view giving plain Python data the surface the tabular parsers expect.
+
+    A dict of columns or a list of row dicts is already tabular; converting it into a
+    DataFrame to reuse those parsers would copy the whole input and make pandas a hard
+    dependency of inputs that need no third-party library at all. This exposes `.columns`,
+    `[col]` and `.iter_rows()` over the original object instead, materialising nothing.
+    """
+    __slots__ = ("_columns", "_by_column", "_rows")
+
+    def __init__(self, data: Any):
+        if isinstance(data, dict):
+            self._by_column = data
+            self._rows = None
+            self._columns = list(data.keys())
+        else:
+            self._by_column = None
+            self._rows = data
+            # Union of keys, first-seen order, so rows with differing keys are not truncated.
+            seen = {}
+            for row in data:
+                for key in row:
+                    seen[key] = None
+            self._columns = list(seen)
+
+    @property
+    def columns(self):
+        return self._columns
+
+    def __getitem__(self, column):
+        if self._by_column is not None:
+            return _Column(self._by_column[column])
+        return _Column([row.get(column) for row in self._rows])
+
+    def iter_rows(self, named: bool = True):
+        if self._rows is not None:
+            yield from self._rows
+            return
+        columns = self._columns
+        length = max((len(v) for v in self._by_column.values()), default=0)
+        for i in range(length):
+            yield {c: self._by_column[c][i] for c in columns}
+
+
+def group_rows_into_paths(
+    data: Any,
+    cols: List[str],
+    lat_col: Optional[str],
+    lon_col: Optional[str],
+    group_col: Optional[str],
+    order_col: Optional[str],
+    coord_order: str,
+    min_vertices: int,
+    close_rings: bool,
+) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:
+    """
+    Multi-row grouping in plain Python, for sources with no native groupby.
+
+    pandas and polars each keep their own implementation of this tier because theirs are
+    vectorised; this is the fallback for dict and list-of-dicts input.
+    """
+    id_candidates = SHAPE_ID_CANDIDATES if close_rings else LINE_ID_CANDIDATES
+    order_candidates = SHAPE_ORDER_CANDIDATES if close_rings else LINE_ORDER_CANDIDATES
+
+    actual_lat = lat_col or find_column_or_key(cols, LAT_CANDIDATES)
+    actual_lon = lon_col or find_column_or_key(cols, LON_CANDIDATES)
+    if not actual_lat or not actual_lon:
+        return None
+
+    actual_group = group_col or find_column_or_key(cols, id_candidates)
+    actual_order = order_col or find_column_or_key(cols, order_candidates)
+
+    rows = list(data.iter_rows(named=True))
+    if actual_order:
+        rows.sort(key=lambda r: (r.get(actual_order) is None, r.get(actual_order)))
+
+    other_cols = [c for c in cols if c not in (actual_lat, actual_lon, actual_group, actual_order)]
+
+    grouped = {}
+    for row in rows:
+        key = row.get(actual_group) if actual_group else None
+        grouped.setdefault(key, []).append(row)
+
+    paths, props_list, keys = [], [], []
+    for key, group in grouped.items():
+        coords = []
+        for row in group:
+            lat, lon = row.get(actual_lat), row.get(actual_lon)
+            if lat is None or lon is None:
+                continue
+            lat, lon = float(lat), float(lon)
+            coords.append([lon, lat] if coord_order == "lon_lat" else [lat, lon])
+        if len(coords) < min_vertices:
+            continue
+        if close_rings:
+            coords = _ensure_closed_ring(coords)
+        paths.append(coords)
+        props_list.append({c: group[0].get(c) for c in other_cols})
+        keys.append(key)
+
+    props = {c: [p.get(c) for p in props_list] for c in other_cols} if props_list else {}
+    if actual_group and paths:
+        props[actual_group] = keys
+    return paths, props
+
+
 def iter_row_dicts(data: Any):
     """Yields each row as something supporting row[col], for either a pandas or polars DataFrame."""
     if hasattr(data, "iter_rows"):
@@ -88,7 +209,9 @@ def parse_tabular_points(data: Any, lat_col: Optional[str] = None, lon_col: Opti
         wkt_column = find_wkt_column(data)
         if wkt_column:
             return _parse_wkt_points(data, cols, wkt_column)
-        raise ValueError(f"Could not auto-detect lat/lon columns from {label}. Columns: {cols}")
+        # No coordinates of any kind. Returning empty rather than raising lets the
+        # calling add_* decide: it knows whether points were actually asked for.
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}
 
     lats = data[actual_lat].to_numpy().astype(np.float64)
     lons = data[actual_lon].to_numpy().astype(np.float64)

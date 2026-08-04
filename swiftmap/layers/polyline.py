@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Any
 from ..parsers import parse_lines
 from ._display import extract_display_config
 from ._batching import batched
+from .._warnings import warn, EmptyLayerWarning
 
 @batched
 def add_line(
@@ -118,6 +119,11 @@ def add_line(
         **kwargs
     )
     if not lines_coords:
+        warn(
+            f"add_line found no line geometry in the supplied {type(data).__name__}. "
+            f"No layer was added.",
+            EmptyLayerWarning,
+        )
         return self
 
     is_multi = len(lines_coords) > 1

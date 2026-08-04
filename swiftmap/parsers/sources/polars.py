@@ -88,7 +88,9 @@ def parse_polars_lines(
                 coords = np.column_stack((lats, lons)).tolist()
             return [coords], {}
 
-    raise ValueError(f"Could not parse lines from Polars DataFrame columns: {cols}")
+    # No line geometry here. Typed sources return empty for this, so tabular
+    # sources do too; the calling add_* warns if it was asked for lines specifically.
+    return [], {}
 
 
 def parse_polars_polygons(
@@ -154,4 +156,6 @@ def parse_polars_polygons(
             coords = _ensure_closed_ring(coords)
             return [coords], {}
 
-    raise ValueError(f"Could not parse polygons from Polars DataFrame columns: {cols}")
+    # No polygon geometry here. Typed sources return empty for this, so tabular
+    # sources do too; the calling add_* warns if it was asked for polygons specifically.
+    return [], {}

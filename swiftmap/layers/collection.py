@@ -1,6 +1,8 @@
 import json
+import warnings
 from typing import Optional, Any
 from ..parsers import supports_mixed_geometry
+from .._warnings import warn, EmptyLayerWarning
 from ._batching import batched
 
 
@@ -48,15 +50,13 @@ def add_collection(
     Map
         Self reference for method chaining.
 
-    Raises
-    ------
-    TypeError
-        If `data` comes from a source whose parsers do not distinguish geometry types.
-        Tabular parsers coerce whatever they are given -- a table of points would also
-        yield a line threaded through them and a polygon around them -- so plotting one
-        speculatively as all three kinds would produce layers you did not ask for.
-    ValueError
-        If `data` is a string that is not valid JSON.
+    Warns
+    -----
+    SwiftMapWarning
+        If `data` is not valid JSON, comes from a source that does not distinguish
+        geometry types, or `point_type` is unrecognised. Nothing raises: an exception
+        partway through a chain of `add_*` calls would discard the layers already added
+        and leave nothing to render.
 
     Examples
     --------
@@ -64,26 +64,30 @@ def add_collection(
     >>> m.add_collection(feature_collection, name="Survey", layer_group="Field Data")
     >>> m.add_collection(gdf, name="Assets", point_type="markers")
     """
+    # Every problem below reports and returns rather than raising. Building a map is a
+    # chain of add_* calls, and an exception partway through discards the layers already
+    # added -- one bad call would leave nothing to render.
     if isinstance(data, str):
         try:
             data = json.loads(data)
         except ValueError as exc:
-            raise ValueError(
-                f"add_collection received a string that is not valid JSON: {exc}"
-            ) from exc
+            warn(f"add_collection received a string that is not valid JSON ({exc}). "
+                 f"No layer was added.")
+            return self
 
     if not supports_mixed_geometry(data):
-        raise TypeError(
+        warn(
             f"add_collection needs a source that states each geometry's type: GeoJSON, "
             f"geostructures, GeoPandas, or a DataFrame with a WKT geometry column. Got "
-            f"{type(data).__name__}. A table of lat/lon columns is a single geometry kind "
-            f"by construction -- use add_markers, add_line, or add_polygon instead."
+            f"{type(data).__name__}, which holds a single geometry kind by construction -- "
+            f"use add_markers, add_line, or add_polygon instead. No layer was added."
         )
+        return self
 
     if point_type not in ("circle_markers", "markers"):
-        raise ValueError(
-            f"point_type must be 'circle_markers' or 'markers', got {point_type!r}."
-        )
+        warn(f"point_type must be 'circle_markers' or 'markers', got {point_type!r}. "
+             f"Falling back to 'circle_markers'.")
+        point_type = "circle_markers"
 
     shared = {
         "name": name or "Collection Layer",
@@ -93,12 +97,17 @@ def add_collection(
     }
 
     # The source data is handed to each builder rather than pre-parsed coordinates, so each
-    # keeps its own per-feature properties for popups. Every builder returns early when its
-    # parser finds nothing, so kinds absent from the collection simply add no layer.
+    # keeps its own per-feature properties for popups.
+    #
+    # All three are asked speculatively, so EmptyLayerWarning is suppressed: a collection of
+    # polygons containing no points is normal, not something to report. A direct call to
+    # add_markers still warns, because there the caller did ask for points.
     add_points = self.add_markers if point_type == "markers" else self.add_circle_markers
-    add_points(data=data, **shared)
-    self.add_polyline(data=data, **shared)
-    self.add_polygon(data=data, **shared)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", EmptyLayerWarning)
+        add_points(data=data, **shared)
+        self.add_polyline(data=data, **shared)
+        self.add_polygon(data=data, **shared)
 
     return self
 
