@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>html,body,#host{margin:0;height:100%;width:100%}</style>
+<div id="host"></div>
+<script type="module">
+// Drives the real anywidget entry point with a stubbed model, so the widget renders
+// exactly as it does under Shiny or Jupyter with no Python, kernel or comm involved.
+import widget from "/dist/anywidget.js";
+
+function makeModel(state) {
+  const listeners = {};
+  const model = {
+    comm: { comm_id: "test" },
+    sent: [],
+    get: k => state[k],
+    set(k, v) { state[k] = v; (listeners["change:" + k] || []).forEach(f => f()); },
+    on(e, f) { (listeners[e] = listeners[e] || []).push(f); },
+    send(content, buffers) { model.sent.push({ content, buffers }); },
+    save_changes() {},
+  };
+  return model;
+}
+
+// Points are shipped as a raw float64 buffer, exactly as the Python side sends them.
+function buffer(pairs) {
+  const arr = new Float64Array(pairs.flat());
+  return new DataView(arr.buffer);
+}
+
+const layers = [
+  { id: "base", type: "basemap", name: "OSM", layer_group: "Basemaps", visible: false,
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", max_zoom: 19 },
+  { id: "pts", type: "circle_markers", name: "Sites", layer_group: "Feeds/Active",
+    visible: true, radius: 12, color: "#ff0000", fillColor: "#ff0000", fillOpacity: 1.0,
+    weight: 2, opacity: 1.0, autobind_popup: true, autobind_tooltip: true,
+    properties: { site: ["Alpha", "Bravo"] },
+    bounds: [[35.98, -5.32], [36.12, -5.18]] },
+  { id: "poly", type: "polygon", name: "Zone", layer_group: "Feeds/Zones", visible: true,
+    color: "#00ff00", fillColor: "#00ff00", fillOpacity: 0.6, weight: 2, opacity: 1,
+    autobind_popup: true, properties: { zone: "North" },
+    locations: [[36.00, -5.30], [36.00, -5.20], [36.10, -5.20], [36.00, -5.30]] },
+];
+
+const model = makeModel({
+  layers,
+  group_configs: {},
+  coordinate_buffers: { pts: buffer([[36.00, -5.30], [36.10, -5.20]]) },
+  center: [36.05, -5.25], zoom: 12, crs: "EPSG:3857",
+  auto_sync: true, sync_trigger: 0, show_logo: false,
+});
+
+window.__model = model;
+await widget.render({ model, el: document.getElementById("host") });
+window.__ready = true;
+</script>

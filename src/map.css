@@ -25,12 +25,14 @@
     font-size: 11px;
 }
 
-/* Enable pointer events on canvases and SVGs inside custom panes */
-.leaflet-polygonsPane-pane > canvas,
-.leaflet-polygonsPane-pane > svg,
-.leaflet-polylinesPane-pane > canvas,
-.leaflet-polylinesPane-pane > svg,
-.leaflet-pointsPane-pane > canvas,
-.leaflet-pointsPane-pane > svg {
+/* Enable pointer events on canvases and SVGs inside the custom panes.
+   Leaflet's createPane() strips "Pane" from the name it is given, so
+   createPane("polygonsPane") produces the class "leaflet-polygons-pane". */
+.leaflet-polygons-pane > canvas,
+.leaflet-polygons-pane > svg,
+.leaflet-polylines-pane > canvas,
+.leaflet-polylines-pane > svg,
+.leaflet-points-pane > canvas,
+.leaflet-points-pane > svg {
     pointer-events: auto !important;
 }

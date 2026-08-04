@@ -85,7 +85,7 @@ const SAFE_URL = /^(?:https?:\/\/|mailto:|tel:|data:image\/|[./#?]|[\w.-]+(?:[/?
 
 // Property values come from user data and end up in innerHTML, so they are escaped.
 // Markup the app author wrote (templates, style strings) is left intact.
-function escapeHtml(value) {
+export function escapeHtml(value) {
     return String(value)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -97,7 +97,7 @@ function escapeHtml(value) {
 // Escaping stops attribute breakout but not "javascript:" in an href, so values landing
 // in a URL attribute get a scheme check. Control characters are stripped first because
 // "java\tscript:" survives a naive comparison.
-function safeUrl(value) {
+export function safeUrl(value) {
     const collapsed = String(value).split("").filter(c => c.charCodeAt(0) > 32).join("");
     return SAFE_URL.test(collapsed) ? String(value) : "";
 }
@@ -127,7 +127,7 @@ function renderTemplate(template, props, fields, names) {
     });
 }
 
-function renderContent(props, layer, kind) {
+export function renderContent(props, layer, kind) {
     const template = layer[kind + "_template"];
     const fields = layer[kind + "_fields"];
     const names = layer[kind + "_names"];

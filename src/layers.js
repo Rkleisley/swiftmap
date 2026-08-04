@@ -47,7 +47,7 @@ function registerHoverMatch(map, priority, action) {
 // Style for one feature: its own entry from `feature_styles` when the layer carries
 // varied styling, otherwise the layer's single style. Python only emits feature_styles
 // when features actually differ, so a uniform layer costs nothing extra here.
-function styleFor(layer, index) {
+export function styleFor(layer, index) {
     const perFeature = layer.feature_styles;
     if (Array.isArray(perFeature) && perFeature[index]) {
         return { ...layer, ...perFeature[index] };
@@ -55,7 +55,7 @@ function styleFor(layer, index) {
     return layer;
 }
 
-function getIndexedProperties(properties, index) {
+export function getIndexedProperties(properties, index) {
     if (!properties) return {};
     const props = {};
     Object.keys(properties).forEach(k => {

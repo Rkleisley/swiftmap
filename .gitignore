@@ -157,3 +157,7 @@ node_modules/
 # NOTE: dist/ is ignored above (Python packaging section) and that covers the npm
 # build output too. swiftmap/static/ is deliberately NOT ignored -- it is the built
 # widget bundle the Python wheel ships, so `pip install` works without Node.
+
+# Playwright browser binaries
+test-results/
+playwright-report/

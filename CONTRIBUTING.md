@@ -41,6 +41,39 @@ Nothing in `src/` may import from Python or assume anywidget — `src/map.js` is
 *adapter*, and the reusable pieces it builds on are exported from `src/index.js` so the same
 renderer can back a React app.
 
+### Testing the JavaScript
+
+```bash
+npm test              # all three tiers
+npm run test:unit     # tiers 1 and 2 only -- no browser needed
+```
+
+Three tiers, cheapest first. Most of what looks like "rendering" is really a decision, and
+decisions are testable without pixels.
+
+| tier | file | covers | needs |
+| --- | --- | --- | --- |
+| 1 | `test/tier1-logic.test.mjs` | visibility inheritance, WebGL bucketing, radio groups, patch application, bounds, per-feature style, click-to-row mapping, escaping | nothing |
+| 2 | `test/tier2-sidebar.test.mjs` | the folder tree, checkbox vs radio, writeback to the model, fitBounds on toggle | jsdom |
+| 3 | `test/tier3-render.test.mjs` | Leaflet init, panes, glify receiving data, visible output, popups | Playwright |
+
+Tier 3 skips itself when Playwright is absent, so the suite still runs on a machine without
+it. Install with `npm i -D playwright && npx playwright install chromium`.
+
+Two rules for tier 3, both learned the hard way:
+
+**Never compare screenshots to a stored baseline.** WebGL output differs across GPUs and
+drivers, so a pixel-exact baseline fails for reasons that have nothing to do with the code.
+Compare two screenshots taken in the *same session* instead -- render, hide the layer,
+assert the images differ. That proves something was drawn and cannot fail on a new machine.
+
+**`readPixels` does not work here.** glify creates its context without
+`preserveDrawingBuffer`, so the buffer is empty by the time a test can read it. The
+differential screenshot above is the way around it.
+
+Keep tier 3 thin. Anything answerable from data belongs in tier 1, where it runs in
+milliseconds instead of six seconds.
+
 ---
 
 ## Adding Support for a New Data Source

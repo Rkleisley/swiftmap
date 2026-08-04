@@ -10,13 +10,20 @@
     ".": "./dist/index.js",
     "./anywidget": "./dist/anywidget.js"
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "node build.mjs",
     "build:watch": "node build.mjs --watch",
-    "test": "node --test test/"
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "test:unit": "node --test test/tier1-logic.test.mjs test/tier2-sidebar.test.mjs"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "jsdom": "^29.1.1",
+    "playwright": "^1.62.1"
   }
 }

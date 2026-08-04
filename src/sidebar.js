@@ -1,6 +1,6 @@
 const collapsedPaths = {};  // path -> collapsed?
 
-function getLayerBounds(l, coordinateBuffers) {
+export function getLayerBounds(l, coordinateBuffers) {
     if (!l) return null;
 
     // Support folder tree nodes (groups in sidebar tree)
@@ -257,7 +257,7 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
             toggleEl.style.display = "inline-block";
             toggleEl.style.textAlign = "center";
             const isCollapsed = collapsedPaths[path] === true;
-            toggleEl.innerText = isCollapsed ? "▸" : "▾";
+            toggleEl.textContent = isCollapsed ? "▸" : "▾";
             toggleEl.style.fontWeight = "bold";
             headerDiv.appendChild(toggleEl);
         } else {
@@ -294,7 +294,7 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
 
         // Label Text
         const label = document.createElement("span");
-        label.innerText = name;
+        label.textContent = name;
         if (isGroup) {
             label.style.fontWeight = "bold";
         }
@@ -329,7 +329,7 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
                 const isCollapsed = collapsedPaths[path] === true;
                 collapsedPaths[path] = !isCollapsed;
                 if (toggleEl) {
-                    toggleEl.innerText = !isCollapsed ? "▸" : "▾";
+                    toggleEl.textContent = !isCollapsed ? "▸" : "▾";
                 }
                 if (childrenDiv) {
                     childrenDiv.style.display = !isCollapsed ? "none" : "block";

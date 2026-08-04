@@ -2,6 +2,48 @@ import { loadCSS, loadJS } from "./utils.js";
 import { renderSidebarControls, normalizeRadioLayers } from "./sidebar.js";
 import { renderLayer, renderMergedGlLayer } from "./layers.js";
 
+// True if a layer is visible and no folder above it is switched off.
+//
+// Visibility is inherited down the folder path: a layer inside "Feeds/Active" is hidden
+// when either "Feeds" or "Feeds/Active" is off, regardless of its own flag. Getting this
+// wrong shows up as "that layer just will not appear", with nothing logged.
+export function isLayerEffectiveVisible(layer, groupConfigs) {
+    if (layer.visible === false) return false;
+    let runningPath = "";
+    for (const part of (layer.layer_group || "Layers").split("/")) {
+        runningPath = runningPath ? `${runningPath}/${part}` : part;
+        const config = groupConfigs[runningPath];
+        if (config && config.visible === false) return false;
+    }
+    return true;
+}
+
+// Sorts the visible layers into one bucket per WebGL draw pass.
+//
+// Sub-layers of a merged group inherit their parent's visibility rather than carrying
+// their own, so a group toggled off contributes nothing even when its children say
+// visible. Circles join the polygon bucket: they are drawn as generated rings.
+export function collectWebglLayers(layers, groupConfigs) {
+    const buckets = { circle_markers: [], markers: [], polyline: [], polygon: [] };
+
+    function collect(layer, parentVisible, isSubLayer) {
+        if (!parentVisible) return;
+        if (layer.type === "group" && layer.layers) {
+            layer.layers.forEach(sub => collect(sub, parentVisible, true));
+            return;
+        }
+        if (!isSubLayer && layer.visible === false) return;
+
+        const bucket = layer.type === "circle" ? "polygon" : layer.type;
+        if (buckets[bucket]) buckets[bucket].push(layer);
+    }
+
+    for (const layer of layers) {
+        collect(layer, isLayerEffectiveVisible(layer, groupConfigs), false);
+    }
+    return buckets;
+}
+
 // Applies incremental patch ops to {layers, buffers}, returning the new state.
 //
 // Ops are addressed by layer id and applied idempotently: "add" upserts rather than
@@ -225,55 +267,12 @@ export default {
             logoDiv.style.display = model.get("show_logo") ? "block" : "none";
 
             // Group visible layers (including sub-layers inside groups) to always use WebGL
-            const webglCircleMarkerLayers = [];
-            const webglMarkerLayers = [];
-            const webglPolylineLayers = [];
-            const webglPolygonLayers = [];
-
-            function isLayerEffectiveVisible(l) {
-                if (l.visible === false) return false;
-                const pathStr = l.layer_group || "Layers";
-                const parts = pathStr.split("/");
-                let runningPath = "";
-                for (const part of parts) {
-                    runningPath = runningPath ? `${runningPath}/${part}` : part;
-                    const config = groupConfigs[runningPath];
-                    if (config && config.visible === false) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-
-            function collectWebglLayers(l, parentEffectiveVisible, isSubLayer) {
-                if (!parentEffectiveVisible) return;
-                
-                if (l.type === "group" && l.layers) {
-                    l.layers.forEach(sub => {
-                        collectWebglLayers(sub, parentEffectiveVisible, true);
-                    });
-                    return;
-                }
-                
-                if (!isSubLayer && l.visible === false) return;
-
-
-                
-                if (l.type === "circle_markers") {
-                    webglCircleMarkerLayers.push(l);
-                } else if (l.type === "markers") {
-                    webglMarkerLayers.push(l);
-                } else if (l.type === "polyline") {
-                    webglPolylineLayers.push(l);
-                } else if (l.type === "polygon" || l.type === "circle") {
-                    webglPolygonLayers.push(l);
-                }
-            }
-
-            layers.forEach(l => {
-                const effectiveVisible = isLayerEffectiveVisible(l);
-                collectWebglLayers(l, effectiveVisible);
-            });
+            const {
+                circle_markers: webglCircleMarkerLayers,
+                markers: webglMarkerLayers,
+                polyline: webglPolylineLayers,
+                polygon: webglPolygonLayers,
+            } = collectWebglLayers(layers, groupConfigs);
 
             // Set of layer IDs processed via merged WebGL layers
             const webglLayerIds = new Set([
@@ -293,7 +292,7 @@ export default {
 
             // Process non-WebGL layers
             for (const layer of layers) {
-                const effectiveVisible = isLayerEffectiveVisible(layer);
+                const effectiveVisible = isLayerEffectiveVisible(layer, groupConfigs);
                 if (layer.type === "basemap") {
                     if (effectiveVisible) {
                         if (!activeTileLayers[layer.name]) {
