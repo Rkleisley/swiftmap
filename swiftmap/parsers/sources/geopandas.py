@@ -13,6 +13,7 @@ def is_geopandas_dataframe(data: Any) -> bool:
 def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
     import geopandas as gpd
     from shapely.geometry import Point, MultiPoint
+    from shapely.geometry.base import BaseGeometry
 
     if isinstance(data, gpd.GeoSeries):
         gdf = gpd.GeoDataFrame(geometry=data)
@@ -28,7 +29,7 @@ def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Op
 
     for _, row in gdf.iterrows():
         geom = row[geom_col]
-        if geom is None or geom.is_empty:
+        if not isinstance(geom, BaseGeometry) or geom.is_empty:
             continue
 
         row_props = {col: row[col] for col in non_geom_cols}
@@ -62,6 +63,7 @@ def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Op
 def parse_geopandas_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
     import geopandas as gpd
     from shapely.geometry import LineString, MultiLineString
+    from shapely.geometry.base import BaseGeometry
 
     lines = []
     props_list = []
@@ -76,7 +78,7 @@ def parse_geopandas_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]],
 
     for _, row in gdf.iterrows():
         geom = row[geom_col]
-        if geom is None or geom.is_empty:
+        if not isinstance(geom, BaseGeometry) or geom.is_empty:
             continue
 
         row_props = {col: row[col] for col in non_geom_cols}
@@ -104,6 +106,7 @@ def parse_geopandas_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]],
 def parse_geopandas_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
     import geopandas as gpd
     from shapely.geometry import Polygon, MultiPolygon
+    from shapely.geometry.base import BaseGeometry
 
     polygons = []
     props_list = []
@@ -118,7 +121,7 @@ def parse_geopandas_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]
 
     for _, row in gdf.iterrows():
         geom = row[geom_col]
-        if geom is None or geom.is_empty:
+        if not isinstance(geom, BaseGeometry) or geom.is_empty:
             continue
 
         row_props = {col: row[col] for col in non_geom_cols}

@@ -60,7 +60,7 @@ def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optiona
 
 
 def parse_coordinate_list_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
-    if not data or len(data) == 0:
+    if data is None or len(data) == 0:
         return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}, np.array([], dtype=np.float64)
 
     if len(data) == 2 and isinstance(data[0], (int, float)) and isinstance(data[1], (int, float)):
@@ -77,7 +77,7 @@ def parse_coordinate_list_points(data: Any, lat_col: Optional[str] = None, lon_c
 
 
 def parse_coordinate_list_lines(data: Any, coord_order: str = "auto", **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    if not data:
+    if data is None or len(data) == 0:
         return [], {}
 
     # Check if single line: [[lat1, lon1], [lat2, lon2], ...]
@@ -120,7 +120,7 @@ def parse_coordinate_list_lines(data: Any, coord_order: str = "auto", **kwargs) 
 
 
 def parse_coordinate_list_polygons(data: Any, coord_order: str = "auto", **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    if not data:
+    if data is None or len(data) == 0:
         return [], {}
 
     # Check if single polygon ring: [[lat1, lon1], [lat2, lon2], ...]

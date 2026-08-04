@@ -20,6 +20,18 @@ dev = [
     "isort",
 ]
 
+# The parser suite covers every supported data source, so running it in full needs
+# them all installed. They stay optional at runtime: each test module skips itself
+# when its library is absent.
+test = [
+    "pytest",
+    "pandas",
+    "polars",
+    "geopandas",
+    "shapely",
+    "geostructures",
+]
+
 [tool.setuptools.packages.find]
 include = ["swiftmap*"]
 
