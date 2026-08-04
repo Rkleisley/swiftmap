@@ -33,7 +33,9 @@ def add_collection(
         Any source that states each geometry's own type:
 
         - a GeoJSON dict or JSON string
-        - a geostructures shape or collection
+        - a geostructures shape, or a collection of them (`FeatureCollection`, `Track`).
+          A `Track` groups shapes by time rather than by geometry, so its contents route
+          by shape type the same as any other collection.
         - a GeoPandas GeoDataFrame or GeoSeries
         - a Pandas or Polars DataFrame with a WKT geometry column, since WKT declares its
           kind per value and one column may mix them

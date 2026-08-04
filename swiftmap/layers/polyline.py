@@ -33,8 +33,9 @@ def add_line(
     - GeoPandas GeoDataFrames / GeoSeries (`LineString`, `MultiLineString`)
     - GeoJSON objects / FeatureCollections
     - GeoStructures line shapes (`GeoLineString`, `MultiGeoLineString`), including those
-      inside a `FeatureCollection`. A `Track` holds points, not a line, so it renders as
-      markers via `add_markers` or `add_collection`.
+      inside a collection. A `FeatureCollection` or `Track` contributes whichever of its
+      shapes are line-like; a `Track` carries timestamps and ordering rather than a
+      geometry type, so its contents route by shape like any other collection.
 
     Parameters
     ----------

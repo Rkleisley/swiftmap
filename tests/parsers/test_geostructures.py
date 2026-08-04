@@ -88,9 +88,44 @@ def test_bare_shape_without_a_list(point):
     assert_points(lats, lons, [A])
 
 
-def test_track_is_expanded(point):
-    track = Track([])
-    assert len(parse_points(track)[0]) == 0, "an empty Track yields nothing, without raising"
+def test_empty_track_yields_nothing():
+    assert len(parse_points(Track([]))[0]) == 0, "an empty Track yields nothing, without raising"
+
+
+@pytest.mark.parametrize("shapes,expected", [
+    pytest.param(
+        lambda t0, td: [GeoPoint(coord(A), dt=t0), GeoPoint(coord(B), dt=t0 + td)],
+        (2, 0, 0), id="points"),
+    pytest.param(
+        lambda t0, td: [GeoLineString([coord(A), coord(B)], dt=t0),
+                        GeoLineString([coord(B), coord(C)], dt=t0 + td)],
+        (0, 2, 0), id="lines"),
+    pytest.param(
+        lambda t0, td: [GeoPolygon([coord(A), coord(C), coord(B), coord(A)], dt=t0),
+                        GeoPolygon([coord(B), coord(C), coord(A), coord(B)], dt=t0 + td)],
+        (0, 0, 2), id="polygons"),
+])
+def test_track_contents_route_by_shape_type(shapes, expected):
+    """
+    A Track groups shapes by time, not by geometry: it may hold points, lines or polygons.
+    Its contents dispatch by shape type like any other collection, so a Track of polygons
+    is polygons -- not points, and not a line through them.
+    """
+    import datetime as dt
+    track = Track(shapes(dt.datetime(2026, 1, 1), dt.timedelta(hours=1)))
+    counts = (len(parse_points(track)[0]),
+              len(parse_lines(track)[0]),
+              len(parse_polygons(track)[0]))
+    assert counts == expected
+
+
+def test_track_timestamps_reach_properties():
+    """geostructures exposes the time interval as properties, so popups can show it."""
+    import datetime as dt
+    t0 = dt.datetime(2026, 1, 1)
+    track = Track([GeoPoint(coord(A), dt=t0), GeoPoint(coord(B), dt=t0 + dt.timedelta(hours=1))])
+    _, _, props = parse_points(track)
+    assert "datetime_start" in props and len(props["datetime_start"]) == 2
 
 
 def test_collection_containing_a_multi_is_flattened(line):
