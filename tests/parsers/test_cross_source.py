@@ -82,7 +82,7 @@ POLYGON_SOURCES = {
 
 @pytest.mark.parametrize("source", POINT_SOURCES, ids=list(POINT_SOURCES))
 def test_every_source_yields_the_same_point(source):
-    lats, lons, _, _ = parse_points(POINT_SOURCES[source]())
+    lats, lons, _ = parse_points(POINT_SOURCES[source]())
     assert_points(lats, lons, [A])
 
 
@@ -136,7 +136,7 @@ def test_mixed_collection_splits_one_of_each(source):
 @pytest.mark.parametrize("source", MIXED_SOURCES, ids=list(MIXED_SOURCES))
 def test_mixed_collection_coordinates_agree_across_sources(source):
     data = MIXED_SOURCES[source]()
-    lats, lons, _, _ = parse_points(data)
+    lats, lons, _ = parse_points(data)
     assert_points(lats, lons, [A])
     assert_coords(parse_lines(data)[0][0], LINE, label=f"{source} line")
     assert_coords(parse_polygons(data)[0][0], RING, label=f"{source} polygon")

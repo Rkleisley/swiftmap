@@ -56,7 +56,7 @@ def _collect_props(props_list: List[Dict[str, Any]]) -> Dict[str, List[Any]]:
     return {k: [p.get(k) for p in props_list] for k in keys}
 
 
-def parse_geostructures_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
+def parse_geostructures_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
     PointLikeMixin, _, _ = _mixins()
 
     lats, lons, props_list = [], [], []
@@ -72,14 +72,7 @@ def parse_geostructures_points(data: Any, lat_col: Optional[str] = None, lon_col
     lons_arr = np.array(lons, dtype=np.float64)
     props = _collect_props(props_list)
 
-    if intensity_col and props_list:
-        intensities = np.array(
-            [float(p.get(intensity_col, 1.0) or 1.0) for p in props_list], dtype=np.float64
-        )
-    else:
-        intensities = np.ones(len(lats_arr), dtype=np.float64)
-
-    return lats_arr, lons_arr, props, intensities
+    return lats_arr, lons_arr, props
 
 
 def parse_geostructures_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:

@@ -41,7 +41,7 @@ def polygon():
 
 # --- basic parsing ----------------------------------------------------------------
 def test_point_parses_to_its_coordinate(point):
-    lats, lons, _, _ = parse_points([point])
+    lats, lons, _ = parse_points([point])
     assert_points(lats, lons, [A])
 
 
@@ -84,7 +84,7 @@ def test_mixed_collection_splits_by_kind(point, line, polygon):
 
 
 def test_bare_shape_without_a_list(point):
-    lats, lons, _, _ = parse_points(point)
+    lats, lons, _ = parse_points(point)
     assert_points(lats, lons, [A])
 
 
@@ -102,7 +102,7 @@ def test_collection_containing_a_multi_is_flattened(line):
 # --- properties -------------------------------------------------------------------
 def test_properties_are_collected(point):
     tagged = GeoPoint(coord(A), properties={"site": "S1", "active": True})
-    _, _, props, _ = parse_points([tagged])
+    _, _, props = parse_points([tagged])
     assert props["site"] == ["S1"]
     assert props["active"] == [True]
 
@@ -120,7 +120,7 @@ def test_properties_propagate_through_multi_expansion():
 
 def test_shapes_with_differing_property_keys_are_unioned():
     shapes = [GeoPoint(coord(A), properties={"a": 1}), GeoPoint(coord(B), properties={"b": 2})]
-    _, _, props, _ = parse_points(shapes)
+    _, _, props = parse_points(shapes)
     assert props["a"] == [1, None]
     assert props["b"] == [None, 2]
 
@@ -142,7 +142,7 @@ def test_line_does_not_also_parse_as_a_point(line):
 
 def test_multigeopoint_yields_every_point_not_one_centroid():
     """Previously collapsed to a single centroid."""
-    lats, lons, _, _ = parse_points([MultiGeoPoint([GeoPoint(coord(A)), GeoPoint(coord(B))])])
+    lats, lons, _ = parse_points([MultiGeoPoint([GeoPoint(coord(A)), GeoPoint(coord(B))])])
     assert_points(lats, lons, [A, B])
 
 

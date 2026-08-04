@@ -28,16 +28,15 @@ def ids(cases):
 @pytest.mark.parametrize("mk", FRAMES)
 @pytest.mark.parametrize("_id,build,expected", POINT_CASES, ids=ids(POINT_CASES))
 def test_points(mk, _id, build, expected):
-    lats, lons, _props, intensities = parse_points(build(mk))
+    lats, lons, _props = parse_points(build(mk))
     assert_points(lats, lons, expected)
-    assert len(intensities) == len(expected), "one intensity per point"
 
 
 @pytest.mark.parametrize("mk", FRAMES)
 def test_points_keep_other_columns_as_properties(mk):
     df = mk({"lat": [A[0], B[0]], "lon": [A[1], B[1]],
              "city": ["Tarifa", "Ceuta"], "pop": [18000, 84000]})
-    _lats, _lons, props, _ = parse_points(df)
+    _lats, _lons, props = parse_points(df)
     assert props["city"] == ["Tarifa", "Ceuta"]
     assert props["pop"] == [18000, 84000]
     assert "lat" not in props and "lon" not in props, "coordinate columns are not properties"
@@ -47,15 +46,8 @@ def test_points_keep_other_columns_as_properties(mk):
 def test_points_explicit_columns_override_autodetect(mk):
     # Both pairs are plausible; the explicit arguments must decide.
     df = mk({"lat": [0.0], "lon": [0.0], "start_lat": [A[0]], "start_lon": [A[1]]})
-    lats, lons, _, _ = parse_points(df, lat_col="start_lat", lon_col="start_lon")
+    lats, lons, _ = parse_points(df, lat_col="start_lat", lon_col="start_lon")
     assert_points(lats, lons, [A])
-
-
-@pytest.mark.parametrize("mk", FRAMES)
-def test_points_intensity_column(mk):
-    df = mk({"lat": [A[0], B[0]], "lon": [A[1], B[1]], "weight": [0.25, 0.75]})
-    _lats, _lons, _props, intensities = parse_points(df, intensity_col="weight")
-    assert list(intensities) == pytest.approx([0.25, 0.75])
 
 
 @pytest.mark.parametrize("mk", FRAMES)
@@ -213,7 +205,7 @@ def test_wkt_column_parses_only_its_own_geometry_kind(mk):
     """A mixed WKT column must yield each geometry exactly once, to one parser only."""
     df = mk({"geometry": [wkt_point(A), wkt_line(LINE), wkt_polygon(RING)],
              "n": ["p", "l", "g"]})
-    lats, _lons, _, _ = parse_points(df)
+    lats, _lons, _ = parse_points(df)
     lines, _ = parse_lines(df)
     polygons, _ = parse_polygons(df)
     assert (len(lats), len(lines), len(polygons)) == (1, 1, 1), (

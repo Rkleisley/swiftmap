@@ -30,17 +30,17 @@ def polygon_feature():
 
 # --- containers -------------------------------------------------------------------
 def test_feature_collection(point_feature):
-    lats, lons, _, _ = parse_points(gj_collection(point_feature))
+    lats, lons, _ = parse_points(gj_collection(point_feature))
     assert_points(lats, lons, [A])
 
 
 def test_bare_feature(point_feature):
-    lats, lons, _, _ = parse_points(point_feature)
+    lats, lons, _ = parse_points(point_feature)
     assert_points(lats, lons, [A])
 
 
 def test_bare_geometry():
-    lats, lons, _, _ = parse_points({"type": "Point", "coordinates": [A[1], A[0]]})
+    lats, lons, _ = parse_points({"type": "Point", "coordinates": [A[1], A[0]]})
     assert_points(lats, lons, [A])
 
 
@@ -58,7 +58,7 @@ def test_polygon_transposes_and_closes(polygon_feature):
 
 def test_multipoint_yields_each_point():
     fc = gj_collection(gj_feature("MultiPoint", lonlat([A, B, C])))
-    lats, lons, _, _ = parse_points(fc)
+    lats, lons, _ = parse_points(fc)
     assert_points(lats, lons, [A, B, C])
 
 
@@ -101,7 +101,7 @@ def test_empty_feature_collection():
 
 # --- properties -------------------------------------------------------------------
 def test_properties_are_collected(point_feature, line_feature, polygon_feature):
-    _, _, props, _ = parse_points(gj_collection(point_feature))
+    _, _, props = parse_points(gj_collection(point_feature))
     assert props["site"] == ["S1"]
     _, line_props = parse_lines(gj_collection(line_feature))
     assert line_props["route"] == ["R1"]
@@ -112,7 +112,7 @@ def test_properties_are_collected(point_feature, line_feature, polygon_feature):
 def test_feature_without_properties_is_tolerated():
     fc = gj_collection({"type": "Feature",
                         "geometry": {"type": "Point", "coordinates": [A[1], A[0]]}})
-    lats, _, props, _ = parse_points(fc)
+    lats, _, props = parse_points(fc)
     assert len(lats) == 1
     assert props == {}
 

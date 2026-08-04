@@ -30,7 +30,9 @@ def add_line(
     - DataFrames with wide vertex columns (`lat1, lon1, lat2, lon2, ...`)
     - GeoPandas GeoDataFrames / GeoSeries (`LineString`, `MultiLineString`)
     - GeoJSON objects / FeatureCollections
-    - GeoStructures objects (`GeoLineString`, `MultiGeoLineString`, `Track`, `FeatureCollection`)
+    - GeoStructures line shapes (`GeoLineString`, `MultiGeoLineString`), including those
+      inside a `FeatureCollection`. A `Track` holds points, not a line, so it renders as
+      markers via `add_markers` or `add_collection`.
 
     Parameters
     ----------

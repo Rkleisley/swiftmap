@@ -8,7 +8,7 @@ def is_geojson(data: Any) -> bool:
     return False
 
 
-def parse_geojson_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
+def parse_geojson_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
     features = []
     if data.get('type') == 'FeatureCollection':
         features = data.get('features', [])
@@ -20,10 +20,9 @@ def parse_geojson_points(data: Any, lat_col: Optional[str] = None, lon_col: Opti
     lats_list = []
     lons_list = []
     props_list = []
-    intensities_list = []
 
     for feature in features:
-        geom = feature.get('geometry', {})
+        geom = feature.get('geometry') or {}
         gtype = geom.get('type')
 
         # MultiPoint holds a list of positions; a Point holds one. Normalizing to a list
@@ -42,18 +41,16 @@ def parse_geojson_points(data: Any, lat_col: Optional[str] = None, lon_col: Opti
                 lons_list.append(float(coords[0]))
                 lats_list.append(float(coords[1]))
                 props_list.append(p)
-                intensities_list.append(float(p.get(intensity_col, 1.0)) if intensity_col else 1.0)
 
     lats = np.array(lats_list, dtype=np.float64)
     lons = np.array(lons_list, dtype=np.float64)
-    intensities = np.array(intensities_list, dtype=np.float64)
     
     props = {}
     if props_list:
         for k in props_list[0].keys():
             props[k] = [x.get(k) for x in props_list]
             
-    return lats, lons, props, intensities
+    return lats, lons, props
 
 
 def parse_geojson_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
@@ -69,7 +66,7 @@ def parse_geojson_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], D
     props_list = []
 
     for feature in features:
-        geom = feature.get('geometry', {})
+        geom = feature.get('geometry') or {}
         p = feature.get('properties', {}) or {}
         gtype = geom.get('type')
 
@@ -106,7 +103,7 @@ def parse_geojson_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]]]
     props_list = []
 
     for feature in features:
-        geom = feature.get('geometry', {})
+        geom = feature.get('geometry') or {}
         p = feature.get('properties', {}) or {}
         gtype = geom.get('type')
 

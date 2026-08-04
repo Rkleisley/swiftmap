@@ -1,6 +1,37 @@
+import datetime
+import decimal
 from typing import Any, Optional
 from .._infra import LayerConfig
 from ._display import DISPLAY_KEYS
+
+
+def _json_safe(value: Any) -> Any:
+    """
+    Coerces a property value into something the widget transport can serialize.
+
+    Layer properties come straight from user data, so they carry whatever the source held:
+    pandas Timestamps, numpy scalars, Decimals, dates. Those survive parsing and then fail
+    at sync time, inside traitlets, far from the column that caused it. Converting here --
+    the single point every layer passes through -- keeps the failure from ever happening.
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+        return value.isoformat()
+    if isinstance(value, decimal.Decimal):
+        return float(value)
+    # numpy scalars and anything else exposing .item() (np.int64, np.float32, ...)
+    item = getattr(value, "item", None)
+    if callable(item):
+        try:
+            return _json_safe(item())
+        except (ValueError, TypeError):
+            pass
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    return str(value)
 
 # Per-layer attributes relocated onto a sub-layer when same-name layers merge into a group.
 _SUB_LAYER_ATTRS = (
@@ -28,6 +59,13 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
             visible=getattr(child, "visible", True)
         )
         
+    # Every layer passes through here, so this is the one place that has to guarantee
+    # properties can cross the wire.
+    if isinstance(child_config.get("properties"), dict):
+        child_config.properties = {
+            str(k): _json_safe(v) for k, v in child_config.properties.items()
+        }
+
     # Ensure ID and name are present
     if not child_config.id:
         child_config.id = f"layer_{self._layer_counter}"

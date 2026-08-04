@@ -89,8 +89,8 @@ Parsing is dispatched dynamically using `GeometryParserRegistry` strategy broker
        except ImportError:
            return False
 
-   def parse_my_format_points(data: Any, lat_col=None, lon_col=None, intensity_col=None, **kwargs) -> Tuple:
-       """Returns (lats: np.ndarray, lons: np.ndarray, props: Dict[str, list], intensities: np.ndarray)."""
+   def parse_my_format_points(data: Any, lat_col=None, lon_col=None, **kwargs) -> Tuple:
+       """Returns (lats: np.ndarray, lons: np.ndarray, props: Dict[str, list])."""
 
    def parse_my_format_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, list]]:
        """Returns (lines_coords: List[List[List[float]]], props: Dict[str, list])."""

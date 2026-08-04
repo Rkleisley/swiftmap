@@ -67,7 +67,7 @@ def add_markers(
     group_multi_select = kwargs.pop("multi_select", group_multi_select)
 
     # 1. Parse all coordinates and properties first
-    lats, lons, props, _ = parse_points(data, lat_col, lon_col)
+    lats, lons, props = parse_points(data, lat_col, lon_col)
     num_points = len(lats)
     if num_points == 0:
         return self

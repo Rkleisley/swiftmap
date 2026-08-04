@@ -15,12 +15,12 @@ from swiftmap.parsers import parse_points, parse_lines, parse_polygons
 
 # --- coordinate lists -------------------------------------------------------------
 def test_list_of_pairs_as_points():
-    lats, lons, _, _ = parse_points([list(A), list(B)])
+    lats, lons, _ = parse_points([list(A), list(B)])
     assert_points(lats, lons, [A, B])
 
 
 def test_single_pair_as_one_point():
-    lats, lons, _, _ = parse_points([A[0], A[1]])
+    lats, lons, _ = parse_points([A[0], A[1]])
     assert_points(lats, lons, [A])
 
 
@@ -53,12 +53,12 @@ def test_nested_lists_as_several_polygons():
 
 
 def test_numpy_array_of_coordinates():
-    lats, lons, _, _ = parse_points(np.array([list(A), list(B)]))
+    lats, lons, _ = parse_points(np.array([list(A), list(B)]))
     assert_points(lats, lons, [A, B])
 
 
 def test_empty_list_yields_nothing():
-    lats, _, _, _ = parse_points([])
+    lats, _, _ = parse_points([])
     assert len(lats) == 0
     assert parse_lines([])[0] == []
     assert parse_polygons([])[0] == []
@@ -66,19 +66,19 @@ def test_empty_list_yields_nothing():
 
 # --- dict of columns --------------------------------------------------------------
 def test_dict_of_columns_as_points():
-    lats, lons, _, _ = parse_points({"lat": [A[0], B[0]], "lon": [A[1], B[1]]})
+    lats, lons, _ = parse_points({"lat": [A[0], B[0]], "lon": [A[1], B[1]]})
     assert_points(lats, lons, [A, B])
 
 
 def test_dict_keeps_other_keys_as_properties():
     data = {"lat": [A[0], B[0]], "lon": [A[1], B[1]], "city": ["Tarifa", "Ceuta"]}
-    _, _, props, _ = parse_points(data)
+    _, _, props = parse_points(data)
     assert props["city"] == ["Tarifa", "Ceuta"]
     assert "lat" not in props
 
 
 def test_dict_alternate_column_names():
-    lats, lons, _, _ = parse_points({"latitude": [A[0]], "longitude": [A[1]]})
+    lats, lons, _ = parse_points({"latitude": [A[0]], "longitude": [A[1]]})
     assert_points(lats, lons, [A])
 
 
@@ -96,7 +96,7 @@ def test_dict_without_coordinates_raises():
 def test_list_of_row_dicts_as_points():
     rows = [{"lat": A[0], "lon": A[1], "city": "Tarifa"},
             {"lat": B[0], "lon": B[1], "city": "Ceuta"}]
-    lats, lons, props, _ = parse_points(rows)
+    lats, lons, props = parse_points(rows)
     assert_points(lats, lons, [A, B])
     assert props["city"] == ["Tarifa", "Ceuta"]
 
@@ -122,5 +122,5 @@ def test_geojson_dict_is_not_captured_by_the_plain_dict_parser():
     gj = {"type": "FeatureCollection", "features": [
         {"type": "Feature", "geometry": {"type": "Point", "coordinates": [A[1], A[0]]},
          "properties": {}}]}
-    lats, lons, _, _ = parse_points(gj)
+    lats, lons, _ = parse_points(gj)
     assert_points(lats, lons, [A])

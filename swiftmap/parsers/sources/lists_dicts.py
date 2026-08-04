@@ -21,7 +21,7 @@ def is_coordinate_list(data: Any) -> bool:
     return False
 
 
-def parse_list_of_dicts_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
+def parse_list_of_dicts_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
     actual_lat = lat_col or find_column_or_key(list(data[0].keys()), LAT_CANDIDATES)
     actual_lon = lon_col or find_column_or_key(list(data[0].keys()), LON_CANDIDATES)
 
@@ -36,11 +36,10 @@ def parse_list_of_dicts_points(data: Any, lat_col: Optional[str] = None, lon_col
         if k not in (actual_lat, actual_lon):
             props[k] = [item[k] for item in data]
             
-    intensities = np.array(props.get(intensity_col), dtype=np.float64) if (intensity_col and intensity_col in props) else np.ones(len(lats), dtype=np.float64)
-    return lats, lons, props, intensities
+    return lats, lons, props
 
 
-def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
+def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
     actual_lat = lat_col or find_column_or_key(list(data.keys()), LAT_CANDIDATES)
     actual_lon = lon_col or find_column_or_key(list(data.keys()), LON_CANDIDATES)
 
@@ -55,25 +54,23 @@ def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optiona
         if k not in (actual_lat, actual_lon):
             props[k] = list(data[k])
             
-    intensities = np.array(props.get(intensity_col), dtype=np.float64) if (intensity_col and intensity_col in props) else np.ones(len(lats), dtype=np.float64)
-    return lats, lons, props, intensities
+    return lats, lons, props
 
 
-def parse_coordinate_list_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
+def parse_coordinate_list_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
     if data is None or len(data) == 0:
-        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}, np.array([], dtype=np.float64)
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}
 
     if len(data) == 2 and isinstance(data[0], (int, float)) and isinstance(data[1], (int, float)):
-        return np.array([float(data[0])]), np.array([float(data[1])]), {}, np.array([1.0])
+        return np.array([float(data[0])]), np.array([float(data[1])]), {}
         
     arr = np.asarray(data, dtype=np.float64)
     if arr.ndim == 1:
-        return np.array([arr[0]]), np.array([arr[1]]), {}, np.array([1.0])
+        return np.array([arr[0]]), np.array([arr[1]]), {}
         
     lats = arr[:, 0]
     lons = arr[:, 1]
-    intensities = arr[:, 2] if (arr.shape[1] >= 3 and intensity_col) else np.ones(len(lats), dtype=np.float64)
-    return lats, lons, {}, intensities
+    return lats, lons, {}
 
 
 def parse_coordinate_list_lines(data: Any, coord_order: str = "auto", **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:

@@ -1,4 +1,5 @@
 import re
+import warnings
 import numpy as np
 from typing import Any, Dict, List, Optional, Tuple
 from ._utils import (
@@ -75,7 +76,7 @@ def match_wide_vertex_columns(cols: List[str]) -> Tuple[Dict[int, str], Dict[int
     return lat_pairs, lon_pairs
 
 
-def parse_tabular_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None, label: str = "DataFrame") -> Tuple:
+def parse_tabular_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, label: str = "DataFrame") -> Tuple:
     """Points parser shared by any source exposing `.columns` and column `.to_numpy()`/`.to_list()` (pandas, polars)."""
     cols = list(data.columns)
     actual_lat = lat_col or find_column_or_key(cols, LAT_CANDIDATES)
@@ -86,7 +87,7 @@ def parse_tabular_points(data: Any, lat_col: Optional[str] = None, lon_col: Opti
         # geometry kind yield nothing here and are picked up by the line/polygon parsers.
         wkt_column = find_wkt_column(data)
         if wkt_column:
-            return _parse_wkt_points(data, cols, wkt_column, intensity_col)
+            return _parse_wkt_points(data, cols, wkt_column)
         raise ValueError(f"Could not auto-detect lat/lon columns from {label}. Columns: {cols}")
 
     lats = data[actual_lat].to_numpy().astype(np.float64)
@@ -97,11 +98,32 @@ def parse_tabular_points(data: Any, lat_col: Optional[str] = None, lon_col: Opti
         if col not in (actual_lat, actual_lon):
             props[col] = data[col].to_list()
 
-    intensities = np.array(props.get(intensity_col), dtype=np.float64) if (intensity_col and intensity_col in props) else np.ones(len(lats), dtype=np.float64)
-    return lats, lons, props, intensities
+    return drop_invalid_coordinates(lats, lons, props, label)
 
 
-def _parse_wkt_points(data: Any, cols: List[str], wkt_column: str, intensity_col: Optional[str]) -> Tuple:
+def drop_invalid_coordinates(lats: Any, lons: Any, props: Dict[str, List[Any]], label: str) -> Tuple:
+    """
+    Removes points whose coordinates are missing or non-finite, warning once per call.
+
+    A null in a coordinate column becomes NaN through the float conversion. Left in place it
+    reaches the WebGL buffer, where it does not raise -- it quietly corrupts the draw. Rows
+    are dropped rather than raising so one bad record cannot take down a whole map.
+    """
+    valid = np.isfinite(lats) & np.isfinite(lons)
+    dropped = int((~valid).sum())
+    if not dropped:
+        return lats, lons, props
+
+    warnings.warn(
+        f"[SwiftMap] Dropped {dropped} of {len(lats)} point(s) from {label} with missing or "
+        f"invalid coordinates.",
+        stacklevel=4,
+    )
+    return lats[valid], lons[valid], {k: [v for v, keep in zip(vals, valid) if keep]
+                                      for k, vals in props.items()}
+
+
+def _parse_wkt_points(data: Any, cols: List[str], wkt_column: str) -> Tuple:
     """Extracts POINT/MULTIPOINT geometries from a WKT column, ignoring other kinds."""
     lats, lons, props_list = [], [], []
     other_cols = [c for c in cols if c != wkt_column]
@@ -118,12 +140,7 @@ def _parse_wkt_points(data: Any, cols: List[str], wkt_column: str, intensity_col
     lons_arr = np.array(lons, dtype=np.float64)
     props = {k: [p.get(k) for p in props_list] for k in other_cols} if props_list else {}
 
-    if intensity_col and intensity_col in props:
-        intensities = np.array(props[intensity_col], dtype=np.float64)
-    else:
-        intensities = np.ones(len(lats_arr), dtype=np.float64)
-
-    return lats_arr, lons_arr, props, intensities
+    return lats_arr, lons_arr, props
 
 
 def parse_tabular_lines_by_coord_column(data: Any, cols: List[str], lat_col: Optional[str], lon_col: Optional[str], coord_order: str) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:

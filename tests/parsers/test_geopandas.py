@@ -39,7 +39,7 @@ def mixed_gdf():
 # --- geometry kinds ---------------------------------------------------------------
 def test_point_transposes_to_lat_lon():
     gdf = gpd.GeoDataFrame({"n": ["a"]}, geometry=[Point(xy(A))])
-    lats, lons, _, _ = parse_points(gdf)
+    lats, lons, _ = parse_points(gdf)
     assert_points(lats, lons, [A])
 
 
@@ -57,7 +57,7 @@ def test_polygon_ring_is_closed():
 
 def test_multipoint_yields_each_point():
     gdf = gpd.GeoDataFrame({"n": ["a"]}, geometry=[MultiPoint([xy(A), xy(B)])])
-    lats, lons, _, _ = parse_points(gdf)
+    lats, lons, _ = parse_points(gdf)
     assert_points(lats, lons, [A, B])
 
 
@@ -86,14 +86,14 @@ def test_each_kind_reaches_only_its_own_parser(mixed_gdf):
 
 def test_geoseries_is_accepted():
     series = gpd.GeoSeries([Point(xy(A)), Point(xy(B))])
-    lats, lons, _, _ = parse_points(series)
+    lats, lons, _ = parse_points(series)
     assert_points(lats, lons, [A, B])
 
 
 # --- properties and edge cases ----------------------------------------------------
 def test_non_geometry_columns_become_properties():
     gdf = gpd.GeoDataFrame({"city": ["Tarifa"], "pop": [18000]}, geometry=[Point(xy(A))])
-    _, _, props, _ = parse_points(gdf)
+    _, _, props = parse_points(gdf)
     assert props["city"] == ["Tarifa"]
     assert props["pop"] == [18000]
     assert "geometry" not in props
@@ -101,13 +101,13 @@ def test_non_geometry_columns_become_properties():
 
 def test_multi_geometry_repeats_the_row_properties():
     gdf = gpd.GeoDataFrame({"zone": ["Z1"]}, geometry=[MultiPoint([xy(A), xy(B)])])
-    _, _, props, _ = parse_points(gdf)
+    _, _, props = parse_points(gdf)
     assert props["zone"] == ["Z1", "Z1"], "each expanded point keeps its row's metadata"
 
 
 def test_none_geometry_is_skipped():
     gdf = gpd.GeoDataFrame({"n": ["a", "b"]}, geometry=[Point(xy(A)), None])
-    lats, lons, _, _ = parse_points(gdf)
+    lats, lons, _ = parse_points(gdf)
     assert_points(lats, lons, [A])
 
 

@@ -23,8 +23,8 @@ def is_polars_dataframe(data: Any) -> bool:
         return False
 
 
-def parse_polars_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
-    return parse_tabular_points(data, lat_col, lon_col, intensity_col, label="Polars DataFrame")
+def parse_polars_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
+    return parse_tabular_points(data, lat_col, lon_col, label="Polars DataFrame")
 
 
 def parse_polars_lines(

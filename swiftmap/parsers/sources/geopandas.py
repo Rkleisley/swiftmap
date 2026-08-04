@@ -10,7 +10,7 @@ def is_geopandas_dataframe(data: Any) -> bool:
         return False
 
 
-def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
+def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
     import geopandas as gpd
     from shapely.geometry import Point, MultiPoint
     from shapely.geometry.base import BaseGeometry
@@ -52,12 +52,7 @@ def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Op
         for k in props_list[0].keys():
             props[k] = [p.get(k) for p in props_list]
 
-    intensities = np.array([
-        float(p.get(intensity_col, 1.0)) if (intensity_col and intensity_col in p) else 1.0
-        for p in props_list
-    ], dtype=np.float64) if props_list else np.ones(len(lats), dtype=np.float64)
-
-    return lats, lons, props, intensities
+    return lats, lons, props
 
 
 def parse_geopandas_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
