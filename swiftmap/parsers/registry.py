@@ -129,3 +129,23 @@ lines_registry.register(is_coordinate_list, parse_coordinate_list_lines)
 polygons_registry.register(is_dict, parse_dict_polygons)
 polygons_registry.register(is_list_of_dicts, parse_list_of_dicts_polygons)
 polygons_registry.register(is_coordinate_list, parse_coordinate_list_polygons)
+
+
+# =============================================================================
+# 4. SOURCE CAPABILITIES
+# =============================================================================
+
+# Sources whose parsers filter by geometry type: each returns only its own kind from a
+# mixed input, so the same object can safely be handed to all three. The tabular parsers
+# do not -- they coerce whatever they are given, which is correct when the caller asked
+# for a specific kind and wrong when all three are speculative.
+_MIXED_GEOMETRY_CHECKS = (
+    is_geojson,
+    is_geostructures,
+    is_geopandas_dataframe,
+)
+
+
+def supports_mixed_geometry(data: Any) -> bool:
+    """True if `data` comes from a source that distinguishes geometry types when parsing."""
+    return any(check(data) for check in _MIXED_GEOMETRY_CHECKS)

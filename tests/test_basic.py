@@ -56,7 +56,9 @@ def test_add_geojson():
     m.add_geojson(data, name="test_geojson")
     layer = m.layers[-1]
     assert layer.name == "test_geojson"
-    assert layer.type == "markers"
+    # Collection-style adds render points as circle markers: cheaper than the pin shader
+    # when a feature collection carries many of them.
+    assert layer.type == "circle_markers"
     assert layer.id in m.coordinate_buffers
 
 def test_add_polyline_and_polygon():

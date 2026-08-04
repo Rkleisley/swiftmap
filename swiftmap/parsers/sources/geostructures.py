@@ -1,6 +1,7 @@
 import numpy as np
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Iterator
 from ._utils import _ensure_closed_ring
+
 
 def is_geostructures(data: Any) -> bool:
     if hasattr(data, "to_geojson") and type(data).__module__.startswith("geostructures"):
@@ -11,142 +12,106 @@ def is_geostructures(data: Any) -> bool:
     return False
 
 
-def _flatten_shapes(data: Any) -> List[Any]:
-    """Normalizes any geostructures input to a flat shape list, expanding collections."""
-    if isinstance(data, (list, tuple)):
-        raw_shapes = list(data)
-    elif hasattr(data, "geoshapes"):
-        raw_shapes = list(data.geoshapes)
-    elif hasattr(data, "__iter__") and not isinstance(data, (str, bytes, dict)):
-        raw_shapes = list(data)
-    else:
-        raw_shapes = [data]
-
-    shapes = []
-    for shape in raw_shapes:
-        if hasattr(shape, "geoshapes"):
-            shapes.extend(shape.geoshapes)
-        else:
-            shapes.append(shape)
-    return shapes
-
-
-def split_geostructures_by_geometry(data: Any) -> Tuple[List[Any], List[Any], List[Any]]:
-    """
-    Flattens collections and groups shapes into (points, lines, polygons).
-
-    Dispatch uses geostructures' own type mixins rather than a `to_geojson()` round trip:
-    it is faster, and it is exact. Every shape is point-like, line-like, or polygon-like and
-    never more than one, so each parser only ever sees shapes of its own kind. Duck-typing on
-    attributes cannot do this -- `centroid` is present on every shape, and `to_polygon` on
-    lines as well as polygons.
-    """
+def _mixins():
+    """Imported lazily: geostructures is an optional dependency."""
     from geostructures.structures import PointLikeMixin, LineLikeMixin, PolygonLikeMixin
+    return PointLikeMixin, LineLikeMixin, PolygonLikeMixin
 
-    points, lines, polygons = [], [], []
-    for shape in _flatten_shapes(data):
-        if isinstance(shape, PointLikeMixin):
-            points.append(shape)
-        elif isinstance(shape, LineLikeMixin):
-            lines.append(shape)
-        elif isinstance(shape, PolygonLikeMixin):
-            polygons.append(shape)
-    return points, lines, polygons
+
+def _iter_shapes(data: Any, inherited: Optional[Dict[str, Any]] = None) -> Iterator[Tuple[Any, Dict[str, Any]]]:
+    """
+    Yields (shape, properties) for every individual shape, recursively.
+
+    Collections (`FeatureCollection`, `Track`) and the `MultiGeo*` types both expose their
+    parts through `.geoshapes`, so both are expanded the same way. Expansion has to happen
+    before geometry is read: `linear_rings()` nests differently on a MultiGeoPolygon than on
+    a GeoPolygon, and `vertices` is absent from MultiGeoLineString entirely.
+
+    Properties propagate down to parts that carry none of their own, so expanding a
+    MultiGeoPolygon does not lose the feature's metadata for popups.
+    """
+    if isinstance(data, (list, tuple)):
+        items = list(data)
+    elif hasattr(data, "geoshapes"):
+        items = list(data.geoshapes)
+        inherited = getattr(data, "properties", None) or inherited
+    elif hasattr(data, "__iter__") and not isinstance(data, (str, bytes, dict)):
+        items = list(data)
+    else:
+        items = [data]
+
+    for shape in items:
+        props = getattr(shape, "properties", None) or inherited or {}
+        children = getattr(shape, "geoshapes", None)
+        if children:
+            yield from _iter_shapes(children, props)
+        else:
+            yield shape, props
+
+
+def _collect_props(props_list: List[Dict[str, Any]]) -> Dict[str, List[Any]]:
+    if not props_list:
+        return {}
+    keys = {k for p in props_list for k in p}
+    return {k: [p.get(k) for p in props_list] for k in keys}
 
 
 def parse_geostructures_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, intensity_col: Optional[str] = None) -> Tuple:
-    shapes = _flatten_shapes(data)
-    valid_shapes = [s for s in shapes if hasattr(s, "centroid")]
-    lats = np.array([s.centroid.latitude for s in valid_shapes], dtype=np.float64)
-    lons = np.array([s.centroid.longitude for s in valid_shapes], dtype=np.float64)
-    
-    props = {}
-    if valid_shapes:
-        first_props = getattr(valid_shapes[0], 'properties', {}) or {}
-        props = {k: [getattr(s, 'properties', {}).get(k) for s in valid_shapes] for k in first_props.keys()}
-        
-    intensities = np.array([
-        getattr(s, 'properties', {}).get(intensity_col, 1.0) if (intensity_col and getattr(s, 'properties', {})) else 1.0 
-        for s in valid_shapes
-    ], dtype=np.float64) if valid_shapes else np.ones(len(lats), dtype=np.float64)
-    
-    return lats, lons, props, intensities
+    PointLikeMixin, _, _ = _mixins()
+
+    lats, lons, props_list = [], [], []
+    for shape, props in _iter_shapes(data):
+        if not isinstance(shape, PointLikeMixin):
+            continue
+        centroid = shape.centroid
+        lats.append(float(centroid.latitude))
+        lons.append(float(centroid.longitude))
+        props_list.append(props)
+
+    lats_arr = np.array(lats, dtype=np.float64)
+    lons_arr = np.array(lons, dtype=np.float64)
+    props = _collect_props(props_list)
+
+    if intensity_col and props_list:
+        intensities = np.array(
+            [float(p.get(intensity_col, 1.0) or 1.0) for p in props_list], dtype=np.float64
+        )
+    else:
+        intensities = np.ones(len(lats_arr), dtype=np.float64)
+
+    return lats_arr, lons_arr, props, intensities
 
 
 def parse_geostructures_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    shapes = _flatten_shapes(data)
+    _, LineLikeMixin, _ = _mixins()
 
-    lines = []
-    props_list = []
-
-    for shape in shapes:
-        coords = []
-        if hasattr(shape, 'vertices'):
-            coords = [[float(pt.latitude), float(pt.longitude)] for pt in shape.vertices]
-        elif hasattr(shape, 'coordinates'):
-            for pt in shape.coordinates:
-                if hasattr(pt, 'latitude') and hasattr(pt, 'longitude'):
-                    coords.append([float(pt.latitude), float(pt.longitude)])
-                elif isinstance(pt, (list, tuple)) and len(pt) >= 2:
-                    coords.append([float(pt[1]), float(pt[0])])
-        
+    lines, props_list = [], []
+    for shape, props in _iter_shapes(data):
+        if not isinstance(shape, LineLikeMixin):
+            continue
+        coords = [[float(v.latitude), float(v.longitude)] for v in shape.vertices]
         if len(coords) >= 2:
             lines.append(coords)
-            props_list.append(getattr(shape, 'properties', {}) or {})
+            props_list.append(props)
 
-    props = {}
-    if props_list:
-        first_props = props_list[0]
-        for k in first_props.keys():
-            props[k] = [p.get(k) for p in props_list]
-
-    return lines, props
+    return lines, _collect_props(props_list)
 
 
 def parse_geostructures_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
-    shapes = _flatten_shapes(data)
+    _, _, PolygonLikeMixin = _mixins()
 
-    polygons = []
-    props_list = []
+    polygons, props_list = [], []
+    for shape, props in _iter_shapes(data):
+        if not isinstance(shape, PolygonLikeMixin):
+            continue
+        # linear_rings() is declared by the mixin and works on every polygon-like shape,
+        # unlike to_polygon() which MultiGeoPolygon does not implement. A GeoRing returns
+        # its outer boundary and its hole as separate rings; the renderer draws one ring
+        # per polygon, so each becomes its own outline.
+        for ring in shape.linear_rings():
+            coords = [[float(p.latitude), float(p.longitude)] for p in ring]
+            if len(coords) >= 3:
+                polygons.append(_ensure_closed_ring(coords))
+                props_list.append(props)
 
-    for shape in shapes:
-        shape_props = getattr(shape, 'properties', {}) or {}
-        if hasattr(shape, 'to_polygon'):
-            try:
-                rings = shape.to_polygon().linear_rings()
-                for ring in rings:
-                    coords = [[float(pt.latitude), float(pt.longitude)] for pt in ring]
-                    if len(coords) >= 3:
-                        coords = _ensure_closed_ring(coords)
-                        polygons.append(coords)
-                        props_list.append(shape_props)
-                continue
-            except Exception:
-                pass
-
-        coords = []
-        raw_pts = getattr(shape, 'outline', getattr(shape, 'boundary', getattr(shape, 'coordinates', [])))
-        if callable(raw_pts):
-            try:
-                raw_pts = raw_pts()
-            except Exception:
-                raw_pts = []
-
-        for pt in raw_pts:
-            if hasattr(pt, 'latitude') and hasattr(pt, 'longitude'):
-                coords.append([float(pt.latitude), float(pt.longitude)])
-            elif isinstance(pt, (list, tuple)) and len(pt) >= 2:
-                coords.append([float(pt[1]), float(pt[0])])
-
-        if len(coords) >= 3:
-            coords = _ensure_closed_ring(coords)
-            polygons.append(coords)
-            props_list.append(shape_props)
-
-    props = {}
-    if props_list:
-        first_props = props_list[0]
-        for k in first_props.keys():
-            props[k] = [p.get(k) for p in props_list]
-
-    return polygons, props
+    return polygons, _collect_props(props_list)

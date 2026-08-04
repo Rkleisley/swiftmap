@@ -1,5 +1,6 @@
 from .registry import (
     GeometryParserRegistry,
+    supports_mixed_geometry,
     parse_points,
     parse_lines,
     parse_polygons,
@@ -8,15 +9,11 @@ from .registry import (
     polygons_registry,
 )
 
-# Geostructures shapes need classifying by geometry kind before parsing, since the
-# geostructures parsers do not filter by type the way the GeoJSON ones do.
-from .sources.geostructures import (
-    is_geostructures,
-    split_geostructures_by_geometry,
-)
+from .sources.geostructures import is_geostructures
 
 __all__ = [
     "GeometryParserRegistry",
+    "supports_mixed_geometry",
     "parse_points",
     "parse_lines",
     "parse_polygons",
@@ -24,5 +21,4 @@ __all__ = [
     "lines_registry",
     "polygons_registry",
     "is_geostructures",
-    "split_geostructures_by_geometry",
 ]
