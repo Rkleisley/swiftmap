@@ -2,6 +2,9 @@
 
 This document covers swiftmap's internal architecture for people extending the library itself. If you just want to *use* `Map`, see [README.md](README.md) instead.
 
+For current project state — what is deliberately the way it is, what is still open, and what
+is known-broken — see [docs/STATE.md](docs/STATE.md).
+
 ## Project Layout
 
 *   `src/` — the frontend (Leaflet + WebGL via a customized `Leaflet.glify`), written as ES modules. This is the primary JavaScript source.
