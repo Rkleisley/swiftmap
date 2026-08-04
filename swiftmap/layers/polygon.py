@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any
 from ..parsers import parse_polygons
 from ._display import extract_display_config
+from ._style import resolve_styles
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
@@ -17,11 +18,6 @@ def add_polygon(
     name: Optional[str] = None,
     layer_group: Optional[str] = None,
     group_multi_select: Optional[bool] = None,
-    color: str = "#3388ff",
-    fill_color: Optional[str] = None,
-    fill_opacity: float = 0.2,
-    weight: int = 3,
-    opacity: float = 1.0,
     properties: Optional[Dict[str, Any]] = None,
     **kwargs
 ) -> "Map":
@@ -64,20 +60,17 @@ def add_polygon(
         polygon under its own risk level.
     group_multi_select : bool, optional
         If False, configures the parent layer group to act as mutually exclusive radio buttons.
-    color : str, default '#3388ff'
-        Polygon stroke line color (hex string or color name).
-    fill_color : str, optional
-        Polygon interior fill color. Defaults to `color` if omitted.
-    fill_opacity : float, default 0.2
-        Interior fill opacity (0.0 to 1.0).
-    weight : int, default 3
-        Stroke line width in pixels.
-    opacity : float, default 1.0
-        Stroke opacity (0.0 to 1.0).
     properties : dict, optional
         Feature attribute metadata dictionary for popups and tooltips.
     **kwargs
-        Additional layer metadata attributes:
+        Styling and behaviour options. Anything not listed here is forwarded to the layer
+        unchanged, so custom metadata reaches the frontend; an option close to a real name
+        (e.g. 'colour') is reported as a likely typo.
+        - color : str, default '#3388ff' - Stroke color (hex string or CSS color name).
+        - fill_color : str - Interior fill color. Defaults to `color`.
+        - fill_opacity : float, default 0.2 - Interior fill opacity (0.0 to 1.0).
+        - weight : int, default 3 - Stroke width in pixels.
+        - opacity : float, default 1.0 - Stroke opacity (0.0 to 1.0).
         - popup_fields / tooltip_fields : list of str - Property names to display.
           Defaults to every property.
         - popup_names / tooltip_names : list of str - Display labels for those fields,
@@ -107,7 +100,7 @@ def add_polygon(
     popup = kwargs.pop("popup", True)
     tooltip = kwargs.pop("tooltip", True)
     display_config = extract_display_config(kwargs, name)
-    fill_color_resolved = fill_color or kwargs.pop("fill_color", kwargs.pop("fillColor", color))
+
 
     # Parse polygon coordinates
     polygons_coords, props = parse_polygons(
@@ -129,6 +122,10 @@ def add_polygon(
 
     is_multi = len(polygons_coords) > 1
     group_specs = build_group_specs(layer_group, props)
+    layer_style, feature_styles = resolve_styles(
+        kwargs, props, len(polygons_coords),
+        {"color": "#3388ff", "fill_opacity": 0.2, "weight": 3, "opacity": 1.0},
+        "add_polygon")
 
     for i, coords in enumerate(polygons_coords):
         poly_props = {k: v[i] for k, v in props.items()} if props else {}
@@ -144,11 +141,7 @@ def add_polygon(
             "group_multi_select": group_multi_select,
             "visible": True,
             "locations": coords,
-            "color": color,
-            "fillColor": fill_color_resolved,
-            "fillOpacity": fill_opacity,
-            "weight": weight,
-            "opacity": opacity,
+            **(feature_styles[i] if feature_styles else layer_style),
             "properties": poly_props,
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),

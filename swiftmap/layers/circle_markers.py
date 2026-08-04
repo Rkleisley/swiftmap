@@ -2,6 +2,7 @@ import numpy as np
 from typing import Optional, Any
 from ..parsers import parse_points
 from ._display import extract_display_config
+from ._style import resolve_styles
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, is_column
 from .._warnings import warn, EmptyLayerWarning
@@ -92,12 +93,11 @@ def add_circle_markers(
     tooltip = kwargs.pop("tooltip", True)
     display_config = extract_display_config(kwargs, name)
 
-    # Resolve colors, weight, opacity etc from kwargs
-    color = kwargs.pop("color", "#3388ff")
-    fillColor = kwargs.pop("fill_color", kwargs.pop("fillColor", "#3388ff"))
-    fillOpacity = kwargs.pop("fill_opacity", kwargs.pop("fillOpacity", 0.2))
-    weight = kwargs.pop("weight", 3)
-    opacity = kwargs.pop("opacity", 1.0)
+    layer_style, feature_styles = resolve_styles(
+        kwargs, props, num_points,
+        {"color": "#3388ff", "fill_color": "#3388ff", "fill_opacity": 0.2,
+         "weight": 3, "opacity": 1.0},
+        "add_circle_markers")
 
     # 3. Group the dataset by the unique combinations of these columns/strings
     group_map = {}
@@ -115,6 +115,9 @@ def add_circle_markers(
         sub_lats = lats[indices]
         sub_lons = lons[indices]
         
+        sub_feature_styles = ([feature_styles[idx] for idx in indices]
+                              if feature_styles else None)
+
         # Subset properties
         sub_props = {}
         for k, v in props.items():
@@ -154,11 +157,7 @@ def add_circle_markers(
             "group_multi_select": group_multi_select,
             "visible": True,
             "radius": radius,
-            "color": color,
-            "fillColor": fillColor,
-            "fillOpacity": fillOpacity,
-            "weight": weight,
-            "opacity": opacity,
+            **layer_style,
             "properties": sub_props_copy,
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
@@ -166,5 +165,7 @@ def add_circle_markers(
             **display_config,
             **kwargs
         }
+        if sub_feature_styles:
+            layer_meta["feature_styles"] = sub_feature_styles
         self.add_child(layer_meta)
     return self

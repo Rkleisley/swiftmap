@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any
 from ..parsers import parse_lines
 from ._display import extract_display_config
+from ._style import resolve_styles
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
@@ -17,9 +18,6 @@ def add_line(
     name: Optional[str] = None,
     layer_group: Optional[str] = None,
     group_multi_select: Optional[bool] = None,
-    color: str = "#3388ff",
-    weight: int = 3,
-    opacity: float = 1.0,
     **kwargs
 ) -> "Map":
     """
@@ -65,14 +63,13 @@ def add_line(
         each line under its own status.
     group_multi_select : bool, optional
         If False, configures the parent layer group to act as mutually exclusive radio buttons.
-    color : str, default '#3388ff'
-        Hex color string or color name for line rendering.
-    weight : int, default 3
-        Line width in pixels.
-    opacity : float, default 1.0
-        Line opacity (0.0 to 1.0).
     **kwargs
-        Additional layer metadata attributes:
+        Styling and behaviour options. Anything not listed here is forwarded to the layer
+        unchanged, so custom metadata reaches the frontend; an option close to a real name
+        (e.g. 'colour') is reported as a likely typo.
+        - color : str, default '#3388ff' - Hex string or CSS color name for the line.
+        - weight : int, default 3 - Line width in pixels.
+        - opacity : float, default 1.0 - Line opacity (0.0 to 1.0).
         - popup : bool, default True - Enables popups on click.
         - tooltip : bool, default True - Enables tooltips on hover.
         - popup_fields / tooltip_fields : list of str - Property names to display.
@@ -114,6 +111,7 @@ def add_line(
     tooltip = kwargs.pop("tooltip", True)
     display_config = extract_display_config(kwargs, name)
 
+
     lines_coords, props = parse_lines(
         data,
         lat_col=lat_col,
@@ -133,6 +131,9 @@ def add_line(
 
     is_multi = len(lines_coords) > 1
     group_specs = build_group_specs(layer_group, props)
+    layer_style, feature_styles = resolve_styles(
+        kwargs, props, len(lines_coords),
+        {"color": "#3388ff", "weight": 3, "opacity": 1.0}, "add_line")
 
     for i, coords in enumerate(lines_coords):
         line_props = {k: v[i] for k, v in props.items()} if props else {}
@@ -145,9 +146,7 @@ def add_line(
             "group_multi_select": group_multi_select,
             "visible": True,
             "locations": coords,
-            "color": color,
-            "weight": weight,
-            "opacity": opacity,
+            **(feature_styles[i] if feature_styles else layer_style),
             "properties": line_props,
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),

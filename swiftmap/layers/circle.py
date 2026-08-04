@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 from ._display import extract_display_config
+from ._style import resolve_styles
 from ._batching import batched
 
 @batched
@@ -62,6 +63,10 @@ def add_circle(
     popup = kwargs.pop("popup", True)
     tooltip = kwargs.pop("tooltip", True)
     display_config = extract_display_config(kwargs, name)
+    layer_style, _ = resolve_styles(
+        kwargs, {}, 1,
+        {"color": "#3388ff", "fill_color": "#3388ff", "fill_opacity": 0.2},
+        "add_circle")
 
     self.add_child({
         "type": "circle",
@@ -71,6 +76,7 @@ def add_circle(
         "visible": True,
         "location": location,
         "radius": radius,
+        **layer_style,
         "properties": properties or {},
         "autobind_popup": bool(popup),
         "autobind_tooltip": bool(tooltip),

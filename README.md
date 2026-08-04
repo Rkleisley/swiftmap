@@ -107,6 +107,49 @@ Full parameter documentation lives in each method's docstring (e.g. `help(Map.ad
 
 ---
 
+## Styling
+
+Every `add_*` method takes the same styling options as keyword arguments — `color`,
+`fill_color`, `fill_opacity`, `weight`, `opacity`, and `radius` where it applies. Leaflet's
+camelCase spellings (`fillColor`, `fillOpacity`) work too:
+
+```python
+m.add_polygon(zones, color="crimson", fill_opacity=0.4, weight=2)
+```
+
+**Style from your data.** A `style` property or column is applied per feature, so one
+DataFrame can carry its own appearance — sort your rows, add a column, and every layer
+type picks it up:
+
+```python
+df["style"] = df["kind"].map({"city": "red", "town": "blue"})
+m.add_markers(df)                    # each point takes its own colour
+```
+
+The value is a colour string or a dict of options:
+
+```python
+df["style"] = [{"color": "red", "weight": 5}, {"color": "blue"}, ...]
+```
+
+**Overriding.** Precedence runs `static_style` → explicit keyword → `style` column →
+defaults. So `static_style` forces one appearance for the whole layer regardless of the
+data, while a plain keyword still beats the column:
+
+```python
+m.add_markers(df, static_style={"color": "grey"})   # ignores the style column
+m.add_markers(df, color="purple")                   # also wins over the column
+```
+
+A style column holding one value everywhere collapses to a plain layer style, so uniform
+data costs nothing extra.
+
+Misspelled options are reported rather than silently ignored — `colour="red"` warns and
+suggests `color`, while unrecognised keys that match nothing (`title`, `draggable`) are
+passed through to the layer untouched.
+
+---
+
 ## Popups & Tooltips
 
 By default every property is listed as `name: value`. Narrow the list with `*_fields`, and give

@@ -44,6 +44,17 @@ function registerHoverMatch(map, priority, action) {
     }
 }
 
+// Style for one feature: its own entry from `feature_styles` when the layer carries
+// varied styling, otherwise the layer's single style. Python only emits feature_styles
+// when features actually differ, so a uniform layer costs nothing extra here.
+function styleFor(layer, index) {
+    const perFeature = layer.feature_styles;
+    if (Array.isArray(perFeature) && perFeature[index]) {
+        return { ...layer, ...perFeature[index] };
+    }
+    return layer;
+}
+
 function getIndexedProperties(properties, index) {
     if (!properties) return {};
     const props = {};
@@ -81,7 +92,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         const features = [];
         for (const layer of layersList) {
             const geojsonCoords = layer.locations.map(c => [c[1], c[0]]);
-            const rgb = parseColor(layer.color, "#3388ff");
+            const style = styleFor(layer, 0);
+            const rgb = parseColor(style.color, "#3388ff");
             features.push({
                 type: "Feature",
                 geometry: {
@@ -90,8 +102,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 },
                 properties: {
                     layer: layer,
-                    colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: layer.opacity || 1.0 },
-                    weight: layer.weight || 3
+                    colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: style.opacity || 1.0 },
+                    weight: style.weight || 3
                 }
             });
         }
@@ -207,7 +219,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
 
             if (geojsonCoords.length === 0) continue;
 
-            const rgb = parseColor(layer.color, "#3388ff");
+            const style = styleFor(layer, 0);
+            const rgb = parseColor(style.color, "#3388ff");
             features.push({
                 type: "Feature",
                 geometry: {
@@ -216,7 +229,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 },
                 properties: {
                     layer: layer,
-                    colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: layer.fillOpacity || 0.2 }
+                    colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: style.fillOpacity || 0.2 }
                 }
             });
         }
@@ -301,8 +314,9 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
     const pointsList = [];
     const indexMapping = [];
 
+    const fallbackColor = type === "markers" ? "#e61a26" : "#3388ff";
     for (const layer of layersList) {
-        const colorRGB = parseColor(layer.color, type === "markers" ? "#e61a26" : "#3388ff");
+        const colorRGB = parseColor(layer.color, fallbackColor);
 
         const coordBuffer = coordinateBuffers[layer.id];
         if (!coordBuffer) {
@@ -324,12 +338,15 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         );
         const count = coords.length / 2;
 
+        const perFeature = Array.isArray(layer.feature_styles) ? layer.feature_styles : null;
         for (let i = 0; i < count; i++) {
             pointsList.push([coords[i * 2], coords[i * 2 + 1]]);
             indexMapping.push({
                 layer: layer,
                 originalIndex: i,
-                colorRGB: colorRGB
+                colorRGB: perFeature && perFeature[i]
+                    ? parseColor(perFeature[i].color, fallbackColor)
+                    : colorRGB
             });
         }
     }

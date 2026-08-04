@@ -2,6 +2,7 @@ import numpy as np
 from typing import Optional, Any
 from ..parsers import parse_points
 from ._display import extract_display_config
+from ._style import resolve_styles
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, is_column
 from .._warnings import warn, EmptyLayerWarning
@@ -87,6 +88,8 @@ def add_markers(
     popup = kwargs.pop("popup", True)
     tooltip = kwargs.pop("tooltip", True)
     display_config = extract_display_config(kwargs, name)
+    layer_style, feature_styles = resolve_styles(
+        kwargs, props, num_points, {"color": "#e61a26"}, "add_markers")
 
     # 3. Group the dataset by the unique combinations of these path strings and names
     group_map = {}
@@ -104,6 +107,10 @@ def add_markers(
         sub_lats = lats[indices]
         sub_lons = lons[indices]
         
+        # Styles are resolved for the whole input, so each group takes its own slice.
+        sub_feature_styles = ([feature_styles[idx] for idx in indices]
+                              if feature_styles else None)
+
         # Subset properties
         sub_props = {}
         for k, v in props.items():
@@ -146,8 +153,11 @@ def add_markers(
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
             "bounds": sub_bounds,
+            **layer_style,
             **display_config,
             **kwargs
         }
+        if sub_feature_styles:
+            layer_meta["feature_styles"] = sub_feature_styles
         self.add_child(layer_meta)
     return self
