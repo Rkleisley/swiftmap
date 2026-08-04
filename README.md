@@ -100,6 +100,7 @@ Beyond `add_markers`, `Map` exposes:
 *   **Finding layers:** `get_layer(id_or_name)` or `get_layer(group, name)` — returns the live layer config, so attributes you set on it persist.
 *   **Updating existing layers:** `update_layer(id_or_name, **kwargs)`, `set_layer_visibility` / `set_layers_visibility`, `remove_layer` / `remove_layers`. `add_layer(layer)` is a Leaflet-compatible alias for adding a prebuilt config.
 *   **Viewport:** `fit_bounds([[min_lat, min_lon], [max_lat, max_lon]])`.
+*   **Legend:** `legend_html` returns markup for the active layers when `show_legend=True`. It is not drawn on the map — render it wherever your layout wants it.
 *   **Syncing:** `sync()` pushes a render when `auto_sync=False`; `resync()` replaces the client's entire state, useful if a view may have missed updates.
 *   **Batching:** `with m.batch(): ...` collapses multiple mutations into one message. Every `add_*` already batches internally, so this is for grouping several calls; it is reentrant, so nesting is safe.
 

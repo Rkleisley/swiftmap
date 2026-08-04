@@ -88,6 +88,16 @@ export default {
         const originalError = console.error;
         const originalWarn = console.warn;
 
+        // js_console_logs is a synced list, so each append resends the whole array. Keeping
+        // only the most recent entries bounds both the payload and the memory a long-lived
+        // session accumulates; the newest are the ones worth having anyway.
+        const MAX_CONSOLE_LOGS = 200;
+        const appendLog = entry => {
+            const logs = model.get("js_console_logs") || [];
+            const next = [...logs, entry];
+            return next.length > MAX_CONSOLE_LOGS ? next.slice(-MAX_CONSOLE_LOGS) : next;
+        };
+
         // Helper to safely write back to Python only if the widget view is active and attached
         function safeSetAndSave(key, value) {
             if (model.comm && document.body.contains(el)) {
@@ -112,9 +122,8 @@ export default {
 
         console.error = function(...args) {
             originalError.apply(console, args);
-            const logs = model.get("js_console_logs") || [];
-            logs.push("CONSOLE.ERROR: " + args.map(a => String(a)).join(" "));
-            safeSetAndSave("js_console_logs", [...logs]);
+            safeSetAndSave("js_console_logs",
+                appendLog("CONSOLE.ERROR: " + args.map(a => String(a)).join(" ")));
         };
         
         let loggedReprojected = false;
@@ -127,9 +136,7 @@ export default {
                     const cleanMsg = `[SwiftMap] Layer was reprojected to "${crs}"`;
                     originalWarn.call(console, cleanMsg);
                     
-                    const logs = model.get("js_console_logs") || [];
-                    logs.push(cleanMsg);
-                    safeSetAndSave("js_console_logs", [...logs]);
+                    safeSetAndSave("js_console_logs", appendLog(cleanMsg));
                 }
                 return; // suppress duplicate console warnings
             }
@@ -137,9 +144,8 @@ export default {
         };
 
         window.onerror = function(message, source, lineno, colno, error) {
-            const logs = model.get("js_console_logs") || [];
-            logs.push(`WINDOW.ONERROR: ${message} at ${source}:${lineno}:${colno}`);
-            safeSetAndSave("js_console_logs", [...logs]);
+            safeSetAndSave("js_console_logs",
+                appendLog(`WINDOW.ONERROR: ${message} at ${source}:${lineno}:${colno}`));
         };
 
         // Load CSS and Leaflet libraries (including WebGL glify)

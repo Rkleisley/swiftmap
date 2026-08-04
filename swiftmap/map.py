@@ -38,7 +38,8 @@ class Map(anywidget.AnyWidget):
     zoom : int, default 10
         Initial map zoom level (0 to 22).
     show_legend : bool, default False
-        If True, displays an interactive layer legend overlay.
+        If True, `legend_html` returns markup for the active layers. There is no built-in
+        map overlay yet -- render the string wherever your app wants it.
     show_logo : bool, default True
         If True, displays branding logos on the map viewport.
     height : str, optional
@@ -248,7 +249,12 @@ class Map(anywidget.AnyWidget):
 
     @property
     def legend_html(self) -> str:
-        """Returns HTML string representation of legend for active map layers."""
+        """
+        Returns HTML listing the active layers, or "" when `show_legend` is False.
+
+        Not drawn on the map: place it in your own layout (a Shiny ui element, a notebook
+        display call). A built-in overlay is not implemented.
+        """
         if not self.show_legend:
             return ""
         items = []
