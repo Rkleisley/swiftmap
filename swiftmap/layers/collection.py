@@ -20,9 +20,9 @@ def add_collection(
     Plots every geometry in a mixed collection, adding one layer per geometry kind present.
 
     Use this when a single dataset holds more than one kind of shape -- a GeoJSON
-    FeatureCollection of points and boundaries, a geostructures `FeatureCollection` or
-    `Track`, a GeoDataFrame whose geometry column mixes types. When your data is all one
-    kind, call `add_markers`, `add_line`, or `add_polygon` directly.
+    FeatureCollection of points and boundaries, a geostructures `FeatureCollection`, a
+    GeoDataFrame whose geometry column mixes types, or a table with a WKT column. When your
+    data is all one kind, call `add_markers`, `add_line`, or `add_polygon` directly.
 
     Layers created from one call share a name, so they merge into a single collapsible
     entry in the sidebar with the individual geometries as children.
@@ -30,9 +30,19 @@ def add_collection(
     Parameters
     ----------
     data : Any
-        GeoJSON dict or JSON string, a geostructures shape/collection, or a GeoPandas
-        GeoDataFrame/GeoSeries. Sources that hold only one geometry kind per call
-        (Pandas, Polars, raw coordinate lists) are rejected -- see Raises.
+        Any source that states each geometry's own type:
+
+        - a GeoJSON dict or JSON string
+        - a geostructures shape or collection
+        - a GeoPandas GeoDataFrame or GeoSeries
+        - a Pandas or Polars DataFrame with a WKT geometry column, since WKT declares its
+          kind per value and one column may mix them
+
+        A table whose geometry is implicit -- plain lat/lon columns -- holds a single kind
+        by construction and is not accepted, nor are raw coordinate lists. Fed to all three
+        parsers speculatively, a table of points would yield the points plus a line threaded
+        through them and a polygon around them. Those sources warn and add nothing; use
+        `add_markers`, `add_line`, or `add_polygon` instead.
     name : str, optional
         Layer name displayed in sidebar controls.
     layer_group : str, optional
@@ -63,6 +73,11 @@ def add_collection(
     >>> m = Map()
     >>> m.add_collection(feature_collection, name="Survey", layer_group="Field Data")
     >>> m.add_collection(gdf, name="Assets", point_type="markers")
+
+    >>> # A WKT column may mix kinds; each value declares its own.
+    >>> df = pd.DataFrame({"geometry": ["POINT (-5.3 36.0)",
+    ...                                 "LINESTRING (-5.3 36.0, -5.2 36.1)"]})
+    >>> m.add_collection(df, name="Survey")
     """
     # Every problem below reports and returns rather than raising. Building a map is a
     # chain of add_* calls, and an exception partway through discards the layers already
