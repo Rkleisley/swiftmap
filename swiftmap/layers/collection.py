@@ -34,8 +34,9 @@ def add_collection(
 
         - a GeoJSON dict or JSON string
         - a geostructures shape, or a collection of them (`FeatureCollection`, `Track`).
-          A `Track` groups shapes by time rather than by geometry, so its contents route
-          by shape type the same as any other collection.
+          A `Track` additionally requires timestamps on its shapes but places no
+          restriction on their geometry, so its contents route by shape type the same as
+          any other collection.
         - a GeoPandas GeoDataFrame or GeoSeries
         - a Pandas or Polars DataFrame with a WKT geometry column, since WKT declares its
           kind per value and one column may mix them

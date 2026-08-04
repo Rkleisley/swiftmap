@@ -32,8 +32,9 @@ def add_line(
     - GeoJSON objects / FeatureCollections
     - GeoStructures line shapes (`GeoLineString`, `MultiGeoLineString`), including those
       inside a collection. A `FeatureCollection` or `Track` contributes whichever of its
-      shapes are line-like; a `Track` carries timestamps and ordering rather than a
-      geometry type, so its contents route by shape like any other collection.
+      shapes are line-like. A `Track` additionally requires timestamps on its shapes, but
+      places no restriction on their geometry, so its contents route by shape type like any
+      other collection.
 
     Parameters
     ----------
