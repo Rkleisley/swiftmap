@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Any
 from ..parsers import parse_lines
 from ._display import extract_display_config
 from ._batching import batched
+from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
 
 @batched
@@ -55,9 +56,12 @@ def add_line(
         - 'lon_lat': GIS standard (X = Longitude, Y = Latitude).
         - 'lat_lon': Traditional format (Y = Latitude, X = Longitude).
     name : str, optional
-        Name of the layer displayed in the sidebar control.
-    layer_group : str, optional
-        Nested folder path for hierarchical sidebar organization (e.g., "Tracks/Active").
+        Layer name displayed in the sidebar control. If it matches a property key in the
+        data, each line is named from its own value of that property.
+    layer_group : str or list of str, optional
+        Folder path for the sidebar tree (e.g. "Tracks/Active"), or a list of parts. Any
+        part matching a property key resolves per line, so `["Tracks", "status"]` files
+        each line under its own status.
     group_multi_select : bool, optional
         If False, configures the parent layer group to act as mutually exclusive radio buttons.
     color : str, default '#3388ff'
@@ -127,19 +131,16 @@ def add_line(
         return self
 
     is_multi = len(lines_coords) > 1
+    group_specs = build_group_specs(layer_group, props)
 
     for i, coords in enumerate(lines_coords):
         line_props = {k: v[i] for k, v in props.items()} if props else {}
-        
-        if name:
-            line_name = f"{name} {i+1}" if is_multi else name
-        else:
-            line_name = str(line_props.get("name")) if "name" in line_props else f"Line {i+1}" if is_multi else "Line"
+        line_name = resolve_layer_name(name, props, i, is_multi, "Line")
 
         self.add_child({
             "type": "polyline",
             "name": line_name,
-            "layer_group": layer_group or "Line Group",
+            "layer_group": resolve_group_path(group_specs, props, i, "Line Group"),
             "group_multi_select": group_multi_select,
             "visible": True,
             "locations": coords,

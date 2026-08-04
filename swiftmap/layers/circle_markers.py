@@ -3,6 +3,7 @@ from typing import Optional, Any
 from ..parsers import parse_points
 from ._display import extract_display_config
 from ._batching import batched
+from ._grouping import build_group_specs, resolve_group_path, is_column
 from .._warnings import warn, EmptyLayerWarning
 
 @batched
@@ -83,11 +84,8 @@ def add_circle_markers(
         return self
 
     # 2. Check if name refers to column in props, and build group specifications
-    name_is_col = name is not None and name in props
-    if isinstance(layer_group, (list, tuple)):
-        group_specs = [(part, part in props) for part in layer_group if part is not None]
-    else:
-        group_specs = [(layer_group, layer_group is not None and layer_group in props)] if layer_group is not None else []
+    name_is_col = is_column(name, props)
+    group_specs = build_group_specs(layer_group, props)
 
     # Extract popup and tooltip settings
     popup = kwargs.pop("popup", True)
@@ -104,14 +102,7 @@ def add_circle_markers(
     # 3. Group the dataset by the unique combinations of these columns/strings
     group_map = {}
     for i in range(num_points):
-        path_parts = []
-        for val, is_col in group_specs:
-            if is_col:
-                path_parts.append(str(props[val][i]))
-            else:
-                path_parts.append(str(val))
-        
-        g_val = "/".join(path_parts) if path_parts else "Circle Markers Group"
+        g_val = resolve_group_path(group_specs, props, i, "Circle Markers Group")
         n_val = props[name][i] if name_is_col else name
         
         key = (g_val, n_val)

@@ -44,9 +44,13 @@ def add_collection(
         through them and a polygon around them. Those sources warn and add nothing; use
         `add_markers`, `add_line`, or `add_polygon` instead.
     name : str, optional
-        Layer name displayed in sidebar controls.
-    layer_group : str, optional
-        Nested folder path in sidebar controls (e.g. "GIS Feeds/Boundaries").
+        Layer name displayed in sidebar controls. If it matches a property key -- a GeoJSON
+        feature property, a geostructures shape property, a GeoDataFrame column -- every
+        geometry is named from its own value, so one call can produce a layer per feature.
+    layer_group : str or list of str, optional
+        Folder path in sidebar controls (e.g. "GIS Feeds/Boundaries"), or a list of parts.
+        Any part matching a property key resolves per feature, so `["Sites", "zone"]` files
+        each geometry under its own zone.
     group_multi_select : bool, optional
         If False, configures parent folder controls as mutually exclusive radio buttons.
     point_type : {'circle_markers', 'markers'}, default 'circle_markers'

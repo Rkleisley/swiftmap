@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Any
 from ..parsers import parse_polygons
 from ._display import extract_display_config
 from ._batching import batched
+from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
 
 @batched
@@ -55,9 +56,12 @@ def add_polygon(
         - 'lon_lat': GIS standard (X = Longitude, Y = Latitude).
         - 'lat_lon': Traditional format (Y = Latitude, X = Longitude).
     name : str, optional
-        Name of the layer displayed in sidebar controls.
-    layer_group : str, optional
-        Nested folder path for hierarchical sidebar organization (e.g., "Boundaries/Zones").
+        Layer name displayed in sidebar controls. If it matches a property key in the data,
+        each polygon is named from its own value of that property.
+    layer_group : str or list of str, optional
+        Folder path for the sidebar tree (e.g. "Boundaries/Zones"), or a list of parts. Any
+        part matching a property key resolves per polygon, so `["Zones", "risk"]` files each
+        polygon under its own risk level.
     group_multi_select : bool, optional
         If False, configures the parent layer group to act as mutually exclusive radio buttons.
     color : str, default '#3388ff'
@@ -124,21 +128,19 @@ def add_polygon(
         return self
 
     is_multi = len(polygons_coords) > 1
+    group_specs = build_group_specs(layer_group, props)
 
     for i, coords in enumerate(polygons_coords):
         poly_props = {k: v[i] for k, v in props.items()} if props else {}
         if properties:
             poly_props.update(properties)
-        
-        if name:
-            poly_name = f"{name} {i+1}" if is_multi else name
-        else:
-            poly_name = str(poly_props.get("name")) if "name" in poly_props else f"Polygon {i+1}" if is_multi else "Polygon"
+
+        poly_name = resolve_layer_name(name, props, i, is_multi, "Polygon")
 
         self.add_child({
             "type": "polygon",
             "name": poly_name,
-            "layer_group": layer_group or "Polygon Group",
+            "layer_group": resolve_group_path(group_specs, props, i, "Polygon Group"),
             "group_multi_select": group_multi_select,
             "visible": True,
             "locations": coords,
