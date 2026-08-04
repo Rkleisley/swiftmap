@@ -2,7 +2,7 @@ import numpy as np
 from typing import Optional, Any
 from ..parsers import parse_points
 from ._display import extract_display_config
-from ._style import resolve_styles
+from ._style import pop_style_options, resolve_styles
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, is_column
 from .._warnings import warn, EmptyLayerWarning
@@ -70,6 +70,7 @@ def add_markers(
     group_multi_select = kwargs.pop("multi_select", group_multi_select)
 
     # 1. Parse all coordinates and properties first
+    explicit_style, static_style = pop_style_options(kwargs, "add_markers")
     lats, lons, props = parse_points(data, lat_col, lon_col)
     num_points = len(lats)
     if num_points == 0:
@@ -89,7 +90,7 @@ def add_markers(
     tooltip = kwargs.pop("tooltip", True)
     display_config = extract_display_config(kwargs, name)
     layer_style, feature_styles = resolve_styles(
-        kwargs, props, num_points, {"color": "#e61a26"}, "add_markers")
+        explicit_style, static_style, props, num_points, {"color": "#e61a26"})
 
     # 3. Group the dataset by the unique combinations of these path strings and names
     group_map = {}

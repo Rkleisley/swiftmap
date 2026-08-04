@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 from ..parsers import parse_polygons
 from ._display import extract_display_config
-from ._style import resolve_styles
+from ._style import pop_style_options, resolve_styles
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
@@ -103,6 +103,7 @@ def add_polygon(
 
 
     # Parse polygon coordinates
+    explicit_style, static_style = pop_style_options(kwargs, "add_polygon")
     polygons_coords, props = parse_polygons(
         data,
         lat_col=lat_col,
@@ -123,9 +124,7 @@ def add_polygon(
     is_multi = len(polygons_coords) > 1
     group_specs = build_group_specs(layer_group, props)
     layer_style, feature_styles = resolve_styles(
-        kwargs, props, len(polygons_coords),
-        {"color": "#3388ff", "fill_opacity": 0.2, "weight": 3, "opacity": 1.0},
-        "add_polygon")
+        explicit_style, static_style, props, len(polygons_coords), {"color": "#3388ff", "fill_opacity": 0.2, "weight": 3, "opacity": 1.0})
 
     for i, coords in enumerate(polygons_coords):
         poly_props = {k: v[i] for k, v in props.items()} if props else {}

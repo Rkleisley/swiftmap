@@ -81,12 +81,30 @@ def warn_on_misspelled_options(kwargs: Dict[str, Any], method: str,
             )
 
 
+def pop_style_options(kwargs: Dict[str, Any], method: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """
+    Takes the style options out of kwargs, returning (explicit, static_style).
+
+    Called before parsing so styling never reaches a parser: several add_* methods forward
+    their remaining kwargs to the parser, and while parsers ignore what they do not know
+    today, a parser that later gained a `color` argument would silently misread it.
+    """
+    static_style = normalize(kwargs.pop("static_style", None))
+    explicit = {}
+    for key in list(kwargs):
+        name = canonical(key)
+        if name in STYLE_KEYS:
+            explicit[name] = kwargs.pop(key)
+    warn_on_misspelled_options(kwargs, method)
+    return explicit, static_style
+
+
 def resolve_styles(
-    kwargs: Dict[str, Any],
+    explicit: Dict[str, Any],
+    static_style: Dict[str, Any],
     props: Dict[str, List[Any]],
     count: int,
     defaults: Dict[str, Any],
-    method: str,
 ) -> Tuple[Dict[str, Any], Optional[List[Dict[str, Any]]]]:
     """
     Works out the style for a layer and, where they differ, for each feature in it.
@@ -103,16 +121,6 @@ def resolve_styles(
     a future restyle -- highlighting a selected row, say -- can patch just this field
     instead of resending a layer's whole property set.
     """
-    static_style = normalize(kwargs.pop("static_style", None))
-
-    explicit = {}
-    for key in list(kwargs):
-        name = canonical(key)
-        if name in STYLE_KEYS:
-            explicit[name] = kwargs.pop(key)
-
-    warn_on_misspelled_options(kwargs, method)
-
     base = {**defaults, **explicit, **static_style}
     layer_style = {STYLE_KEYS[k]: v for k, v in base.items() if k in STYLE_KEYS}
 

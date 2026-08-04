@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 from ..parsers import parse_lines
 from ._display import extract_display_config
-from ._style import resolve_styles
+from ._style import pop_style_options, resolve_styles
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
@@ -112,6 +112,7 @@ def add_line(
     display_config = extract_display_config(kwargs, name)
 
 
+    explicit_style, static_style = pop_style_options(kwargs, "add_line")
     lines_coords, props = parse_lines(
         data,
         lat_col=lat_col,
@@ -132,8 +133,7 @@ def add_line(
     is_multi = len(lines_coords) > 1
     group_specs = build_group_specs(layer_group, props)
     layer_style, feature_styles = resolve_styles(
-        kwargs, props, len(lines_coords),
-        {"color": "#3388ff", "weight": 3, "opacity": 1.0}, "add_line")
+        explicit_style, static_style, props, len(lines_coords), {"color": "#3388ff", "weight": 3, "opacity": 1.0})
 
     for i, coords in enumerate(lines_coords):
         line_props = {k: v[i] for k, v in props.items()} if props else {}
