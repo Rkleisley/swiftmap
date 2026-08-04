@@ -2,8 +2,40 @@
 
 This document covers swiftmap's internal architecture for people extending the library itself. If you just want to *use* `Map`, see [README.md](README.md) instead.
 
-For current project state — what is deliberately the way it is, what is still open, and what
-is known-broken — see [docs/STATE.md](docs/STATE.md).
+---
+
+## Decisions worth preserving
+
+Each of these looks like something worth tidying up, and each is load-bearing. The reason is
+recorded so a future cleanup does not reintroduce a bug that has already been fixed.
+
+**Parsers return empty; they never raise for absent geometry.** Building a map is a chain of
+`add_*` calls, and an exception partway through discards every layer already added, leaving
+nothing to render. The calling `add_*` warns instead, because only it knows whether that
+geometry kind was actually asked for — `add_collection` asks all three speculatively and so
+suppresses `EmptyLayerWarning`. Still fatal, because nothing can render and there is no
+partial result: an unknown data source type, and a missing JS bundle.
+
+**geostructures dispatches on type mixins, never on attributes.** `centroid` exists on every
+shape and `to_polygon` exists on lines, so duck-typing made a polygon render as a polygon
+*and* a phantom centroid marker. Expansion via `.geoshapes` must happen *before* geometry is
+read: `linear_rings()` nests differently on a `MultiGeoPolygon` than a `GeoPolygon`, and
+`MultiGeoLineString` has no `vertices` at all.
+
+**GeoPandas must stay registered ahead of pandas in `registry.py`.** `GeoDataFrame` subclasses
+`DataFrame`, so first-match-wins dispatch would otherwise read it as a plain table with no
+geometry. A test pins this.
+
+**Property values are coerced to JSON-safe types in `_add_child.py`.** Timestamps and numpy
+scalars parse fine and then fail during traitlets serialisation, far from the column
+responsible. One choke point every layer passes through.
+
+**Per-feature styles live in `feature_styles`, not inside `properties`.** So restyling one
+feature — highlighting a selected table row — can patch that field alone rather than
+resending a layer's whole property set.
+
+**`swiftmap/static/` is a committed build artifact**, so `pip install` never needs Node. See
+the rebuild warning below.
 
 ## Project Layout
 
