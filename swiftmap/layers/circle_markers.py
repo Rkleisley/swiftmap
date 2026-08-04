@@ -49,7 +49,8 @@ def add_circle_markers(
           Defaults to every property.
         - popup_names / tooltip_names : list of str - Display labels for those fields,
           matched by position (e.g. fields=["pop_2020"], names=["Population"]).
-          Requires the matching `*_fields`.
+          If they cannot be lined up, a warning is issued and the raw column
+          names are used.
         - popup_template / tooltip_template : str - HTML template. `{column}` inserts one
           value, `{*}` inserts the default field list. Data values are HTML-escaped; your
           markup is not (e.g. "<img src='{photo}' width=300><br>{*}").
@@ -85,7 +86,7 @@ def add_circle_markers(
     # Extract popup and tooltip settings
     popup = kwargs.pop("popup", True)
     tooltip = kwargs.pop("tooltip", True)
-    display_config = extract_display_config(kwargs)
+    display_config = extract_display_config(kwargs, name)
 
     # Resolve colors, weight, opacity etc from kwargs
     color = kwargs.pop("color", "#3388ff")

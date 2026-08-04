@@ -120,6 +120,9 @@ m.add_markers(
 )
 ```
 
+If `*_names` cannot be lined up with `*_fields`, swiftmap warns and falls back to the raw
+column names rather than failing the render.
+
 For images, links, or custom layout, supply a template. `{column}` inserts a single value and
 `{*}` expands the default field list, so you can add markup without enumerating every column:
 

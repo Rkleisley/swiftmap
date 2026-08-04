@@ -1,4 +1,5 @@
-from typing import Any, Dict
+import warnings
+from typing import Any, Dict, Optional
 
 # Popup/tooltip display options forwarded to the frontend as layer metadata.
 DISPLAY_KEYS = (
@@ -14,12 +15,14 @@ DISPLAY_KEYS = (
 )
 
 
-def extract_display_config(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+def extract_display_config(kwargs: Dict[str, Any], layer_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Pops popup/tooltip display options out of `kwargs` and returns them as layer metadata.
 
-    Aliases are matched to fields by position, so a length mismatch is rejected here rather
-    than silently falling back to raw column names once it reaches the browser.
+    Aliases are matched to fields by position. If they cannot be lined up -- different
+    lengths, or names given without fields -- the aliases are dropped and the raw column
+    names are used instead. Mislabelled popups are a better outcome than a failed render,
+    so this warns rather than raising.
     """
     config = {key: kwargs.pop(key) for key in DISPLAY_KEYS if key in kwargs}
 
@@ -29,15 +32,21 @@ def extract_display_config(kwargs: Dict[str, Any]) -> Dict[str, Any]:
             continue
 
         fields = config.get(f"{kind}_fields")
+        if fields is not None and len(names) == len(fields):
+            continue
+
         if fields is None:
-            raise ValueError(
-                f"{kind}_names requires {kind}_fields. Aliases are matched to fields by "
-                f"position, so the fields must be listed explicitly."
-            )
-        if len(names) != len(fields):
-            raise ValueError(
-                f"{kind}_names has {len(names)} entries but {kind}_fields has {len(fields)}. "
-                f"They are matched by position and must be the same length."
-            )
+            detail = f"{kind}_names was given without {kind}_fields"
+        else:
+            detail = f"{kind}_fields has {len(fields)} entries but {kind}_names has {len(names)}"
+
+        # 4 frames out lands on the caller's add_* line: here -> add_*() -> the @batched
+        # wrapper -> user code. Without this the warning blames swiftmap's own decorator.
+        warnings.warn(
+            f"[SwiftMap] Layer {layer_name or '<unnamed>'} did not have matching fields and "
+            f"names for popups or tooltips ({detail}). Defaulting to column names.",
+            stacklevel=4,
+        )
+        config.pop(f"{kind}_names")
 
     return config
