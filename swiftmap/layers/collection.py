@@ -74,10 +74,10 @@ def add_collection(
 
     if not supports_mixed_geometry(data):
         raise TypeError(
-            f"add_collection needs a source that distinguishes geometry types "
-            f"(GeoJSON, geostructures, or GeoPandas); got {type(data).__name__}. "
-            f"Tabular sources hold a single geometry kind per call -- use add_markers, "
-            f"add_line, or add_polygon instead."
+            f"add_collection needs a source that states each geometry's type: GeoJSON, "
+            f"geostructures, GeoPandas, or a DataFrame with a WKT geometry column. Got "
+            f"{type(data).__name__}. A table of lat/lon columns is a single geometry kind "
+            f"by construction -- use add_markers, add_line, or add_polygon instead."
         )
 
     if point_type not in ("circle_markers", "markers"):

@@ -3,6 +3,34 @@ from typing import Optional, List, Any
 
 FLOAT_REGEX = re.compile(r'[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?')
 
+_WKT_PREFIX = re.compile(r'^\s*(MULTI)?(POINT|LINESTRING|POLYGON)\b', re.IGNORECASE)
+_WKT_KINDS = {"POINT": "point", "LINESTRING": "line", "POLYGON": "polygon"}
+
+
+def wkt_kind(val: Any) -> Optional[str]:
+    """
+    Returns 'point', 'line' or 'polygon' for a WKT string, or None if it is not WKT.
+
+    Used to keep each geometry parser to its own kind. Plain delimited coordinate strings
+    ("-118.24, 34.05; -122.41, 37.77") are not WKT and return None, so they still reach the
+    permissive number-extraction path the parsers rely on.
+    """
+    if not isinstance(val, str):
+        return None
+    match = _WKT_PREFIX.match(val)
+    return _WKT_KINDS[match.group(2).upper()] if match else None
+
+
+def _wkt_coord_pairs(val: str) -> List[List[float]]:
+    """Pulls [lat, lon] pairs out of a WKT body, which is always lon-first."""
+    nums = [float(n) for n in FLOAT_REGEX.findall(val)]
+    return [[nums[i + 1], nums[i]] for i in range(0, len(nums) - 1, 2)]
+
+
+def _parse_point_wkt_string(val: Any) -> List[List[float]]:
+    """Returns [[lat, lon], ...] for a POINT or MULTIPOINT string, else []."""
+    return _wkt_coord_pairs(val) if wkt_kind(val) == "point" else []
+
 def find_column_or_key(keys: List[str], candidates: List[str]) -> Optional[str]:
     """Finds the first key in keys that matches any of the candidates case-insensitively."""
     for c in candidates:
@@ -23,14 +51,13 @@ def _ensure_closed_ring(ring: List[List[float]]) -> List[List[float]]:
 def _parse_coord_string(val: str, coord_order: str = "auto") -> List[List[float]]:
     if not val or not isinstance(val, str):
         return []
-    val_upper = val.strip().upper()
-    if val_upper.startswith("LINESTRING") or val_upper.startswith("MULTILINESTRING"):
-        nums = [float(n) for n in FLOAT_REGEX.findall(val)]
-        coords = []
-        for i in range(0, len(nums) - 1, 2):
-            lon, lat = nums[i], nums[i+1]
-            coords.append([lat, lon])
-        return coords
+    kind = wkt_kind(val)
+    if kind == "line":
+        return _wkt_coord_pairs(val)
+    if kind is not None:
+        # Recognisable WKT of another kind. Falling through would extract its numbers as
+        # a line, which is how a POLYGON column used to render as a phantom polyline.
+        return []
 
     nums = [float(n) for n in FLOAT_REGEX.findall(val)]
     if len(nums) < 4:
@@ -52,14 +79,11 @@ def _parse_coord_string(val: str, coord_order: str = "auto") -> List[List[float]
 def _parse_polygon_wkt_string(val: str, coord_order: str = "auto") -> List[List[float]]:
     if not val or not isinstance(val, str):
         return []
-    val_upper = val.strip().upper()
-    if val_upper.startswith("POLYGON") or val_upper.startswith("MULTIPOLYGON"):
-        nums = [float(n) for n in FLOAT_REGEX.findall(val)]
-        coords = []
-        for i in range(0, len(nums) - 1, 2):
-            lon, lat = nums[i], nums[i+1]
-            coords.append([lat, lon])
-        return _ensure_closed_ring(coords)
+    kind = wkt_kind(val)
+    if kind == "polygon":
+        return _ensure_closed_ring(_wkt_coord_pairs(val))
+    if kind is not None:
+        return []
 
     nums = [float(n) for n in FLOAT_REGEX.findall(val)]
     if len(nums) < 6:

@@ -136,16 +136,27 @@ polygons_registry.register(is_coordinate_list, parse_coordinate_list_polygons)
 # =============================================================================
 
 # Sources whose parsers filter by geometry type: each returns only its own kind from a
-# mixed input, so the same object can safely be handed to all three. The tabular parsers
-# do not -- they coerce whatever they are given, which is correct when the caller asked
-# for a specific kind and wrong when all three are speculative.
+# mixed input, so the same object can safely be handed to all three.
 _MIXED_GEOMETRY_CHECKS = (
     is_geojson,
     is_geostructures,
     is_geopandas_dataframe,
 )
 
+from .sources._tabular import find_wkt_column
+
 
 def supports_mixed_geometry(data: Any) -> bool:
-    """True if `data` comes from a source that distinguishes geometry types when parsing."""
-    return any(check(data) for check in _MIXED_GEOMETRY_CHECKS)
+    """
+    True if `data` comes from a source that distinguishes geometry types when parsing.
+
+    A DataFrame qualifies only when it carries a WKT geometry column, since WKT states its
+    own kind per value and a single column may mix them. Without one, a table is a single
+    geometry kind by construction: lat/lon columns fed to all three parsers would yield the
+    points plus a line threaded through them and a polygon around them.
+    """
+    if any(check(data) for check in _MIXED_GEOMETRY_CHECKS):
+        return True
+    if is_pandas_dataframe(data) or is_polars_dataframe(data):
+        return find_wkt_column(data) is not None
+    return False

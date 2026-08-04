@@ -1,7 +1,14 @@
 import re
 import numpy as np
 from typing import Any, Dict, List, Optional, Tuple
-from ._utils import find_column_or_key, _parse_coord_string, _parse_polygon_wkt_string, _ensure_closed_ring
+from ._utils import (
+    find_column_or_key,
+    _parse_coord_string,
+    _parse_polygon_wkt_string,
+    _parse_point_wkt_string,
+    _ensure_closed_ring,
+    wkt_kind,
+)
 
 # Multi-row grouping (tier 3 of lines/polygons parsing) is intentionally NOT
 # shared here: pandas.py groups via per-group sub-frames, polars.py via
@@ -18,6 +25,31 @@ SHAPE_ID_CANDIDATES = ['shape_id', 'polygon_id', 'zone_id', 'group', 'id', 'name
 SHAPE_ORDER_CANDIDATES = ['order', 'step', 'vertex', 'index', 'seq', 'sequence']
 LINE_COORD_COL_CANDIDATES = ['coords', 'coordinates', 'locations', 'path', 'wkt', 'geometry']
 POLYGON_COORD_COL_CANDIDATES = ['coords', 'coordinates', 'locations', 'wkt', 'geometry', 'shape']
+WKT_COL_CANDIDATES = ['wkt', 'geometry', 'geom', 'shape', 'coords', 'coordinates', 'locations']
+
+
+def find_wkt_column(data: Any) -> Optional[str]:
+    """
+    Returns the name of a column holding WKT strings, or None.
+
+    A likely column name is not enough -- 'coords' may hold plain delimited pairs -- so the
+    first few non-null values are checked for an actual WKT prefix.
+    """
+    try:
+        cols = list(data.columns)
+    except AttributeError:
+        return None
+
+    column = find_column_or_key(cols, WKT_COL_CANDIDATES)
+    if not column:
+        return None
+
+    for checked, row in enumerate(iter_row_dicts(data)):
+        if checked >= 10:
+            break
+        if wkt_kind(row[column]):
+            return column
+    return None
 
 
 def iter_row_dicts(data: Any):
@@ -50,6 +82,11 @@ def parse_tabular_points(data: Any, lat_col: Optional[str] = None, lon_col: Opti
     actual_lon = lon_col or find_column_or_key(cols, LON_CANDIDATES)
 
     if not actual_lat or not actual_lon:
+        # No coordinate columns, but a WKT column may carry POINTs. Rows holding another
+        # geometry kind yield nothing here and are picked up by the line/polygon parsers.
+        wkt_column = find_wkt_column(data)
+        if wkt_column:
+            return _parse_wkt_points(data, cols, wkt_column, intensity_col)
         raise ValueError(f"Could not auto-detect lat/lon columns from {label}. Columns: {cols}")
 
     lats = data[actual_lat].to_numpy().astype(np.float64)
@@ -62,6 +99,31 @@ def parse_tabular_points(data: Any, lat_col: Optional[str] = None, lon_col: Opti
 
     intensities = np.array(props.get(intensity_col), dtype=np.float64) if (intensity_col and intensity_col in props) else np.ones(len(lats), dtype=np.float64)
     return lats, lons, props, intensities
+
+
+def _parse_wkt_points(data: Any, cols: List[str], wkt_column: str, intensity_col: Optional[str]) -> Tuple:
+    """Extracts POINT/MULTIPOINT geometries from a WKT column, ignoring other kinds."""
+    lats, lons, props_list = [], [], []
+    other_cols = [c for c in cols if c != wkt_column]
+
+    for row in iter_row_dicts(data):
+        row_props = {c: row[c] for c in other_cols}
+        # MULTIPOINT contributes several points, all sharing the row's properties.
+        for lat, lon in _parse_point_wkt_string(row[wkt_column]):
+            lats.append(lat)
+            lons.append(lon)
+            props_list.append(row_props)
+
+    lats_arr = np.array(lats, dtype=np.float64)
+    lons_arr = np.array(lons, dtype=np.float64)
+    props = {k: [p.get(k) for p in props_list] for k in other_cols} if props_list else {}
+
+    if intensity_col and intensity_col in props:
+        intensities = np.array(props[intensity_col], dtype=np.float64)
+    else:
+        intensities = np.ones(len(lats_arr), dtype=np.float64)
+
+    return lats_arr, lons_arr, props, intensities
 
 
 def parse_tabular_lines_by_coord_column(data: Any, cols: List[str], lat_col: Optional[str], lon_col: Optional[str], coord_order: str) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:
