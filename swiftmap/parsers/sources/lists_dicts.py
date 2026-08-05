@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
-from ._utils import find_column_or_key, _ensure_closed_ring
+from ._utils import (find_column_or_key, _ensure_closed_ring,
+                     detect_coord_order, apply_coord_order)
 from ._tabular import (
     LAT_CANDIDATES,
     LON_CANDIDATES,
@@ -93,39 +94,23 @@ def parse_coordinate_list_lines(data: Any, coord_order: str = "auto", **kwargs) 
 
     # Check if single line: [[lat1, lon1], [lat2, lon2], ...]
     if isinstance(data[0], (list, tuple, np.ndarray)) and len(data[0]) >= 2 and isinstance(data[0][0], (int, float, np.number)):
-        line = []
-        for pt in data:
-            n1, n2 = float(pt[0]), float(pt[1])
-            if coord_order == "lon_lat":
-                line.append([n2, n1])
-            elif coord_order == "lat_lon":
-                line.append([n1, n2])
-            else:
-                if abs(n1) > 90 and abs(n2) <= 90:
-                    line.append([n2, n1])
-                else:
-                    line.append([n1, n2])
-        return [line], {}
+        pts = [pt for pt in data if len(pt) >= 2]
+        return [apply_coord_order(pts, detect_coord_order(pts, coord_order))], {}
 
     # Check if list of lines: [[[lat1, lon1], ...], [[lat3, lon3], ...]]
+    #
+    # The order is detected across every line at once and then applied to all of them, so a
+    # single line holding the only out-of-range longitude cannot end up transposed while the
+    # rest of the dataset keeps the opposite convention.
+    subs = [[pt for pt in sub if len(pt) >= 2]
+            for sub in data if isinstance(sub, (list, tuple, np.ndarray)) and len(sub) > 0]
+    order = detect_coord_order((pt for sub in subs for pt in sub), coord_order)
+
     lines = []
-    for sub in data:
-        if isinstance(sub, (list, tuple, np.ndarray)) and len(sub) > 0:
-            line = []
-            for pt in sub:
-                if len(pt) >= 2:
-                    n1, n2 = float(pt[0]), float(pt[1])
-                    if coord_order == "lon_lat":
-                        line.append([n2, n1])
-                    elif coord_order == "lat_lon":
-                        line.append([n1, n2])
-                    else:
-                        if abs(n1) > 90 and abs(n2) <= 90:
-                            line.append([n2, n1])
-                        else:
-                            line.append([n1, n2])
-            if len(line) >= 2:
-                lines.append(line)
+    for sub in subs:
+        line = apply_coord_order(sub, order)
+        if len(line) >= 2:
+            lines.append(line)
 
     return lines, {}
 
@@ -136,41 +121,21 @@ def parse_coordinate_list_polygons(data: Any, coord_order: str = "auto", **kwarg
 
     # Check if single polygon ring: [[lat1, lon1], [lat2, lon2], ...]
     if isinstance(data[0], (list, tuple, np.ndarray)) and len(data[0]) >= 2 and isinstance(data[0][0], (int, float, np.number)):
-        ring = []
-        for pt in data:
-            n1, n2 = float(pt[0]), float(pt[1])
-            if coord_order == "lon_lat":
-                ring.append([n2, n1])
-            elif coord_order == "lat_lon":
-                ring.append([n1, n2])
-            else:
-                if abs(n1) > 90 and abs(n2) <= 90:
-                    ring.append([n2, n1])
-                else:
-                    ring.append([n1, n2])
-        ring = _ensure_closed_ring(ring)
-        return [ring], {}
+        pts = [pt for pt in data if len(pt) >= 2]
+        ring = apply_coord_order(pts, detect_coord_order(pts, coord_order))
+        return [_ensure_closed_ring(ring)], {}
 
     # Check if list of polygon rings: [[[lat1, lon1], ...], [[lat3, lon3], ...]]
+    # Detected across every ring at once, for the reason given in the lines parser.
+    subs = [[pt for pt in sub if len(pt) >= 2]
+            for sub in data if isinstance(sub, (list, tuple, np.ndarray)) and len(sub) > 0]
+    order = detect_coord_order((pt for sub in subs for pt in sub), coord_order)
+
     polygons = []
-    for sub in data:
-        if isinstance(sub, (list, tuple, np.ndarray)) and len(sub) > 0:
-            ring = []
-            for pt in sub:
-                if len(pt) >= 2:
-                    n1, n2 = float(pt[0]), float(pt[1])
-                    if coord_order == "lon_lat":
-                        ring.append([n2, n1])
-                    elif coord_order == "lat_lon":
-                        ring.append([n1, n2])
-                    else:
-                        if abs(n1) > 90 and abs(n2) <= 90:
-                            ring.append([n2, n1])
-                        else:
-                            ring.append([n1, n2])
-            if len(ring) >= 3:
-                ring = _ensure_closed_ring(ring)
-                polygons.append(ring)
+    for sub in subs:
+        ring = apply_coord_order(sub, order)
+        if len(ring) >= 3:
+            polygons.append(_ensure_closed_ring(ring))
 
     return polygons, {}
 

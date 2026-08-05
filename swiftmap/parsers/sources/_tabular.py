@@ -9,6 +9,9 @@ from ._utils import (
     _parse_point_wkt_string,
     _ensure_closed_ring,
     wkt_kind,
+    coord_string_parts,
+    detect_coord_order,
+    apply_coord_order,
 )
 
 # Multi-row grouping (tier 3 of lines/polygons parsing) is intentionally NOT
@@ -272,29 +275,29 @@ def parse_tabular_lines_by_coord_column(data: Any, cols: List[str], lat_col: Opt
     if not actual_coord_col or (lat_col or lon_col):
         return None
 
-    lines = []
-    props_list = []
     non_coord_cols = [c for c in cols if c != actual_coord_col]
 
+    # Collected before any ordering happens, so the axis order can be detected across the
+    # whole column at once. Deciding row by row lets a row whose longitudes all sit inside
+    # +/-90 default to lat-first while a neighbouring row with a decisive value flips,
+    # scattering part of the layer. WKT rows come back already resolved -- WKT states its
+    # own axis order -- and are held aside from detection entirely.
+    rows = []  # (resolved | None, pairs | None, props)
     for row in iter_row_dicts(data):
         raw_val = row[actual_coord_col]
-        if isinstance(raw_val, str):
-            coords = _parse_coord_string(raw_val, coord_order=coord_order)
-        elif isinstance(raw_val, (list, tuple, np.ndarray)):
-            coords = []
-            for pt in raw_val:
-                if len(pt) >= 2:
-                    n1, n2 = float(pt[0]), float(pt[1])
-                    if coord_order == "lon_lat":
-                        coords.append([n2, n1])
-                    else:
-                        coords.append([n1, n2])
+        if isinstance(raw_val, (list, tuple, np.ndarray)):
+            resolved, pairs = None, [pt for pt in raw_val if len(pt) >= 2]
         else:
-            coords = []
+            resolved, pairs = coord_string_parts(raw_val, "line", 4)
+        if len(pairs if pairs is not None else resolved) >= 2:
+            rows.append((resolved, pairs, {col: row[col] for col in non_coord_cols}))
 
-        if len(coords) >= 2:
-            lines.append(coords)
-            props_list.append({col: row[col] for col in non_coord_cols})
+    order = detect_coord_order(
+        (pt for _, pairs, _ in rows if pairs is not None for pt in pairs), coord_order)
+
+    lines = [resolved if pairs is None else apply_coord_order(pairs, order)
+             for resolved, pairs, _ in rows]
+    props_list = [p for _, _, p in rows]
 
     props = {}
     if props_list:
@@ -338,30 +341,25 @@ def parse_tabular_polygons_by_coord_column(data: Any, cols: List[str], lat_col: 
     if not actual_coord_col or (lat_col or lon_col):
         return None
 
-    polygons = []
-    props_list = []
     non_coord_cols = [c for c in cols if c != actual_coord_col]
 
+    # Two passes, for the reason given in the lines parser above.
+    rows = []  # (resolved | None, pairs | None, props)
     for row in iter_row_dicts(data):
         raw_val = row[actual_coord_col]
-        if isinstance(raw_val, str):
-            coords = _parse_polygon_wkt_string(raw_val, coord_order=coord_order)
-        elif isinstance(raw_val, (list, tuple, np.ndarray)):
-            coords = []
-            for pt in raw_val:
-                if len(pt) >= 2:
-                    n1, n2 = float(pt[0]), float(pt[1])
-                    if coord_order == "lon_lat":
-                        coords.append([n2, n1])
-                    else:
-                        coords.append([n1, n2])
-            coords = _ensure_closed_ring(coords)
+        if isinstance(raw_val, (list, tuple, np.ndarray)):
+            resolved, pairs = None, [pt for pt in raw_val if len(pt) >= 2]
         else:
-            coords = []
+            resolved, pairs = coord_string_parts(raw_val, "polygon", 6)
+        if len(pairs if pairs is not None else resolved) >= 3:
+            rows.append((resolved, pairs, {col: row[col] for col in non_coord_cols}))
 
-        if len(coords) >= 3:
-            polygons.append(coords)
-            props_list.append({col: row[col] for col in non_coord_cols})
+    order = detect_coord_order(
+        (pt for _, pairs, _ in rows if pairs is not None for pt in pairs), coord_order)
+
+    polygons = [_ensure_closed_ring(resolved if pairs is None else apply_coord_order(pairs, order))
+                for resolved, pairs, _ in rows]
+    props_list = [p for _, _, p in rows]
 
     props = {}
     if props_list:

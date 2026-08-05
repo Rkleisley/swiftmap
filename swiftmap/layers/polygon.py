@@ -48,9 +48,14 @@ def add_polygon(
         Column name used to sequence boundary vertices along each polygon ring.
     coord_order : {'auto', 'lat_lon', 'lon_lat'}, default 'auto'
         Coordinate pairing convention for raw arrays and delimited strings:
-        - 'auto': Range-based heuristic (values > 90° are automatically identified as longitude).
+        - 'auto': Range-based heuristic. A first value beyond ±90° can only be a longitude,
+          so the whole dataset is read lon-first; absent that evidence anywhere in the
+          data, it is read lat-first. The decision is made once and applied to every
+          coordinate, so no part of a layer can be transposed away from the rest.
         - 'lon_lat': GIS standard (X = Longitude, Y = Latitude).
         - 'lat_lon': Traditional format (Y = Latitude, X = Longitude).
+
+        WKT values declare their own axis order and are never subject to the heuristic.
     name : str, optional
         Layer name displayed in sidebar controls. If it matches a property key in the data,
         each polygon is named from its own value of that property.
