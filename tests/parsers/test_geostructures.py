@@ -203,3 +203,32 @@ def test_multigeopolygon_parses_without_error():
     assert len(polygons) == 2
     for ring in polygons:
         assert_closed(ring)
+
+
+# --- source detection ---------------------------------------------------------------
+@pytest.mark.parametrize("factory", [
+    pytest.param(lambda: GeoPoint(coord(A)), id="GeoPoint"),
+    pytest.param(lambda: GeoLineString([coord(A), coord(B)]), id="GeoLineString"),
+    pytest.param(lambda: GeoPolygon([coord(A), coord(C), coord(B), coord(A)]), id="GeoPolygon"),
+    pytest.param(lambda: GeoBox(coord(A), coord(B)), id="GeoBox"),
+    pytest.param(lambda: GeoCircle(coord(A), radius=500), id="GeoCircle"),
+    pytest.param(lambda: GeoRing(coord(A), inner_radius=1, outer_radius=2), id="GeoRing"),
+    pytest.param(lambda: MultiGeoPoint([GeoPoint(coord(A))]), id="MultiGeoPoint"),
+    pytest.param(lambda: FeatureCollection([GeoPoint(coord(A))]), id="FeatureCollection"),
+    pytest.param(lambda: Track([]), id="Track"),
+])
+def test_every_geostructures_type_is_recognised(factory):
+    from swiftmap.parsers.sources.geostructures import is_geostructures
+    shape = factory()
+    assert is_geostructures(shape), "bare shape"
+    assert is_geostructures([shape]), "inside a list"
+
+
+def test_non_geostructures_input_is_not_claimed():
+    from swiftmap.parsers.sources.geostructures import is_geostructures
+    # A Coordinate is part of geostructures but is not a shape, so it must not be claimed.
+    assert not is_geostructures(Coordinate(-5.3, 36.0))
+    assert not is_geostructures({"type": "FeatureCollection", "features": []})
+    assert not is_geostructures([[36.0, -5.3]])
+    assert not is_geostructures([])
+    assert not is_geostructures(object())

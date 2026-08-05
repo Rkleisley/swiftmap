@@ -4,11 +4,24 @@ from ._utils import _ensure_closed_ring
 
 
 def is_geostructures(data: Any) -> bool:
-    if hasattr(data, "to_geojson") and type(data).__module__.startswith("geostructures"):
+    """
+    True for a geostructures shape or collection, or a list of them.
+
+    Tested against the library's own base classes rather than by probing for a `to_geojson`
+    method and a module name. Duck-typing here would match anything that happened to expose
+    that method, and a module-name prefix is not a type check at all -- the same reasoning
+    that moved the parsers onto the geometry mixins.
+    """
+    try:
+        from geostructures.collections import BaseShape, CollectionBase
+    except ImportError:
+        return False
+
+    known = (BaseShape, CollectionBase)
+    if isinstance(data, known):
         return True
     if isinstance(data, (list, tuple)) and len(data) > 0:
-        if hasattr(data[0], "to_geojson") and type(data[0]).__module__.startswith("geostructures"):
-            return True
+        return isinstance(data[0], known)
     return False
 
 
