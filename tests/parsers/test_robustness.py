@@ -187,3 +187,47 @@ def test_supports_mixed_geometry_accepts_typed_sources():
     assert supports_mixed_geometry(gj)
     assert not supports_mixed_geometry([[36.0, -5.3]])
     assert not supports_mixed_geometry(object())
+
+
+# --- an unreadable source must not kill the chain ----------------------------------
+@pytest.mark.parametrize("method,payload", [
+    ("add_markers", None), ("add_circle_markers", None),
+    ("add_line", None), ("add_polygon", None),
+])
+def test_an_unparseable_source_warns_instead_of_raising(method, payload):
+    """
+    A raise here would escape the add_* chain and discard every layer already added. The
+    registry still raises for direct parse_* callers, where there is no map to protect.
+    """
+    from ipywidgets.widgets.widget import Widget
+    Widget.on_widget_constructed(None)
+    from swiftmap import Map
+    from swiftmap._warnings import SwiftMapWarning
+
+    class Unreadable:
+        pass
+
+    m = Map()
+    before = len(m.layers)
+    with pytest.warns(SwiftMapWarning, match="could not read the supplied data"):
+        getattr(m, method)(Unreadable(), name="bad")
+    assert len(m.layers) == before, "nothing is added, but the map survives"
+
+
+def test_layers_around_a_failed_call_survive():
+    from ipywidgets.widgets.widget import Widget
+    Widget.on_widget_constructed(None)
+    from swiftmap import Map
+
+    class Unreadable:
+        pass
+
+    df = pd.DataFrame({"lat": [A[0]], "lon": [A[1]]})
+    m = Map()
+    start = len(m.layers)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m.add_markers(df, name="first")
+        m.add_markers(Unreadable(), name="second")
+        m.add_markers(df, name="third")
+    assert [l.get("name") for l in m.layers[start:]] == ["first", "third"]

@@ -104,15 +104,22 @@ def add_polygon(
 
     # Parse polygon coordinates
     explicit_style, static_style = pop_style_options(kwargs, "add_polygon")
-    polygons_coords, props = parse_polygons(
-        data,
-        lat_col=lat_col,
-        lon_col=lon_col,
-        shape_id_col=shape_id_col,
-        order_col=order_col,
-        coord_order=coord_order,
-        **kwargs
-    )
+    try:
+        polygons_coords, props = parse_polygons(
+            data,
+            lat_col=lat_col,
+            lon_col=lon_col,
+            shape_id_col=shape_id_col,
+            order_col=order_col,
+            coord_order=coord_order,
+            **kwargs
+        )
+    except TypeError as exc:
+        # The registry raises for a source it cannot dispatch. Direct parse_* callers should
+        # see that, but here it would escape the add_* chain and discard every layer already
+        # on the map -- the same reason nothing else in this path raises.
+        warn(f"add_polygon could not read the supplied data. {exc} No layer was added.")
+        return self
     if not polygons_coords:
         warn(
             f"add_polygon found no polygon geometry in the supplied {type(data).__name__}. "

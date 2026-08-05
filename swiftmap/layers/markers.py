@@ -71,7 +71,14 @@ def add_markers(
 
     # 1. Parse all coordinates and properties first
     explicit_style, static_style = pop_style_options(kwargs, "add_markers")
-    lats, lons, props = parse_points(data, lat_col, lon_col)
+    try:
+        lats, lons, props = parse_points(data, lat_col, lon_col)
+    except TypeError as exc:
+        # The registry raises for a source it cannot dispatch. Direct parse_* callers should
+        # see that, but here it would escape the add_* chain and discard every layer already
+        # on the map -- the same reason nothing else in this path raises.
+        warn(f"add_markers could not read the supplied data. {exc} No layer was added.")
+        return self
     num_points = len(lats)
     if num_points == 0:
         warn(

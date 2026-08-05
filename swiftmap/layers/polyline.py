@@ -114,15 +114,22 @@ def add_line(
 
 
     explicit_style, static_style = pop_style_options(kwargs, "add_line")
-    lines_coords, props = parse_lines(
-        data,
-        lat_col=lat_col,
-        lon_col=lon_col,
-        line_id_col=line_id_col,
-        order_col=order_col,
-        coord_order=coord_order,
-        **kwargs
-    )
+    try:
+        lines_coords, props = parse_lines(
+            data,
+            lat_col=lat_col,
+            lon_col=lon_col,
+            line_id_col=line_id_col,
+            order_col=order_col,
+            coord_order=coord_order,
+            **kwargs
+        )
+    except TypeError as exc:
+        # The registry raises for a source it cannot dispatch. Direct parse_* callers should
+        # see that, but here it would escape the add_* chain and discard every layer already
+        # on the map -- the same reason nothing else in this path raises.
+        warn(f"add_line could not read the supplied data. {exc} No layer was added.")
+        return self
     if not lines_coords:
         warn(
             f"add_line found no line geometry in the supplied {type(data).__name__}. "
