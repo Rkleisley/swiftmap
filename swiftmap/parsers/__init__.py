@@ -9,8 +9,6 @@ from .registry import (
     polygons_registry,
 )
 
-from .sources.geostructures import is_geostructures
-
 __all__ = [
     "GeometryParserRegistry",
     "supports_mixed_geometry",
@@ -20,5 +18,4 @@ __all__ = [
     "points_registry",
     "lines_registry",
     "polygons_registry",
-    "is_geostructures",
 ]
