@@ -58,6 +58,11 @@ points_registry = GeometryParserRegistry("points")
 lines_registry = GeometryParserRegistry("lines")
 polygons_registry = GeometryParserRegistry("polygons")
 
+# Checks for sources whose parsers filter by geometry type: each returns only its own kind
+# from a mixed input, so the same object can safely go to all three. Sources opt in from
+# their own block below, so everything about a source stays in one place.
+mixed_geometry_checks = []
+
 
 # =============================================================================
 # 2. PUBLIC DISPATCH API
@@ -78,6 +83,11 @@ def parse_polygons(data: Any, *args, **kwargs) -> Tuple[List[List[List[float]]],
     return polygons_registry.parse(data, *args, **kwargs)
 
 
+def supports_mixed_geometry(data: Any) -> bool:
+    """True if `data` comes from a source that distinguishes geometry types when parsing."""
+    return any(check(data) for check in mixed_geometry_checks)
+
+
 # =============================================================================
 # 3. SOURCE STRATEGY REGISTRATIONS (Add new data sources at the bottom)
 # =============================================================================
@@ -92,6 +102,7 @@ from .sources.geopandas import (
 points_registry.register(is_geopandas_dataframe, parse_geopandas_points)
 lines_registry.register(is_geopandas_dataframe, parse_geopandas_lines)
 polygons_registry.register(is_geopandas_dataframe, parse_geopandas_polygons)
+mixed_geometry_checks.append(is_geopandas_dataframe)
 
 # --- GeoStructures ---
 from .sources.geostructures import (
@@ -103,6 +114,7 @@ from .sources.geostructures import (
 points_registry.register(is_geostructures, parse_geostructures_points)
 lines_registry.register(is_geostructures, parse_geostructures_lines)
 polygons_registry.register(is_geostructures, parse_geostructures_polygons)
+mixed_geometry_checks.append(is_geostructures)
 
 # --- GeoJSON ---
 from .sources.geojson import (
@@ -114,10 +126,12 @@ from .sources.geojson import (
 points_registry.register(is_geojson, parse_geojson_points)
 lines_registry.register(is_geojson, parse_geojson_lines)
 polygons_registry.register(is_geojson, parse_geojson_polygons)
+mixed_geometry_checks.append(is_geojson)
 
 # --- Pandas DataFrames ---
 from .sources.pandas import (
     is_pandas_dataframe,
+    pandas_has_mixed_geometry,
     parse_pandas_points,
     parse_pandas_lines,
     parse_pandas_polygons,
@@ -125,10 +139,12 @@ from .sources.pandas import (
 points_registry.register(is_pandas_dataframe, parse_pandas_points)
 lines_registry.register(is_pandas_dataframe, parse_pandas_lines)
 polygons_registry.register(is_pandas_dataframe, parse_pandas_polygons)
+mixed_geometry_checks.append(pandas_has_mixed_geometry)
 
 # --- Polars DataFrames ---
 from .sources.polars import (
     is_polars_dataframe,
+    polars_has_mixed_geometry,
     parse_polars_points,
     parse_polars_lines,
     parse_polars_polygons,
@@ -136,6 +152,7 @@ from .sources.polars import (
 points_registry.register(is_polars_dataframe, parse_polars_points)
 lines_registry.register(is_polars_dataframe, parse_polars_lines)
 polygons_registry.register(is_polars_dataframe, parse_polars_polygons)
+mixed_geometry_checks.append(polars_has_mixed_geometry)
 
 # --- Raw Lists, Dicts, and Coordinates ---
 from .sources.lists_dicts import (
@@ -163,34 +180,3 @@ lines_registry.register(is_coordinate_list, parse_coordinate_list_lines)
 polygons_registry.register(is_dict, parse_dict_polygons)
 polygons_registry.register(is_list_of_dicts, parse_list_of_dicts_polygons)
 polygons_registry.register(is_coordinate_list, parse_coordinate_list_polygons)
-
-
-# =============================================================================
-# 4. SOURCE CAPABILITIES
-# =============================================================================
-
-# Sources whose parsers filter by geometry type: each returns only its own kind from a
-# mixed input, so the same object can safely be handed to all three.
-_MIXED_GEOMETRY_CHECKS = (
-    is_geojson,
-    is_geostructures,
-    is_geopandas_dataframe,
-)
-
-from .sources._tabular import find_wkt_column
-
-
-def supports_mixed_geometry(data: Any) -> bool:
-    """
-    True if `data` comes from a source that distinguishes geometry types when parsing.
-
-    A DataFrame qualifies only when it carries a WKT geometry column, since WKT states its
-    own kind per value and a single column may mix them. Without one, a table is a single
-    geometry kind by construction: lat/lon columns fed to all three parsers would yield the
-    points plus a line threaded through them and a polygon around them.
-    """
-    if any(check(data) for check in _MIXED_GEOMETRY_CHECKS):
-        return True
-    if is_pandas_dataframe(data) or is_polars_dataframe(data):
-        return find_wkt_column(data) is not None
-    return False

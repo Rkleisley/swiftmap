@@ -196,10 +196,16 @@ Parsing is dispatched dynamically using `GeometryParserRegistry` strategy broker
    messages for a reader to act on. Miss it, and someone whose install of your library is
    broken gets told their own type is unsupported, which sends them looking in the wrong place.
 
-   **If your parsers filter by geometry type**, add your `is_x` check to
-   `_MIXED_GEOMETRY_CHECKS` too. That is what lets `add_collection` hand the same object to
-   all three parsers. Only add it if each parser genuinely returns *only* its own kind from a
-   mixed input — GeoJSON, geostructures and GeoPandas do; the tabular parsers coerce whatever
-   they are given, which is why a plain lat/lon table is rejected there.
+   **If your parsers filter by geometry type**, add one more line to the same block:
+
+   ```python
+   mixed_geometry_checks.append(is_my_format)
+   ```
+
+   That is what lets `add_collection` hand the same object to all three parsers. Only opt in
+   if each parser genuinely returns *only* its own kind from a mixed input — GeoJSON,
+   geostructures and GeoPandas do. The tabular sources coerce whatever they are given, so
+   they register a narrower check (`pandas_has_mixed_geometry`) that requires a WKT column;
+   a plain lat/lon table stays out.
 
 5. **Add test cases** to `tests/test_basic.py` verifying that `add_markers()`, `add_line()`, and `add_polygon()` work end-to-end with your new data source. Follow the shape of an existing test like `test_geopandas_points_and_lines` or `test_polars_and_dict_lines_polygons` — build a small sample of your format, call the public `Map` method, and assert on the resulting layer rather than calling your parser functions directly.

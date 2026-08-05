@@ -2,6 +2,7 @@ import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
 from ._utils import find_column_or_key, _ensure_closed_ring
 from ._tabular import (
+    find_wkt_column,
     LAT_CANDIDATES,
     LON_CANDIDATES,
     LINE_ID_CANDIDATES,
@@ -21,6 +22,18 @@ def is_pandas_dataframe(data: Any) -> bool:
         return isinstance(data, pd.DataFrame)
     except ImportError:
         return False
+
+
+def pandas_has_mixed_geometry(data: Any) -> bool:
+    """
+    True only when a WKT column is present.
+
+    WKT states its own kind per value, so one column may hold points, lines and polygons.
+    A table of plain lat/lon columns is a single kind by construction, and handing it to
+    all three parsers would yield the points plus a line threaded through them and a
+    polygon around them.
+    """
+    return is_pandas_dataframe(data) and find_wkt_column(data) is not None
 
 
 def parse_pandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
