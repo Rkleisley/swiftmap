@@ -13,7 +13,7 @@ def is_geostructures(data: Any) -> bool:
     that moved the parsers onto the geometry mixins.
     """
     try:
-        from geostructures.collections import BaseShape, CollectionBase
+        from geostructures.typing import BaseShape, CollectionBase
     except ImportError:
         return False
 
@@ -26,8 +26,14 @@ def is_geostructures(data: Any) -> bool:
 
 
 def _mixins():
-    """Imported lazily: geostructures is an optional dependency."""
-    from geostructures.structures import PointLikeMixin, LineLikeMixin, PolygonLikeMixin
+    """
+    Imported lazily, since geostructures is an optional dependency.
+
+    `geostructures.typing` is the library's canonical home for these -- it re-exports the
+    mixins and base classes together, so importing from the implementation modules would
+    be reaching past the interface the library offers.
+    """
+    from geostructures.typing import PointLikeMixin, LineLikeMixin, PolygonLikeMixin
     return PointLikeMixin, LineLikeMixin, PolygonLikeMixin
 
 
