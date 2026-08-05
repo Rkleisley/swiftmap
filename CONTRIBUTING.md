@@ -190,4 +190,16 @@ Parsing is dispatched dynamically using `GeometryParserRegistry` strategy broker
 
    Every registration in the file follows this same plain two-argument form — if you find yourself reaching for a `lambda` here, it usually means step 3 was skipped.
 
+   **Also add your library's top-level import name to `_SOURCE_PACKAGES`** in the same file.
+   That set is how the registry tells "you passed something from a library we support, so its
+   import probably failed" apart from "we do not support this at all" — two very different
+   messages for a reader to act on. Miss it, and someone whose install of your library is
+   broken gets told their own type is unsupported, which sends them looking in the wrong place.
+
+   **If your parsers filter by geometry type**, add your `is_x` check to
+   `_MIXED_GEOMETRY_CHECKS` too. That is what lets `add_collection` hand the same object to
+   all three parsers. Only add it if each parser genuinely returns *only* its own kind from a
+   mixed input — GeoJSON, geostructures and GeoPandas do; the tabular parsers coerce whatever
+   they are given, which is why a plain lat/lon table is rejected there.
+
 5. **Add test cases** to `tests/test_basic.py` verifying that `add_markers()`, `add_line()`, and `add_polygon()` work end-to-end with your new data source. Follow the shape of an existing test like `test_geopandas_points_and_lines` or `test_polars_and_dict_lines_polygons` — build a small sample of your format, call the public `Map` method, and assert on the resulting layer rather than calling your parser functions directly.
