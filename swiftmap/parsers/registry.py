@@ -4,6 +4,14 @@ from typing import Any, Tuple, List, Dict
 # 1. REGISTRY BROKER CLASS & GLOBAL INSTANCES
 # =============================================================================
 
+# Top-level packages swiftmap knows how to parse. Used only to tell "you passed something
+# from a library we support, so its import probably failed" apart from "we do not support
+# this at all" -- two very different things for the reader to act on.
+_SOURCE_PACKAGES = frozenset({
+    "pandas", "polars", "geopandas", "shapely", "geostructures",
+})
+
+
 class GeometryParserRegistry:
     """Registry broker managing coordinate data parsing strategies for a geometry type."""
     def __init__(self, geometry_name: str = "geometry"):
@@ -17,7 +25,33 @@ class GeometryParserRegistry:
         for check, parse_fn in self._parsers:
             if check(data):
                 return parse_fn(data, *args, **kwargs)
-        raise TypeError(f"Unsupported data source type for {self.geometry_name}: {type(data)}")
+        raise TypeError(self._unsupported_message(data))
+
+    def _unsupported_message(self, data: Any) -> str:
+        """
+        Explains why nothing matched, and what to do about it.
+
+        Every `is_x` check swallows ImportError and returns False, so a library that is
+        installed but fails to import for some other reason -- a broken build, a missing
+        dependency of its own -- makes its own types report as unsupported. Saying
+        "unsupported: <class 'pandas.DataFrame'>" to someone who plainly has pandas is
+        baffling, so that case is named separately.
+        """
+        origin = type(data).__module__.split(".")[0]
+        supported = ("GeoJSON, geostructures, GeoPandas, Pandas, Polars, or plain "
+                     "coordinate lists and dicts")
+
+        if origin in _SOURCE_PACKAGES:
+            return (
+                f"Cannot parse {self.geometry_name} from {type(data).__name__}. swiftmap "
+                f"supports {origin}, so this is most likely {origin} failing to import -- "
+                f"try `import {origin}` directly to see the underlying error."
+            )
+        return (
+            f"Cannot parse {self.geometry_name} from {type(data).__name__}: no registered "
+            f"parser handles it. Supported sources are {supported}. To add one, see the "
+            f"\"Adding Support for a New Data Source\" section of CONTRIBUTING.md."
+        )
 
 
 points_registry = GeometryParserRegistry("points")

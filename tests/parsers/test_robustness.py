@@ -46,9 +46,22 @@ def test_geojson_dict_outranks_the_plain_dict_parser():
 
 
 @pytest.mark.parametrize("parse", [parse_points, parse_lines, parse_polygons])
-def test_unsupported_type_raises_a_named_error(parse):
-    with pytest.raises(TypeError, match="Unsupported data source type"):
+def test_unsupported_type_names_the_type_and_points_at_contributing(parse):
+    with pytest.raises(TypeError, match="no registered parser handles it") as exc:
         parse(object())
+    assert "CONTRIBUTING.md" in str(exc.value), "the error should say how to add a source"
+
+
+@pytest.mark.parametrize("parse", [parse_points, parse_lines, parse_polygons])
+def test_a_type_from_a_supported_library_blames_the_import(parse):
+    """
+    Every is_x check swallows ImportError and returns False, so a library that is installed
+    but fails to import makes its own types look unsupported. That reads as nonsense to
+    someone who plainly has pandas, so it is reported as an import problem instead.
+    """
+    with pytest.raises(TypeError, match="failing to import") as exc:
+        parse(pd.Series([1, 2]))
+    assert "import pandas" in str(exc.value)
 
 
 # --- column detection -------------------------------------------------------------
