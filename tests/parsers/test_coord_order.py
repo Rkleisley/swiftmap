@@ -15,7 +15,7 @@ import pytest
 
 import numpy as np
 
-from swiftmap.parsers import parse_lines, parse_polygons
+from swiftmap.parsers import parse_lines, parse_points, parse_polygons
 from swiftmap.parsers.sources._utils import detect_coord_order, apply_coord_order
 
 LA, SF = [-118.24, 34.05], [-122.41, 37.77]      # |lon| > 90 -- proves lon-first
@@ -144,3 +144,87 @@ def test_wkt_polygon_rows_are_exempt_from_detection():
         "POLYGON ((-80.19 25.76, -74.00 40.71, -71.06 42.36, -80.19 25.76))"]})
     polygons, _ = parse_polygons(df)
     assert polygons[0][:3] == [MIA_LATLON, NYC_LATLON, [42.36, -71.06]]
+
+
+# --- points -------------------------------------------------------------------------
+def as_pairs(result):
+    lats, lons, _ = result
+    return [[lat, lon] for lat, lon in zip(lats, lons)]
+
+
+def test_points_detect_order_like_every_other_geometry():
+    """Points had no detection at all, so lon-first input yielded latitudes past ±90."""
+    assert as_pairs(parse_points([LA, MIA])) == [LA_LATLON, MIA_LATLON]
+
+
+def test_points_and_lines_agree_on_identical_input():
+    """
+    The same coordinates through two entrypoints must land in the same place. They did
+    not: add_line put this route in California while add_markers put it off the globe.
+    """
+    assert as_pairs(parse_points([LA, SF, MIA])) == parse_lines([LA, SF, MIA])[0][0]
+
+
+def test_points_never_flip_partway_through():
+    """MIA carries no evidence of its own and must follow the decision LA forces."""
+    pairs = as_pairs(parse_points([LA, MIA, NYC]))
+    assert pairs == [LA_LATLON, MIA_LATLON, NYC_LATLON]
+
+
+def test_genuine_lat_lon_points_are_left_alone():
+    assert as_pairs(parse_points([LA_LATLON, MIA_LATLON])) == [LA_LATLON, MIA_LATLON]
+
+
+def test_every_parsed_latitude_stays_on_the_globe():
+    """The symptom that makes this a bug and not a preference."""
+    lats, _, _ = parse_points([LA, SF, MIA, NYC])
+    assert all(abs(lat) <= 90 for lat in lats)
+
+
+@pytest.mark.parametrize("explicit,expected", [
+    ("lat_lon", [LA, MIA]),
+    ("lon_lat", [LA_LATLON, MIA_LATLON]),
+])
+def test_explicit_order_survives_the_point_parser(explicit, expected):
+    assert as_pairs(parse_points([LA, MIA], coord_order=explicit)) == expected
+
+
+def test_a_single_bare_pair_still_detects():
+    """One pair is the whole dataset, so its own evidence is all there is to go on."""
+    assert as_pairs(parse_points(LA)) == [LA_LATLON]
+    assert as_pairs(parse_points([LA])) == [LA_LATLON]
+
+
+def test_numpy_point_input_detects_the_same_way():
+    """Arrays take a vectorised scan; it must reach the same verdict as the iterator."""
+    assert as_pairs(parse_points(np.array([LA, MIA]))) == [LA_LATLON, MIA_LATLON]
+    assert as_pairs(parse_points(np.array([LA_LATLON, MIA_LATLON]))) == [LA_LATLON, MIA_LATLON]
+
+
+@pytest.mark.parametrize("pairs,expected", [
+    pytest.param([LA, MIA], "lon_lat", id="decisive"),
+    pytest.param([MIA, NYC], "lat_lon", id="ambiguous"),
+    pytest.param([], "lat_lon", id="empty"),
+])
+def test_array_and_iterator_detection_agree(pairs, expected):
+    arr = np.array(pairs, dtype=np.float64).reshape(-1, 2)
+    assert detect_coord_order(arr) == detect_coord_order(pairs) == expected
+
+
+def test_sources_that_state_their_own_order_ignore_the_parameter():
+    """
+    Named lat/lon columns mean what they say. coord_order exists for raw coordinate
+    lists, the one point source that states nothing, and must not override a column name.
+    """
+    pd = pytest.importorskip("pandas")
+    df = pd.DataFrame({"lat": [34.05], "lon": [-118.24]})
+    assert as_pairs(parse_points(df, coord_order="lon_lat")) == [LA_LATLON]
+
+
+def test_point_layer_methods_accept_coord_order():
+    """Without a real parameter this would fall into **kwargs and ship to JS as metadata."""
+    import swiftmap
+    m = swiftmap.Map().add_circle_markers([LA, MIA], coord_order="lon_lat")
+    assert m.layers[-1]["bounds"] == [[MIA_LATLON[0], LA_LATLON[1]],
+                                      [LA_LATLON[0], MIA_LATLON[1]]]
+    assert "coord_order" not in m.layers[-1], "consumed by the parser, not sent to the client"

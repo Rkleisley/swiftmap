@@ -13,6 +13,7 @@ def add_circle_markers(
     data: Any,
     lat_col: Optional[str] = None,
     lon_col: Optional[str] = None,
+    coord_order: str = "auto",
     radius: int = 10,
     name: Optional[str] = None,
     layer_group: Optional[str] = None,
@@ -30,6 +31,15 @@ def add_circle_markers(
         Column name for latitude coordinates. Auto-detected if omitted.
     lon_col : str, optional
         Column name for longitude coordinates. Auto-detected if omitted.
+    coord_order : {'auto', 'lat_lon', 'lon_lat'}, default 'auto'
+        Coordinate pairing convention, used only for raw coordinate lists. Every other
+        source states its own axis order -- named lat/lon columns, WKT, the GeoJSON spec,
+        a typed geometry -- and ignores this.
+        - 'auto': Range-based heuristic. A first value beyond +/-90 can only be a longitude,
+          so the whole dataset is read lon-first; absent that evidence anywhere in the data,
+          it is read lat-first. The decision is made once and applied to every coordinate.
+        - 'lon_lat': GIS standard (X = Longitude, Y = Latitude).
+        - 'lat_lon': Traditional format (Y = Latitude, X = Longitude).
     radius : int, default 10
         Circle marker radius in screen pixels.
     name : str, optional
@@ -76,7 +86,7 @@ def add_circle_markers(
     # 1. Parse all coordinates and properties first
     explicit_style, static_style = pop_style_options(kwargs, "add_circle_markers")
     try:
-        lats, lons, props = parse_points(data, lat_col, lon_col)
+        lats, lons, props = parse_points(data, lat_col, lon_col, coord_order=coord_order)
     except TypeError as exc:
         # The registry raises for a source it cannot dispatch. Direct parse_* callers should
         # see that, but here it would escape the add_* chain and discard every layer already

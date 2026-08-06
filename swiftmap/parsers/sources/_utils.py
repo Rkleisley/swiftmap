@@ -1,4 +1,5 @@
 import re
+import numpy as np
 from typing import Optional, List, Any, Iterable, Sequence, Tuple
 
 FLOAT_REGEX = re.compile(r'[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?')
@@ -65,6 +66,17 @@ def detect_coord_order(pairs: Iterable[Sequence[float]], coord_order: str = "aut
     """
     if coord_order in ("lat_lon", "lon_lat"):
         return coord_order
+
+    # Point layers reach this with the whole dataset as one (n, 2) array, and may hold
+    # millions of rows. The early exit below is O(1) on decisive data but walks every row
+    # when there is no evidence to find, which is the common case for data that really is
+    # lat-first -- so arrays take a vectorised scan instead.
+    if isinstance(pairs, np.ndarray):
+        if pairs.ndim != 2 or pairs.shape[0] == 0:
+            return "lat_lon"
+        decisive = (np.abs(pairs[:, 0]) > 90) & (np.abs(pairs[:, 1]) <= 90)
+        return "lon_lat" if decisive.any() else "lat_lon"
+
     for pair in pairs:
         if abs(pair[0]) > 90 and abs(pair[1]) <= 90:
             return "lon_lat"

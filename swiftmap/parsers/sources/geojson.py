@@ -8,7 +8,7 @@ def is_geojson(data: Any) -> bool:
     return False
 
 
-def parse_geojson_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
+def parse_geojson_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
     features = []
     if data.get('type') == 'FeatureCollection':
         features = data.get('features', [])

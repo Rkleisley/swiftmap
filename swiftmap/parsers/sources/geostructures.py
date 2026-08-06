@@ -75,7 +75,7 @@ def _collect_props(props_list: List[Dict[str, Any]]) -> Dict[str, List[Any]]:
     return {k: [p.get(k) for p in props_list] for k in keys}
 
 
-def parse_geostructures_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
+def parse_geostructures_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
     PointLikeMixin, _, _ = _mixins()
 
     lats, lons, props_list = [], [], []

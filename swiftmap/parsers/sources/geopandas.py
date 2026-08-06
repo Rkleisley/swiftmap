@@ -10,7 +10,7 @@ def is_geopandas_dataframe(data: Any) -> bool:
         return False
 
 
-def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
+def parse_geopandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
     import geopandas as gpd
     from shapely.geometry import Point, MultiPoint
     from shapely.geometry.base import BaseGeometry

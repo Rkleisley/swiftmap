@@ -36,7 +36,7 @@ def polars_has_mixed_geometry(data: Any) -> bool:
     return is_polars_dataframe(data) and find_wkt_column(data) is not None
 
 
-def parse_polars_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
+def parse_polars_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
     return parse_tabular_points(data, lat_col, lon_col, label="Polars DataFrame")
 
 

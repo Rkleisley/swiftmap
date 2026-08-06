@@ -31,7 +31,7 @@ def is_coordinate_list(data: Any) -> bool:
     return False
 
 
-def parse_list_of_dicts_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
+def parse_list_of_dicts_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
     actual_lat = lat_col or find_column_or_key(list(data[0].keys()), LAT_CANDIDATES)
     actual_lon = lon_col or find_column_or_key(list(data[0].keys()), LON_CANDIDATES)
 
@@ -54,7 +54,7 @@ def parse_list_of_dicts_points(data: Any, lat_col: Optional[str] = None, lon_col
     return lats, lons, props
 
 
-def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
+def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
     actual_lat = lat_col or find_column_or_key(list(data.keys()), LAT_CANDIDATES)
     actual_lon = lon_col or find_column_or_key(list(data.keys()), LON_CANDIDATES)
 
@@ -72,20 +72,33 @@ def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optiona
     return lats, lons, props
 
 
-def parse_coordinate_list_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None) -> Tuple:
+def parse_coordinate_list_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None,
+                                 coord_order: str = "auto", **kwargs) -> Tuple:
+    """
+    Raw coordinate lists, the one point source whose axis order nothing states.
+
+    Every other point source declares it -- named lat/lon columns, WKT, the GeoJSON spec,
+    a typed geometry -- so this is the only place detection has anything to decide.
+    """
     if data is None or len(data) == 0:
         return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}
 
     if len(data) == 2 and isinstance(data[0], (int, float)) and isinstance(data[1], (int, float)):
-        return np.array([float(data[0])]), np.array([float(data[1])]), {}
-        
-    arr = np.asarray(data, dtype=np.float64)
-    if arr.ndim == 1:
-        return np.array([arr[0]]), np.array([arr[1]]), {}
-        
-    lats = arr[:, 0]
-    lons = arr[:, 1]
-    return lats, lons, {}
+        arr = np.asarray([data], dtype=np.float64)
+    else:
+        arr = np.asarray(data, dtype=np.float64)
+        if arr.ndim == 1:
+            arr = arr.reshape(1, -1)
+
+    if arr.shape[0] == 0 or arr.shape[1] < 2:
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}
+
+    # Detected across the whole array and applied to all of it, never per point: see
+    # detect_coord_order. A single bare pair carries only its own evidence, which is all
+    # there is to go on, so [-118.24, 34.05] is still correctly read as lon-first.
+    if detect_coord_order(arr, coord_order) == "lon_lat":
+        return arr[:, 1], arr[:, 0], {}
+    return arr[:, 0], arr[:, 1], {}
 
 
 def parse_coordinate_list_lines(data: Any, coord_order: str = "auto", **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
