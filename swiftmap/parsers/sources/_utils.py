@@ -83,11 +83,53 @@ def detect_coord_order(pairs: Iterable[Sequence[float]], coord_order: str = "aut
     return "lat_lon"
 
 
+def detect_coord_order_multi(chunks: Iterable[Any], coord_order: str = "auto") -> str:
+    """
+    Resolves the order across several coordinate sequences as though they were one.
+
+    Equivalent to concatenating them first: a single decisive pair anywhere settles the
+    whole dataset, so the first chunk answering 'lon_lat' ends the scan. Keeping the chunks
+    apart lets each take whichever scan suits its type -- vectorised for arrays, early-exit
+    for lists -- without building a combined copy just to look at it.
+    """
+    if coord_order in ("lat_lon", "lon_lat"):
+        return coord_order
+    for chunk in chunks:
+        if detect_coord_order(chunk) == "lon_lat":
+            return "lon_lat"
+    return "lat_lon"
+
+
 def apply_coord_order(pairs: Iterable[Sequence[float]], order: str) -> List[List[float]]:
-    """Emits [lat, lon] for every pair, under an order already resolved for the dataset."""
+    """
+    Emits [lat, lon] for every pair, under an order already resolved for the dataset.
+
+    Arrays are reordered as whole columns and converted in one step. Going through the
+    comprehension instead costs roughly 3x as much on a large array, since it pays for a
+    Python-level iteration and two float() calls on numpy scalars per row. The reverse is
+    just as true: converting a genuine Python list to an array to use this path costs more
+    than the comprehension it replaces, so lists stay on the comprehension.
+    """
+    if isinstance(pairs, np.ndarray) and pairs.ndim == 2 and pairs.shape[1] >= 2:
+        cols = [1, 0] if order == "lon_lat" else [0, 1]
+        return pairs[:, cols].tolist()
     if order == "lon_lat":
         return [[float(p[1]), float(p[0])] for p in pairs]
     return [[float(p[0]), float(p[1])] for p in pairs]
+
+
+def as_pair_block(seq: Any) -> Any:
+    """
+    Keeps a coordinate sequence in array form when it already is one.
+
+    Filtering short rows out with a comprehension turns an (n, 2) array into a list of n
+    array scalars, which then forces both the detection scan and the reordering onto their
+    slow paths. A clean 2-D array has no short rows to filter, so it passes straight
+    through; anything else is filtered as before.
+    """
+    if isinstance(seq, np.ndarray) and seq.ndim == 2 and seq.shape[1] >= 2:
+        return seq
+    return [pt for pt in seq if len(pt) >= 2]
 
 
 def coord_string_parts(val: Any, kind_wanted: str, min_nums: int) -> Tuple[Optional[List[List[float]]], Optional[List[Sequence[float]]]]:

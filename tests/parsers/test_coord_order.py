@@ -228,3 +228,58 @@ def test_point_layer_methods_accept_coord_order():
     assert m.layers[-1]["bounds"] == [[MIA_LATLON[0], LA_LATLON[1]],
                                       [LA_LATLON[0], MIA_LATLON[1]]]
     assert "coord_order" not in m.layers[-1], "consumed by the parser, not sent to the client"
+
+
+# --- array fast path ----------------------------------------------------------------
+# Arrays skip the per-row Python scan on both detection and reordering. The results must
+# be indistinguishable from the list path; only the cost differs.
+from swiftmap.parsers.sources._utils import as_pair_block, detect_coord_order_multi  # noqa: E402
+
+
+@pytest.mark.parametrize("pairs", [
+    pytest.param([LA, SF], id="decisive"),
+    pytest.param([MIA, NYC], id="ambiguous"),
+    pytest.param([MIA, NYC, LA], id="evidence-last"),
+])
+@pytest.mark.parametrize("parse,index", [
+    pytest.param(parse_lines, lambda r: r[0][0], id="lines"),
+    pytest.param(parse_polygons, lambda r: r[0][0][:3], id="polygons"),
+])
+def test_array_input_parses_identically_to_list_input(pairs, parse, index):
+    pairs = pairs + [[-95.37, 29.76]]  # third vertex, so polygons have a valid ring
+    assert index(parse(np.array(pairs))) == index(parse(pairs))
+
+
+def test_array_and_list_agree_across_several_geometries():
+    """Chunk-wise detection must reach the same verdict as scanning the concatenation."""
+    subs = [[LA, SF], [MIA, NYC]]
+    assert parse_lines([np.array(s) for s in subs])[0] == parse_lines(subs)[0]
+
+
+@pytest.mark.parametrize("chunks,expected", [
+    pytest.param([[MIA, NYC], [LA, SF]], "lon_lat", id="evidence-in-a-later-chunk"),
+    pytest.param([[MIA, NYC], [NYC, MIA]], "lat_lon", id="no-evidence-anywhere"),
+    pytest.param([], "lat_lon", id="no-chunks"),
+])
+def test_multi_chunk_detection_matches_the_flat_scan(chunks, expected):
+    flat = [pt for chunk in chunks for pt in chunk]
+    assert detect_coord_order_multi(chunks) == detect_coord_order(flat) == expected
+    assert detect_coord_order_multi([np.array(c) for c in chunks]) == expected
+
+
+def test_multi_chunk_detection_honours_an_explicit_order():
+    assert detect_coord_order_multi([[LA, SF]], "lat_lon") == "lat_lon"
+
+
+def test_clean_arrays_pass_through_and_everything_else_is_filtered():
+    arr = np.array([LA, MIA])
+    assert as_pair_block(arr) is arr, "a 2-D array has no short rows to filter"
+    assert as_pair_block([LA, [1.0], MIA]) == [LA, MIA], "short rows are dropped"
+    assert as_pair_block(np.array([[1.0], [2.0]])) == [], "an (n, 1) array holds no pairs"
+
+
+def test_extra_columns_are_ignored_on_both_paths():
+    """A third column (elevation, timestamp) must not shift which values are read."""
+    with_elev = [LA + [120.0], MIA + [3.0]]
+    assert parse_lines(np.array(with_elev))[0][0] == parse_lines(with_elev)[0][0] \
+        == [LA_LATLON, MIA_LATLON]

@@ -10,8 +10,9 @@ from ._utils import (
     _ensure_closed_ring,
     wkt_kind,
     coord_string_parts,
-    detect_coord_order,
+    detect_coord_order_multi,
     apply_coord_order,
+    as_pair_block,
 )
 
 # Multi-row grouping (tier 3 of lines/polygons parsing) is intentionally NOT
@@ -286,14 +287,14 @@ def parse_tabular_lines_by_coord_column(data: Any, cols: List[str], lat_col: Opt
     for row in iter_row_dicts(data):
         raw_val = row[actual_coord_col]
         if isinstance(raw_val, (list, tuple, np.ndarray)):
-            resolved, pairs = None, [pt for pt in raw_val if len(pt) >= 2]
+            resolved, pairs = None, as_pair_block(raw_val)
         else:
             resolved, pairs = coord_string_parts(raw_val, "line", 4)
         if len(pairs if pairs is not None else resolved) >= 2:
             rows.append((resolved, pairs, {col: row[col] for col in non_coord_cols}))
 
-    order = detect_coord_order(
-        (pt for _, pairs, _ in rows if pairs is not None for pt in pairs), coord_order)
+    order = detect_coord_order_multi(
+        (pairs for _, pairs, _ in rows if pairs is not None), coord_order)
 
     lines = [resolved if pairs is None else apply_coord_order(pairs, order)
              for resolved, pairs, _ in rows]
@@ -348,14 +349,14 @@ def parse_tabular_polygons_by_coord_column(data: Any, cols: List[str], lat_col: 
     for row in iter_row_dicts(data):
         raw_val = row[actual_coord_col]
         if isinstance(raw_val, (list, tuple, np.ndarray)):
-            resolved, pairs = None, [pt for pt in raw_val if len(pt) >= 2]
+            resolved, pairs = None, as_pair_block(raw_val)
         else:
             resolved, pairs = coord_string_parts(raw_val, "polygon", 6)
         if len(pairs if pairs is not None else resolved) >= 3:
             rows.append((resolved, pairs, {col: row[col] for col in non_coord_cols}))
 
-    order = detect_coord_order(
-        (pt for _, pairs, _ in rows if pairs is not None for pt in pairs), coord_order)
+    order = detect_coord_order_multi(
+        (pairs for _, pairs, _ in rows if pairs is not None), coord_order)
 
     polygons = [_ensure_closed_ring(resolved if pairs is None else apply_coord_order(pairs, order))
                 for resolved, pairs, _ in rows]
