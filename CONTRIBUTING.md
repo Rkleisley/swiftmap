@@ -71,6 +71,25 @@ npm run build        # or: npm run build:watch
 never need a JavaScript toolchain. Commit the rebuilt bundle alongside your `src/` change so
 the two never drift apart.
 
+### Building without Node
+
+```bash
+python tools/bundle.py
+```
+
+For environments where `src/` can be obtained but `node_modules` cannot — an isolated
+network, or anywhere the 180 KB bundle is impractical to move as a file. It rebuilds
+`swiftmap/static/` from `src/` using only the standard library.
+
+This works because `src/` imports nothing from npm: Leaflet and Leaflet.glify are fetched
+at runtime by `loadJS`/`loadCSS`, so the bundle is only swiftmap's own modules and
+flattening them is a question of ordering, not resolution.
+
+Prefer `npm run build` whenever Node is available. The Python script flattens every module
+into one shared scope rather than preserving module boundaries, so it fails the build if
+two modules declare the same top-level name — a duplicate would otherwise shadow silently.
+Keep that in mind when naming things in `src/`; it is the constraint esbuild removes.
+
 The JS is plain ES modules with real `import`/`export`, bundled by esbuild (`build.mjs`).
 Nothing in `src/` may import from Python or assume anywidget — `src/map.js` is the anywidget
 *adapter*, and the reusable pieces it builds on are exported from `src/index.js` so the same
