@@ -163,3 +163,6 @@ test-results/
 playwright-report/
 
 release.env
+# Internal release tooling -- names internal systems, do not publish
+release.sh
+ingest.sh
