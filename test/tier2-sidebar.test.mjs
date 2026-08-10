@@ -180,3 +180,84 @@ test("re-rendering replaces the tree rather than appending to it", () => {
     renderSidebarControls(el, layers, model, map, () => {});
     assert.equal(el.querySelectorAll("input").length, before, "no duplicated controls");
 });
+
+// --- write-back targets the rendered list, not the trait ----------------------------
+// The sidebar renders from the list map.js keeps locally, which patches update in place.
+// Python's _set_trait_quietly deliberately skips the notification, so the frontend's copy
+// of the `layers` trait never advances past the initial state message. Any handler that
+// rebuilds the update from the trait silently drops every layer added after display: the
+// toggle matches no id, the stale list is written back, and map.js resets local state to
+// it -- so the checkbox re-checks itself and the layer never hides.
+
+/** Mounts with the rendered list deliberately ahead of the model, as a patch leaves it. */
+function mountDiverged(rendered, inModel, groupConfigs = {}) {
+    const dom = new JSDOM("<!doctype html><div id='sidebar'></div>");
+    globalThis.document = dom.window.document;
+    globalThis.Event = dom.window.Event;
+    const model = makeModel({ layers: inModel, group_configs: groupConfigs });
+    const el = dom.window.document.getElementById("sidebar");
+    renderSidebarControls(el, rendered, model, makeMap(), () => {});
+    return { el, model };
+}
+
+const boxFor = (el, name) => inputs(el).find(
+    i => i.parentElement.textContent.includes(name));
+
+test("toggling a patch-added layer writes that layer, not the stale trait", () => {
+    const base = layer({ id: "a", name: "Base", layer_group: "Layers" });
+    const added = layer({ id: "s1", name: "Search Result", layer_group: "Layers" });
+    const { el, model } = mountDiverged([base, added], [base]);
+
+    boxFor(el, "Search Result").click();
+
+    const written = model.get("layers");
+    const target = written.find(l => l.id === "s1");
+    assert.ok(target, "the toggled layer survives the write-back");
+    assert.equal(target.visible, false, "and is actually hidden");
+});
+
+test("a toggle never shrinks the layer list back to the trait's copy", () => {
+    const base = layer({ id: "a", name: "Base", layer_group: "Layers" });
+    const added = layer({ id: "s1", name: "Search Result", layer_group: "Layers" });
+    const { el, model } = mountDiverged([base, added], [base]);
+
+    boxFor(el, "Search Result").click();
+
+    assert.deepEqual(model.get("layers").map(l => l.id), ["a", "s1"],
+        "map.js resets local state from this write, so dropping a layer here unrenders it");
+});
+
+test("untoggling a patch-added layer leaves its siblings alone", () => {
+    const base = layer({ id: "a", name: "Base", layer_group: "Layers" });
+    const added = layer({ id: "s1", name: "Search Result", layer_group: "Layers" });
+    const { el, model } = mountDiverged([base, added], [base]);
+
+    boxFor(el, "Search Result").click();
+
+    assert.equal(model.get("layers").find(l => l.id === "a").visible, true);
+});
+
+test("a radio layer added by patch can still be selected", () => {
+    // Radios route through the same write-back, so they failed identically -- the symptom
+    // just looked like radio semantics rather than a stale read.
+    const first = layer({ id: "a", name: "Alpha", layer_group: "Modes" });
+    const added = layer({ id: "b", name: "Bravo", layer_group: "Modes", visible: false });
+    const { el, model } = mountDiverged([first, added], [first],
+        { Modes: { visible: true, multi_select: false } });
+
+    boxFor(el, "Bravo").click();
+
+    const written = model.get("layers");
+    assert.equal(written.find(l => l.id === "b").visible, true, "the selected radio turns on");
+    assert.equal(written.find(l => l.id === "a").visible, false, "and its sibling turns off");
+});
+
+test("toggling still works when the trait and the rendered list agree", () => {
+    // The undiverged path, so the fix is not just moving the failure somewhere else.
+    const layers = [layer({ id: "a", name: "Alpha", layer_group: "Layers" })];
+    const { el, model } = mountDiverged(layers, layers);
+
+    boxFor(el, "Alpha").click();
+
+    assert.equal(model.get("layers").find(l => l.id === "a").visible, false);
+});

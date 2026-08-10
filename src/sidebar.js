@@ -360,8 +360,14 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
                     return;
                 }
 
-                const currentLayers = model.get("layers");
-                let updatedLayers = [...currentLayers];
+                // Written against the list this sidebar rendered from, never model.get("layers").
+                // Layers added after the widget is displayed arrive as patches that update the
+                // frontend's local state without touching the trait, so the model's copy is
+                // frozen at whatever the initial state message carried. Building the update from
+                // it drops every later layer: the toggle matches no id, writes the stale list
+                // back, and the change handler then resets local state to it -- so the box
+                // re-checks itself and the layer never hides.
+                let updatedLayers = [...layers];
 
                 if (!isMultiSelect) {
                     // Radio button logic: set all siblings to visible=false, and this to visible=true
