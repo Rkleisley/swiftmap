@@ -315,8 +315,13 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
     const indexMapping = [];
 
     const fallbackColor = type === "markers" ? "#e61a26" : "#3388ff";
+    // glify's fallback when a layer declares no radius. Pins need far more room than a
+    // circle because the glyph is drawn inside the point's own quad by the shader.
+    const defaultSize = type === "markers" ? 64 : 5;
+
     for (const layer of layersList) {
         const colorRGB = parseColor(layer.color, fallbackColor);
+        const layerSize = layer.radius != null ? Number(layer.radius) : defaultSize;
 
         const coordBuffer = coordinateBuffers[layer.id];
         if (!coordBuffer) {
@@ -325,7 +330,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 indexMapping.push({
                     layer: layer,
                     originalIndex: 0,
-                    colorRGB: colorRGB
+                    colorRGB: colorRGB,
+                    size: layerSize
                 });
             }
             continue;
@@ -346,7 +352,10 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 originalIndex: i,
                 colorRGB: perFeature && perFeature[i]
                     ? parseColor(perFeature[i].color, fallbackColor)
-                    : colorRGB
+                    : colorRGB,
+                size: perFeature && perFeature[i] && perFeature[i].radius != null
+                    ? Number(perFeature[i].radius)
+                    : layerSize
             });
         }
     }
@@ -382,7 +391,12 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 map: m,
                 data: pointsList,
                 pane: "pointsPane",
-                size: type === "markers" ? 64 : 5,
+                // Resolved per point, like colour: several layers share one glify instance,
+                // so a single constant here silently discarded every layer's own radius.
+                size: (index) => {
+                    const info = indexMapping[index];
+                    return info && info.size != null ? info.size : defaultSize;
+                },
                 color: (index, point) => {
                     const info = indexMapping[index];
                     return info ? info.colorRGB : { r: 0.2, g: 0.5, b: 1.0 };

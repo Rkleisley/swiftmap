@@ -186,3 +186,24 @@ suite("no console errors are produced during a full render", async () => {
         assert.deepEqual(errors, [], `page errors: ${errors.join("; ")}`);
     });
 });
+
+suite("a layer's radius reaches the renderer", async () => {
+    // glify was given `size: type === "markers" ? 64 : 5` -- a constant. Every layer's
+    // radius was validated, styled and shipped, then discarded at the last step, so this
+    // is only catchable against a real glify instance.
+    await withPage(async page => {
+        const out = await page.evaluate(() => {
+            const inst = (window.L.glify.pointsInstances || [])[0];
+            const declared = (window.__model.get("layers") || [])
+                .find(l => l.type === "circle_markers");
+            const size = inst.settings.size;
+            return {
+                declared: declared && declared.radius,
+                resolved: typeof size === "function" ? size(0, null) : size,
+            };
+        });
+        assert.ok(out.declared, "the fixture declares a radius to test against");
+        assert.equal(out.resolved, out.declared,
+            "the radius the layer declares is the size glify draws");
+    });
+});
