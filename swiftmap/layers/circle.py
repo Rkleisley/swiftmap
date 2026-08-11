@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Any
 from ._display import extract_display_config
 from ._style import pop_style_options, resolve_styles
 from ._batching import batched
+from ._targeting import bounds_of_circle
 
 @batched
 def add_circle(
@@ -76,6 +77,7 @@ def add_circle(
         "visible": True,
         "location": location,
         "radius": radius,
+        "bounds": bounds_of_circle(location, radius),
         **layer_style,
         "properties": properties or {},
         "autobind_popup": bool(popup),

@@ -5,6 +5,7 @@ from ._style import pop_style_options, resolve_styles
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
+from ._targeting import bounds_of_coords
 
 @batched
 def add_polygon(
@@ -152,6 +153,7 @@ def add_polygon(
             "group_multi_select": group_multi_select,
             "visible": True,
             "locations": coords,
+            "bounds": bounds_of_coords(coords),
             **(feature_styles[i] if feature_styles else layer_style),
             "properties": poly_props,
             "autobind_popup": bool(popup),

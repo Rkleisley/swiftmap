@@ -152,3 +152,36 @@ def apply_to_layers(layers: List[Any], changes: Dict[Any, Dict[str, Any]],
         if changed:
             changed_top.append(rebuilt)
     return new_layers, changed_top
+
+
+def bounds_of_coords(coords: Iterable[Iterable[float]]) -> Optional[List[List[float]]]:
+    """
+    The box enclosing a sequence of [lat, lon] vertices, or None if there are none.
+
+    Recorded on every layer as it is built, so fitting the view to a selection later needs
+    no coordinates from the caller. Point layers computed this from the start; lines,
+    polygons and circles did not, which made `bounds_of` and `select(zoom=True)` silently
+    do nothing for them -- accepted, plausible, and no movement on the map.
+    """
+    lats, lons = [], []
+    for point in coords:
+        lats.append(float(point[0]))
+        lons.append(float(point[1]))
+    if not lats:
+        return None
+    return [[min(lats), min(lons)], [max(lats), max(lons)]]
+
+
+def bounds_of_circle(center: Iterable[float], radius_m: float) -> List[List[float]]:
+    """
+    The box enclosing a geographic circle, whose radius is in metres rather than pixels.
+
+    Longitude degrees shrink with latitude, so the east-west extent is divided by cos(lat)
+    -- without that a circle near the poles would fit far too tightly.
+    """
+    import math
+
+    lat, lon = float(center[0]), float(center[1])
+    d_lat = radius_m / 111_320.0
+    d_lon = radius_m / (111_320.0 * max(math.cos(math.radians(lat)), 1e-6))
+    return [[lat - d_lat, lon - d_lon], [lat + d_lat, lon + d_lon]]

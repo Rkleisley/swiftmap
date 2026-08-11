@@ -447,3 +447,56 @@ def test_highlight_composes_with_select_in_one_batch(m):
         m.highlight("Survey", color="#ffcc00", types="polygon")
     patches = [d for d in m.comm.msgs if (d.get("content") or {}).get("ops")]
     assert len(patches) == 1, "visibility and styling leave together"
+
+
+# --- every geometry records its own extent ---------------------------------------------
+GEOMETRY_BUILDERS = [
+    pytest.param(lambda m: m.add_circle_markers([[36.0, -5.3], [36.1, -5.2]], name="X"),
+                 id="circle_markers"),
+    pytest.param(lambda m: m.add_markers([[36.0, -5.3], [36.1, -5.2]], name="X"),
+                 id="markers"),
+    pytest.param(lambda m: m.add_line([[36.0, -5.3], [36.1, -5.2]], name="X"),
+                 id="polyline"),
+    pytest.param(lambda m: m.add_polygon([[36.0, -5.3], [36.1, -5.2], [36.0, -5.2]], name="X"),
+                 id="polygon"),
+    pytest.param(lambda m: m.add_circle([36.0, -5.3], radius=500, name="X"), id="circle"),
+]
+
+
+@pytest.mark.parametrize("build", GEOMETRY_BUILDERS)
+def test_every_geometry_type_records_its_bounds(build):
+    """
+    Only point layers did. `bounds_of` and `select(zoom=True)` returned None for the rest
+    and the map simply did not move -- accepted, plausible, silent. A new layer type must
+    not be able to reintroduce that.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SwiftMapWarning)
+        mp = swiftmap.Map()
+        build(mp)
+    layer = mp.find_layers("X")[0]
+    box = layer.get("bounds")
+    assert box, f"{layer['type']} carries no bounds"
+    (min_lat, min_lon), (max_lat, max_lon) = box
+    assert min_lat <= max_lat and min_lon <= max_lon
+
+
+@pytest.mark.parametrize("build", GEOMETRY_BUILDERS)
+def test_zooming_to_any_geometry_moves_the_map(build):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SwiftMapWarning)
+        mp = swiftmap.Map()
+        build(mp)
+    mp.select("X", zoom=True)
+    assert mp.fit_bounds_request.get("bounds"), "select(zoom=True) had nothing to fit"
+
+
+def test_a_circle_encloses_its_radius():
+    """Its radius is metres, not pixels, so the extent is the centre expanded outwards."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SwiftMapWarning)
+        mp = swiftmap.Map()
+        mp.add_circle([36.0, -5.3], radius=1000, name="C")
+    (min_lat, _), (max_lat, _) = mp.find_layers("C")[0]["bounds"]
+    assert min_lat < 36.0 < max_lat
+    assert 0.017 < (max_lat - min_lat) < 0.019, "~2km of latitude across"
