@@ -118,7 +118,7 @@ def add_line(
     display_config = extract_display_config(kwargs, name)
 
 
-    explicit_style, static_style = pop_style_options(kwargs, "add_line")
+    explicit_style, static_style = pop_style_options(kwargs, "add_line", "polyline")
     try:
         lines_coords, props = parse_lines(
             data,

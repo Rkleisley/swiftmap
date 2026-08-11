@@ -80,7 +80,7 @@ def add_markers(
     group_multi_select = kwargs.pop("multi_select", group_multi_select)
 
     # 1. Parse all coordinates and properties first
-    explicit_style, static_style = pop_style_options(kwargs, "add_markers")
+    explicit_style, static_style = pop_style_options(kwargs, "add_markers", "markers")
     try:
         lats, lons, props = parse_points(data, lat_col, lon_col, coord_order=coord_order)
     except TypeError as exc:

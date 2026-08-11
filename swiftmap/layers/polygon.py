@@ -108,7 +108,7 @@ def add_polygon(
 
 
     # Parse polygon coordinates
-    explicit_style, static_style = pop_style_options(kwargs, "add_polygon")
+    explicit_style, static_style = pop_style_options(kwargs, "add_polygon", "polygon")
     try:
         polygons_coords, props = parse_polygons(
             data,

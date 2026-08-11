@@ -1,19 +1,61 @@
 import difflib
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
 from .._warnings import warn
 from ._display import DISPLAY_KEYS
 
+# Layer types, grouped by what styling means for them.
+POINTS = frozenset({"circle_markers", "markers"})
+LINES = frozenset({"polyline"})
+AREAS = frozenset({"polygon", "circle"})
+GEOMETRY = POINTS | LINES | AREAS
+NOTHING = frozenset()
+
+
+class StyleKey(NamedTuple):
+    """
+    One style option, and where it is meaningful versus where it is actually drawn.
+
+    `applies_to` is semantic -- a fill colour means something for an area and nothing for a
+    line, whatever any renderer does. `renders_on` is the subset the renderer draws today,
+    and is always a subset of `applies_to`.
+
+    Keeping them apart is what lets a warning tell the truth about three different
+    situations that otherwise look identical to the caller, because every one of them ends
+    in a map that ignored what they asked for:
+
+      - the option does not exist         -> probably a typo
+      - it exists but not for this shape  -> wrong option for the job
+      - it exists, fits, and is not drawn -> a gap in swiftmap, not a mistake
+
+    A capability landing later is then one edit here plus the renderer work, with no change
+    to any signature: an option can be named and accepted before it can be drawn.
+    """
+    frontend: str
+    applies_to: frozenset
+    renders_on: frozenset
+    note: str = ""
+
+
+# The vocabulary. `renders_on` was read out of src/layers.js rather than assumed -- see
+# tests/test_style_registry.py, which pins each entry against what the renderer
+# actually consumes so this table cannot quietly drift from the code it describes.
+STYLE_REGISTRY = {
+    "color": StyleKey("color", GEOMETRY, GEOMETRY),
+    "fill_color": StyleKey(
+        "fillColor", AREAS, NOTHING,
+        note="areas are filled with `color`; a separate fill colour is not drawn yet"),
+    "fill_opacity": StyleKey("fillOpacity", AREAS, AREAS),
+    "opacity": StyleKey("opacity", GEOMETRY, LINES),
+    "weight": StyleKey("weight", LINES | AREAS, LINES),
+    "radius": StyleKey(
+        "radius", POINTS | {"circle"}, POINTS | {"circle"},
+        note="pixels for point layers, metres for `circle`"),
+}
+
 # Canonical style option -> the key the frontend reads. The frontend uses Leaflet's
 # camelCase for two of them, so callers may write either spelling.
-STYLE_KEYS = {
-    "color": "color",
-    "fill_color": "fillColor",
-    "fill_opacity": "fillOpacity",
-    "weight": "weight",
-    "opacity": "opacity",
-    "radius": "radius",
-}
+STYLE_KEYS = {name: spec.frontend for name, spec in STYLE_REGISTRY.items()}
 
 # Spellings accepted for the same option.
 ALIASES = {
@@ -81,13 +123,45 @@ def warn_on_misspelled_options(kwargs: Dict[str, Any], method: str,
             )
 
 
-def pop_style_options(kwargs: Dict[str, Any], method: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def warn_on_undrawn_options(styles: Iterable[str], method: str, layer_type: Optional[str]) -> None:
+    """
+    Flags a real style option that this layer type will not draw.
+
+    Both cases end the same way for the caller -- a map that ignored what they asked for --
+    but they need different responses, so they are reported differently. An option that does
+    not apply to the shape is the wrong tool. An option that applies and is simply not drawn
+    yet is a gap in swiftmap, and the caller has nothing to fix.
+
+    Nothing is rejected. `radius` was accepted, validated and discarded by the renderer for
+    the whole life of the project without a word; saying so is the entire point.
+    """
+    if not layer_type:
+        return
+    for name in styles:
+        spec = STYLE_REGISTRY.get(name)
+        if spec is None or layer_type in spec.renders_on:
+            continue
+        detail = f" ({spec.note})" if spec.note else ""
+        if layer_type not in spec.applies_to:
+            warn(f"{method}: {name!r} does not apply to {layer_type} layers{detail}. "
+                 f"It was accepted but will not change how the layer draws.")
+        else:
+            warn(f"{method}: {name!r} is not drawn for {layer_type} layers yet{detail}. "
+                 f"It was accepted but will not change how the layer draws.")
+
+
+def pop_style_options(kwargs: Dict[str, Any], method: str,
+                      layer_type: Optional[str] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Takes the style options out of kwargs, returning (explicit, static_style).
 
     Called before parsing so styling never reaches a parser: several add_* methods forward
     their remaining kwargs to the parser, and while parsers ignore what they do not know
     today, a parser that later gained a `color` argument would silently misread it.
+
+    `layer_type` enables the capability warnings. It is optional so a caller that has no
+    single type -- add_collection fans one call out to three -- can leave them to the
+    per-geometry builders it delegates to, which do know.
     """
     static_style = normalize(kwargs.pop("static_style", None))
     explicit = {}
@@ -96,6 +170,7 @@ def pop_style_options(kwargs: Dict[str, Any], method: str) -> Tuple[Dict[str, An
         if name in STYLE_KEYS:
             explicit[name] = kwargs.pop(key)
     warn_on_misspelled_options(kwargs, method)
+    warn_on_undrawn_options({**explicit, **static_style}, method, layer_type)
     return explicit, static_style
 
 
