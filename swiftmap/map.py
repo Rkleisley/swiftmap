@@ -6,6 +6,8 @@ import contextlib
 from typing import Optional, List, Dict, Any, Union
 import pathlib
 from ._infra import LayerConfig, _load_esm, _widget_css_path
+from .layers._targeting import find_layers, apply_to_layers
+from ._warnings import warn
 
 # Import layer methods
 from .layers.basemap import add_basemap
@@ -23,6 +25,13 @@ def _layers_from_json(value, widget):
 
 def _layer_to_dict(item):
     return item.to_dict() if hasattr(item, "to_dict") else item
+
+def _describe_target(target, criteria):
+    """Echoes back what was asked for, so an empty match says which part missed."""
+    parts = [repr(target)] if target is not None else []
+    parts += [f"{k}={v!r}" for k, v in sorted(criteria.items()) if v is not None]
+    return ", ".join(parts) or "no criteria"
+
 
 class Map(anywidget.AnyWidget):
     """
@@ -466,6 +475,120 @@ class Map(anywidget.AnyWidget):
                 if l.get("id") == target_id or l.get("name") == target_name:
                     return l
         return None
+
+    def find_layers(self, target: Any = None, **criteria) -> List[Any]:
+        """
+        Returns every layer matching the given criteria, looking inside groups.
+
+        The same targeting vocabulary every layer method accepts, exposed directly for
+        cases it cannot express -- combining several queries, or reading `bounds` off the
+        results. For plain "act on these layers", pass the criteria to `hide` or `show`
+        instead of filtering here first.
+
+        Parameters
+        ----------
+        target : str or layer or list, optional
+            Matches an id or a name, the same pair `get_layer` accepts.
+        ids, name, types, exclude_types, group : optional
+            Narrowing criteria; see `hide`. All given conditions must match.
+        include_groups : bool, default False
+            Include the group layers themselves, not only the geometry inside them.
+
+        Returns
+        -------
+        list
+            The matching layers, in map order. Empty if nothing matched.
+
+        Examples
+        --------
+        >>> m.find_layers("Survey")                       # every part of a collection
+        >>> m.find_layers("Survey", types="polyline")     # just its line
+        >>> m.find_layers(group="Feeds")                  # everything under a folder
+        """
+        return find_layers(self.layers, target, **criteria)
+
+    def _set_layer_fields(self, layers: List[Any], fields: Dict[str, Any]) -> "Map":
+        """Applies `fields` to the given layers, emitting nothing if none actually change."""
+        if not layers:
+            return self
+        changes = {l.get("id"): fields for l in layers if l.get("id") is not None}
+        new_layers, changed = apply_to_layers(self.layers, changes, lambda d: LayerConfig(**d))
+        if changed:
+            with self.batch():
+                self._layers_update_many(new_layers, changed)
+        return self
+
+    def hide(self, target: Any = None, **criteria) -> "Map":
+        """
+        Hides every layer matching the criteria, including layers inside a collection.
+
+        Parameters
+        ----------
+        target : str or layer or list, optional
+            Matches an id or a name.
+        ids : str or list, optional
+            Match by id only, when a name would be ambiguous.
+        name : str, optional
+            Match by name only.
+        types : str or list, optional
+            Keep only these layer types -- 'circle_markers', 'markers', 'polyline',
+            'polygon', 'circle'. Within a collection this is the only thing telling the
+            parts apart, since they share a name by design.
+        exclude_types : str or list, optional
+            The inverse: match everything except these types.
+        group : str, optional
+            Match by folder path. Matches nested folders too, so "Feeds" includes
+            "Feeds/Active".
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+
+        Warns
+        -----
+        SwiftMapWarning
+            If nothing matched. A call that quietly does nothing is the failure this is
+            most likely to hide, since a mistyped name looks identical to a hidden layer.
+
+        Examples
+        --------
+        >>> m.hide("Survey", types="polyline")    # drop the line from a collection
+        >>> m.hide(group="Feeds/Inactive")
+        >>> m.hide(ids=[l.id for l in stale])
+        """
+        matched = self.find_layers(target, **criteria)
+        if not matched:
+            warn(f"hide matched no layers ({_describe_target(target, criteria)}). "
+                 f"Nothing was hidden.")
+            return self
+        return self._set_layer_fields(matched, {"visible": False})
+
+    def show(self, target: Any = None, **criteria) -> "Map":
+        """
+        Shows every layer matching the criteria. The inverse of `hide`; same arguments.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+
+        Warns
+        -----
+        SwiftMapWarning
+            If nothing matched.
+
+        Examples
+        --------
+        >>> m.show("Survey")            # every part of a collection, line included
+        >>> m.show(group="Feeds")
+        """
+        matched = self.find_layers(target, **criteria)
+        if not matched:
+            warn(f"show matched no layers ({_describe_target(target, criteria)}). "
+                 f"Nothing was shown.")
+            return self
+        return self._set_layer_fields(matched, {"visible": True})
 
     def update_layer(self, identifier: Union[str, Any], name: Optional[str] = None, **kwargs) -> "Map":
         """
