@@ -374,3 +374,76 @@ def test_reselecting_the_same_rows_emits_nothing(dwells):
     dwells.comm.msgs.clear()
     dwells.select([ids[1]], scope="Dwells")
     assert ops_of(dwells.comm) == []
+
+
+# --- highlight --------------------------------------------------------------------------
+def test_highlight_leaves_the_layers_own_style_untouched(m):
+    """It lives in its own field, so clearing restores what was underneath."""
+    m.highlight("Survey", color="#ffcc00")
+    poly = subs(m)["polygon"]
+    assert poly["highlight_style"] == {"color": "#ffcc00"}
+    assert poly.get("color") != "#ffcc00", "the layer's own colour is not overwritten"
+
+
+def test_per_family_options_apply_to_their_geometry_only(m):
+    m.highlight("Survey", color="#ffcc00",
+                markers={"radius": 14}, polygons={"fill_opacity": 0.5})
+    assert subs(m)["circle_markers"]["highlight_style"] == {"color": "#ffcc00", "radius": 14}
+    assert subs(m)["polyline"]["highlight_style"] == {"color": "#ffcc00"}
+    assert subs(m)["polygon"]["highlight_style"] == {"color": "#ffcc00", "fillOpacity": 0.5}
+
+
+def test_highlighting_again_drops_the_previous_one(m):
+    """Each call states the whole highlight, so nothing tracks what was lit before."""
+    m.highlight("Survey", color="#ffcc00")
+    m.highlight("Survey", color="#0000ff", exclude_types="polyline")
+    assert subs(m)["polygon"]["highlight_style"] == {"color": "#0000ff"}
+    assert not subs(m)["polyline"].get("highlight_style"), "no longer in the selection"
+
+
+def test_highlight_none_clears_everything(m):
+    m.highlight("Survey", color="#ffcc00")
+    m.highlight(None)
+    assert all(not s.get("highlight_style") for s in subs(m).values())
+
+
+def test_highlight_travels_as_a_set_op(m):
+    m.comm = Comm()
+    m.comm.msgs.clear()
+    m.highlight("Survey", color="#ffcc00", types="polygon")
+    ops = ops_of(m.comm)
+    assert [o["op"] for o in ops] == ["set"]
+    assert ops[0]["fields"] == {"highlight_style": {"color": "#ffcc00"}}
+
+
+def test_rehighlighting_identically_emits_nothing(m):
+    m.highlight("Survey", color="#ffcc00")
+    m.comm = Comm()
+    m.comm.msgs.clear()
+    m.highlight("Survey", color="#ffcc00")
+    assert ops_of(m.comm) == []
+
+
+def test_an_undrawable_option_warns_but_is_kept(m):
+    """
+    Kept rather than dropped, so it starts working if the renderer later learns to draw
+    it -- the same contract the style registry sets for add_*.
+    """
+    with pytest.warns(SwiftMapWarning, match="'weight' does not apply to circle_markers"):
+        m.highlight("Survey", color="#ffcc00", weight=6, types="circle_markers")
+    assert subs(m)["circle_markers"]["highlight_style"]["weight"] == 6
+
+
+def test_highlighting_nothing_warns(m):
+    with pytest.warns(SwiftMapWarning, match="highlight matched no layers"):
+        m.highlight("Typo", color="#ffcc00")
+
+
+def test_highlight_composes_with_select_in_one_batch(m):
+    m.comm = Comm()
+    m.comm.msgs.clear()
+    with m.batch():
+        m.select("Survey", scope="Field")
+        m.highlight("Survey", color="#ffcc00", types="polygon")
+    patches = [d for d in m.comm.msgs if (d.get("content") or {}).get("ops")]
+    assert len(patches) == 1, "visibility and styling leave together"

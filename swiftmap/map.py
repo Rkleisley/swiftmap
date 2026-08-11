@@ -8,6 +8,8 @@ import pathlib
 from ._infra import LayerConfig, _load_esm, _widget_css_path
 from .layers._targeting import find_layers, apply_to_layers
 from ._warnings import warn
+from .layers._style import (STYLE_KEYS, POINTS, LINES, AREAS, pop_style_options,
+                            warn_on_undrawn_options, normalize as normalize_style)
 
 # Import layer methods
 from .layers.basemap import add_basemap
@@ -668,6 +670,92 @@ class Map(anywidget.AnyWidget):
             if zoom and chosen:
                 self.fit_bounds(self.bounds_of(chosen), zoom_offset=zoom_offset,
                                 max_zoom=max_zoom, padding=padding)
+        return self
+
+    def highlight(self, target: Any = None, *, markers: Optional[Dict[str, Any]] = None,
+                  lines: Optional[Dict[str, Any]] = None,
+                  polygons: Optional[Dict[str, Any]] = None, **options) -> "Map":
+        """
+        Restyles whole layers to mark them as selected, leaving their own styling intact.
+
+        The highlight sits in a field of its own above the layer's style and any
+        data-driven per-feature styling, so clearing it restores what was underneath with
+        nothing remembered and nothing to put back. Like `select`, each call states the
+        whole highlight: highlighting something else drops the previous one, and
+        `highlight(None)` clears every highlight on the map.
+
+        Parameters
+        ----------
+        target : str or layer or list, optional
+            What to highlight -- ids or names, as in `hide`. `None` clears.
+        markers, lines, polygons : dict, optional
+            Style overrides for one geometry family, applied over the shared options
+            below. A mixed selection usually wants different treatment per shape --
+            an accent colour on the points and a translucent wash on the areas -- and a
+            single flat colour cannot say that.
+        **options
+            Shared style options applied to every matched layer -- `color`, `weight`,
+            `radius`, and the rest of the vocabulary `add_*` accepts. Targeting criteria
+            (`types`, `exclude_types`, `group`) are accepted here too.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+
+        Warns
+        -----
+        SwiftMapWarning
+            If nothing matched, or an option cannot be drawn for a matched layer's
+            geometry -- `weight` on points, say. The option is kept rather than dropped,
+            so it starts working if the renderer later learns to draw it.
+
+        Examples
+        --------
+        >>> m.highlight("Survey", color="#ffcc00", weight=6)
+        >>> m.highlight("Survey", color="#ffcc00",
+        ...             markers={"radius": 14}, polygons={"fill_opacity": 0.5})
+        >>> m.highlight("Survey", color="#ffcc00", exclude_types="polyline")
+        >>> m.highlight(None)                       # clear every highlight
+        """
+        criteria = {k: options.pop(k) for k in
+                    ("ids", "name", "types", "exclude_types", "group", "include_groups")
+                    if k in options}
+
+        if not target:
+            lit = [l for l in self.find_layers() if l.get("highlight_style")]
+            return self._set_layer_fields(lit, {"highlight_style": {}}) if lit else self
+
+        matched = self.find_layers(target, **criteria)
+        if not matched:
+            warn(f"highlight matched no layers ({_describe_target(target, criteria)}). "
+                 f"Nothing was highlighted.")
+            return self
+
+        shared, _ = pop_style_options(dict(options), "highlight")
+        per_family = {"markers": markers or {}, "lines": lines or {}, "polygons": polygons or {}}
+        families = {"markers": POINTS, "lines": LINES, "polygons": AREAS}
+
+        with self.batch():
+            for layer in matched:
+                ltype = layer.get("type")
+                merged = dict(shared)
+                for family, style in per_family.items():
+                    if style and ltype in families[family]:
+                        merged.update(normalize_style(style))
+                if not merged:
+                    continue
+                warn_on_undrawn_options(merged, "highlight", ltype)
+                frontend = {STYLE_KEYS[k]: v for k, v in merged.items() if k in STYLE_KEYS}
+                self._set_layer_fields([layer], {"highlight_style": frontend})
+
+            # Anything previously lit and not in this selection goes dark, so the caller
+            # never tracks what the last highlight touched.
+            keep = {l.get("id") for l in matched}
+            stale = [l for l in self.find_layers()
+                     if l.get("highlight_style") and l.get("id") not in keep]
+            if stale:
+                self._set_layer_fields(stale, {"highlight_style": {}})
         return self
 
     def set_feature_styles(self, target: Any = None, overrides: Optional[Dict[int, Any]] = None,

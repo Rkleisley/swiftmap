@@ -320,3 +320,32 @@ test("styleFor falls back cleanly when a feature has no override", () => {
     };
     assert.equal(styleFor(layer, 1).color, "#333");
 });
+
+test("a whole-layer highlight sits above the data styling", () => {
+    const layer = {
+        id: "a", type: "circle_markers", color: "#111", radius: 5,
+        feature_styles: [{ color: "#222", radius: 7 }],
+        highlight_style: { color: "#ffcc00" },
+    };
+    const style = styleFor(layer, 0);
+    assert.equal(style.color, "#ffcc00", "the highlight wins over the data");
+    assert.equal(style.radius, 7, "what it does not set still comes from the data");
+});
+
+test("a per-feature override outranks a whole-layer highlight", () => {
+    // Most specific wins: the layer is selected, but this one feature is THE selection.
+    const layer = {
+        id: "a", type: "circle_markers", color: "#111",
+        highlight_style: { color: "#ffcc00" },
+        style_overrides: { 0: { color: "#ff0000" } },
+    };
+    assert.equal(styleFor(layer, 0).color, "#ff0000");
+    assert.equal(styleFor(layer, 1).color, "#ffcc00", "other features keep the highlight");
+});
+
+test("clearing a highlight restores the layer's own style", () => {
+    const lit = { id: "a", type: "circle_markers", color: "#111", highlight_style: { color: "#ffcc00" } };
+    const { layers } = applySwiftmapPatch({ layers: [lit] },
+        [{ op: "set", id: "a", fields: { highlight_style: {} } }], []);
+    assert.equal(styleFor(layers[0], 0).color, "#111", "nothing had to be remembered");
+});

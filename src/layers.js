@@ -47,17 +47,20 @@ function registerHoverMatch(map, priority, action) {
 // Style for one feature: its own entry from `feature_styles` when the layer carries
 // varied styling, otherwise the layer's single style. Python only emits feature_styles
 // when features actually differ, so a uniform layer costs nothing extra here.
+// Four sources, least specific first. Each transient one lives in its own field rather
+// than editing the layer's style, so clearing it restores what was underneath with
+// nothing to remember and nothing to put back.
+//
+//   the layer's own style   what it was drawn with
+//   feature_styles[i]       per feature, from the data
+//   highlight_style         the whole layer is selected
+//   style_overrides[i]      this feature is selected -- most specific, so it wins
 export function styleFor(layer, index) {
-    const perFeature = layer.feature_styles;
-    // style_overrides is transient selection styling and wins over both the layer's own
-    // style and its data-driven per-feature styles. Keeping it in its own field is what
-    // lets a highlight be cleared by dropping it, with nothing to restore.
-    const override = layer.style_overrides && layer.style_overrides[index];
-    if (Array.isArray(perFeature) && perFeature[index]) {
-        return override ? { ...layer, ...perFeature[index], ...override }
-                        : { ...layer, ...perFeature[index] };
-    }
-    return override ? { ...layer, ...override } : layer;
+    const fromData = Array.isArray(layer.feature_styles) ? layer.feature_styles[index] : null;
+    const highlight = layer.highlight_style;
+    const selected = layer.style_overrides && layer.style_overrides[index];
+    if (!fromData && !highlight && !selected) return layer;
+    return { ...layer, ...(fromData || {}), ...(highlight || {}), ...(selected || {}) };
 }
 
 export function getIndexedProperties(properties, index) {
@@ -351,13 +354,18 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
 
         const perFeature = Array.isArray(layer.feature_styles) ? layer.feature_styles : null;
         // Selection styling, applied over the layer's own and its data-driven styles.
+        // Same precedence as styleFor: data, then whole-layer highlight, then per-feature.
+        const highlight = layer.highlight_style || null;
         const overrides = layer.style_overrides || null;
 
         for (let i = 0; i < count; i++) {
             const fromData = perFeature ? perFeature[i] : null;
             const selected = overrides ? overrides[i] : null;
-            const color = (selected && selected.color) || (fromData && fromData.color);
+            const color = (selected && selected.color)
+                || (highlight && highlight.color)
+                || (fromData && fromData.color);
             const radius = selected && selected.radius != null ? selected.radius
+                : highlight && highlight.radius != null ? highlight.radius
                 : fromData && fromData.radius != null ? fromData.radius
                 : null;
 
