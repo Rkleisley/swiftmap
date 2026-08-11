@@ -150,14 +150,21 @@ def ops_of(comm):
     return [o for d in comm.msgs for o in (d.get("content") or {}).get("ops", [])]
 
 
-def test_changing_a_nested_layer_replaces_its_group(m):
-    """Patch ops address top-level layers, so the group is what moves."""
+def test_changing_a_nested_layer_addresses_it_directly(m):
+    """
+    A `set` op names the nested layer itself; the frontend descends into groups to find
+    it. Sending a `replace` for the enclosing group instead would carry every sibling's
+    properties along with it, which is the cost this op exists to avoid.
+    """
     m.comm = Comm()
     m.comm.msgs.clear()
     m.hide("Survey", types="polyline")
     ops = ops_of(m.comm)
-    assert [o["op"] for o in ops] == ["replace"]
-    assert ops[0]["id"] == group_of(m)["id"]
+    line_id = subs(m)["polyline"]["id"]
+    assert [o["op"] for o in ops] == ["set"]
+    assert ops[0]["id"] == line_id
+    assert ops[0]["fields"] == {"visible": False}
+    assert "layer" not in ops[0], "no layer body -- only the changed field travels"
 
 
 def test_a_second_identical_call_emits_nothing(m):
@@ -195,3 +202,46 @@ def test_the_warning_echoes_the_criteria(m):
 def test_show_warns_the_same_way(m):
     with pytest.warns(SwiftMapWarning, match="show matched no layers"):
         m.show("Typo")
+
+
+# --- style overrides ------------------------------------------------------------------
+def test_feature_styles_travel_as_a_style_op(m):
+    m.comm = Comm()
+    m.comm.msgs.clear()
+    m.set_feature_styles("Ports", {0: {"color": "#ffcc00", "radius": 14}})
+    ops = ops_of(m.comm)
+    assert [o["op"] for o in ops] == ["style"]
+    assert ops[0]["overrides"] == {"0": {"color": "#ffcc00", "radius": 14}}
+
+
+def test_overrides_replace_rather_than_accumulate(m):
+    m.set_feature_styles("Ports", {0: {"color": "#f00"}})
+    m.set_feature_styles("Ports", {1: {"color": "#0f0"}})
+    layer = m.find_layers("Ports")[0]
+    assert set(layer.get("style_overrides")) == {"1"}, \
+        "a selection describes its whole state; the previous one needs no undoing"
+
+
+def test_empty_overrides_clear_the_highlight(m):
+    m.set_feature_styles("Ports", {0: {"color": "#f00"}})
+    m.set_feature_styles("Ports", {})
+    assert m.find_layers("Ports")[0].get("style_overrides") == {}
+
+
+def test_restyling_to_the_same_thing_emits_nothing(m):
+    m.set_feature_styles("Ports", {0: {"color": "#f00"}})
+    m.comm = Comm()
+    m.comm.msgs.clear()
+    m.set_feature_styles("Ports", {0: {"color": "#f00"}})
+    assert ops_of(m.comm) == []
+
+
+def test_styling_can_target_one_geometry_of_a_collection(m):
+    m.set_feature_styles("Survey", {0: {"color": "#f00"}}, types="polygon")
+    assert subs(m)["polygon"].get("style_overrides") == {"0": {"color": "#f00"}}
+    assert not subs(m)["polyline"].get("style_overrides")
+
+
+def test_styling_nothing_warns(m):
+    with pytest.warns(SwiftMapWarning, match="set_feature_styles matched no layers"):
+        m.set_feature_styles("Typo", {0: {"color": "#f00"}})

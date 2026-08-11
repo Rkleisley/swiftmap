@@ -252,3 +252,71 @@ test("safeUrl passes real links and blocks script schemes", () => {
     assert.equal(safeUrl("javascript:alert(1)"), "");
     assert.equal(safeUrl("java\tscript:alert(1)"), "", "obfuscation with control chars");
 });
+
+// --- field and style ops -------------------------------------------------------------
+// "replace" carries the whole layer, so flipping `visible` on a large layer resent every
+// property it held. These two ops address a field and a feature-style map instead.
+
+const groupWith = (...subs) => ({ id: "g1", type: "group", name: "Survey", layers: subs });
+
+test("a set op changes only the named fields", () => {
+    const before = { id: "a", type: "circle_markers", visible: true, radius: 8, properties: { k: [1] } };
+    const { layers } = applySwiftmapPatch({ layers: [before] },
+        [{ op: "set", id: "a", fields: { visible: false } }], []);
+    assert.equal(layers[0].visible, false);
+    assert.equal(layers[0].radius, 8, "untouched fields survive");
+    assert.deepEqual(layers[0].properties, { k: [1] }, "properties are not resent or lost");
+});
+
+test("a set op reaches a layer nested in a group", () => {
+    // add_collection nests its parts, so an op addressed at a nested id must descend.
+    const { layers } = applySwiftmapPatch(
+        { layers: [groupWith({ id: "s1", type: "polyline", visible: true })] },
+        [{ op: "set", id: "s1", fields: { visible: false } }], []);
+    assert.equal(layers[0].layers[0].visible, false);
+    assert.equal(layers[0].type, "group", "the wrapper is rebuilt, not replaced");
+});
+
+test("a set op for an unknown id leaves the array identical", () => {
+    const state = { layers: [{ id: "a", type: "circle_markers" }] };
+    const { layers } = applySwiftmapPatch(state, [{ op: "set", id: "nope", fields: { visible: false } }], []);
+    assert.equal(layers, state.layers, "same reference -- an unmatched op costs no re-render");
+});
+
+test("a style op replaces overrides rather than merging them", () => {
+    // A selection describes its whole state, so no caller tracks what the last one touched.
+    const first = applySwiftmapPatch({ layers: [{ id: "a", type: "circle_markers" }] },
+        [{ op: "style", id: "a", overrides: { 3: { color: "#f00" }, 9: { color: "#f00" } } }], []);
+    assert.deepEqual(Object.keys(first.layers[0].style_overrides), ["3", "9"]);
+
+    const second = applySwiftmapPatch(first, [{ op: "style", id: "a", overrides: { 5: { color: "#0f0" } } }], []);
+    assert.deepEqual(Object.keys(second.layers[0].style_overrides), ["5"],
+        "the previous highlight is gone without being undone");
+});
+
+test("an empty style op clears the highlight", () => {
+    const on = applySwiftmapPatch({ layers: [{ id: "a", type: "circle_markers" }] },
+        [{ op: "style", id: "a", overrides: { 3: { color: "#f00" } } }], []);
+    const off = applySwiftmapPatch(on, [{ op: "style", id: "a", overrides: {} }], []);
+    assert.deepEqual(off.layers[0].style_overrides, {});
+});
+
+test("style overrides outrank both the layer style and per-feature styles", () => {
+    const layer = {
+        id: "a", type: "circle_markers", color: "#111", radius: 5,
+        feature_styles: [{ color: "#222", radius: 7 }],
+        style_overrides: { 0: { color: "#ffcc00" } },
+    };
+    const style = styleFor(layer, 0);
+    assert.equal(style.color, "#ffcc00", "the selection wins");
+    assert.equal(style.radius, 7, "what it does not override still comes from the data");
+});
+
+test("styleFor falls back cleanly when a feature has no override", () => {
+    const layer = {
+        id: "a", type: "circle_markers", color: "#111",
+        feature_styles: [{ color: "#222" }, { color: "#333" }],
+        style_overrides: { 0: { color: "#ffcc00" } },
+    };
+    assert.equal(styleFor(layer, 1).color, "#333");
+});

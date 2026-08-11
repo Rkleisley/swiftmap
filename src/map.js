@@ -49,6 +49,29 @@ export function collectWebglLayers(layers, groupConfigs) {
 // Ops are addressed by layer id and applied idempotently: "add" upserts rather than
 // appending blindly, so a patch that races the initial trait snapshot cannot duplicate
 // a layer, and a "remove" for something already gone is a no-op.
+// Applies `update` to one layer wherever it sits, descending into groups. add_collection
+// nests its point, line and polygon layers inside a group layer, so an op addressed at a
+// nested id would otherwise match nothing and silently do nothing. Returns the original
+// array untouched when the id is not found, so an unmatched op costs no re-render.
+function updateLayerById(layers, id, update) {
+    let hit = false;
+    const next = layers.map(l => {
+        if (l.id === id) {
+            hit = true;
+            return update(l);
+        }
+        if (l.type === "group" && Array.isArray(l.layers)) {
+            const subs = updateLayerById(l.layers, id, update);
+            if (subs !== l.layers) {
+                hit = true;
+                return { ...l, layers: subs };
+            }
+        }
+        return l;
+    });
+    return hit ? next : layers;
+}
+
 export function applySwiftmapPatch(state, ops, buffers) {
     let layers = state.layers || [];
     let bufferMap = state.buffers || {};
@@ -69,6 +92,18 @@ export function applySwiftmapPatch(state, ops, buffers) {
             } else {
                 layers = layers.map((l, i) => (i === idx ? incoming : l));
             }
+        } else if (op.op === "set") {
+            // Field-level update. "replace" carries the whole layer, so flipping `visible`
+            // on a 50k-point layer resent every property it holds -- half a megabyte to
+            // change one boolean, on every click of a checkbox.
+            layers = updateLayerById(layers, op.id, l => ({ ...l, ...(op.fields || {}) }));
+        } else if (op.op === "style") {
+            // Per-feature style overrides, replaced wholesale rather than merged: a
+            // selection describes its complete state, so sending {} clears it and no
+            // caller has to track what the previous highlight touched.
+            layers = updateLayerById(layers, op.id, l => ({
+                ...l, style_overrides: op.overrides || {},
+            }));
         } else if (op.op === "remove") {
             layers = layers.filter(l => l.id !== op.id);
         } else if (op.op === "buffer") {

@@ -49,10 +49,15 @@ function registerHoverMatch(map, priority, action) {
 // when features actually differ, so a uniform layer costs nothing extra here.
 export function styleFor(layer, index) {
     const perFeature = layer.feature_styles;
+    // style_overrides is transient selection styling and wins over both the layer's own
+    // style and its data-driven per-feature styles. Keeping it in its own field is what
+    // lets a highlight be cleared by dropping it, with nothing to restore.
+    const override = layer.style_overrides && layer.style_overrides[index];
     if (Array.isArray(perFeature) && perFeature[index]) {
-        return { ...layer, ...perFeature[index] };
+        return override ? { ...layer, ...perFeature[index], ...override }
+                        : { ...layer, ...perFeature[index] };
     }
-    return layer;
+    return override ? { ...layer, ...override } : layer;
 }
 
 export function getIndexedProperties(properties, index) {
@@ -345,17 +350,23 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         const count = coords.length / 2;
 
         const perFeature = Array.isArray(layer.feature_styles) ? layer.feature_styles : null;
+        // Selection styling, applied over the layer's own and its data-driven styles.
+        const overrides = layer.style_overrides || null;
+
         for (let i = 0; i < count; i++) {
+            const fromData = perFeature ? perFeature[i] : null;
+            const selected = overrides ? overrides[i] : null;
+            const color = (selected && selected.color) || (fromData && fromData.color);
+            const radius = selected && selected.radius != null ? selected.radius
+                : fromData && fromData.radius != null ? fromData.radius
+                : null;
+
             pointsList.push([coords[i * 2], coords[i * 2 + 1]]);
             indexMapping.push({
                 layer: layer,
                 originalIndex: i,
-                colorRGB: perFeature && perFeature[i]
-                    ? parseColor(perFeature[i].color, fallbackColor)
-                    : colorRGB,
-                size: perFeature && perFeature[i] && perFeature[i].radius != null
-                    ? Number(perFeature[i].radius)
-                    : layerSize
+                colorRGB: color ? parseColor(color, fallbackColor) : colorRGB,
+                size: radius != null ? Number(radius) : layerSize
             });
         }
     }

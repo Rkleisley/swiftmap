@@ -508,14 +508,85 @@ class Map(anywidget.AnyWidget):
         return find_layers(self.layers, target, **criteria)
 
     def _set_layer_fields(self, layers: List[Any], fields: Dict[str, Any]) -> "Map":
-        """Applies `fields` to the given layers, emitting nothing if none actually change."""
+        """
+        Applies `fields` to the given layers, emitting nothing if none actually change.
+
+        Sends one `set` op per layer rather than replacing them. A replace carries the whole
+        layer, so hiding a 50k-point layer resent every property it holds -- roughly half a
+        megabyte to change one boolean, on every click of a checkbox wired to a reactive.
+        """
         if not layers:
             return self
-        changes = {l.get("id"): fields for l in layers if l.get("id") is not None}
-        new_layers, changed = apply_to_layers(self.layers, changes, lambda d: LayerConfig(**d))
-        if changed:
-            with self.batch():
-                self._layers_update_many(new_layers, changed)
+        targets = [l for l in layers if l.get("id") is not None
+                   and any(l.get(k) != v for k, v in fields.items())]
+        if not targets:
+            return self
+
+        changes = {l.get("id"): fields for l in targets}
+        new_layers, _ = apply_to_layers(self.layers, changes, lambda d: LayerConfig(**d))
+        self._set_trait_quietly("layers", new_layers)
+        with self.batch():
+            for layer in targets:
+                self._emit({"op": "set", "id": layer.get("id"), "fields": dict(fields)})
+        return self
+
+    def set_feature_styles(self, target: Any = None, overrides: Optional[Dict[int, Any]] = None,
+                           **criteria) -> "Map":
+        """
+        Overrides the style of individual features within the matching layers.
+
+        Intended for transient styling -- a highlighted row, a hovered feature -- which is
+        why the overrides replace whatever was set before rather than merging with it.
+        Passing `{}` clears them, so a caller describes the state it wants and never has to
+        remember what the previous call touched.
+
+        Overrides sit in their own field, above both the layer's style and any per-feature
+        styling from the data, so clearing one restores the underlying style with nothing
+        to put back.
+
+        Parameters
+        ----------
+        target : str or layer or list, optional
+            Matches an id or a name, as in `hide`.
+        overrides : dict, optional
+            Feature index -> style dict, e.g. `{3: {"color": "#ffcc00", "radius": 14}}`.
+            `None` or `{}` clears the layer's overrides.
+        **criteria
+            Further narrowing -- `types`, `exclude_types`, `group`; see `hide`.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+
+        Warns
+        -----
+        SwiftMapWarning
+            If nothing matched.
+
+        Examples
+        --------
+        >>> m.set_feature_styles("Sites", {12: {"color": "#ffcc00", "radius": 14}})
+        >>> m.set_feature_styles("Sites", {})        # clear
+        """
+        matched = self.find_layers(target, **criteria)
+        if not matched:
+            warn(f"set_feature_styles matched no layers "
+                 f"({_describe_target(target, criteria)}). Nothing was styled.")
+            return self
+
+        wanted = {str(k): v for k, v in (overrides or {}).items()}
+        targets = [l for l in matched
+                   if l.get("id") is not None and (l.get("style_overrides") or {}) != wanted]
+        if not targets:
+            return self
+
+        changes = {l.get("id"): {"style_overrides": wanted} for l in targets}
+        new_layers, _ = apply_to_layers(self.layers, changes, lambda d: LayerConfig(**d))
+        self._set_trait_quietly("layers", new_layers)
+        with self.batch():
+            for layer in targets:
+                self._emit({"op": "style", "id": layer.get("id"), "overrides": wanted})
         return self
 
     def hide(self, target: Any = None, **criteria) -> "Map":
