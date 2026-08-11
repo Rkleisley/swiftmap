@@ -495,10 +495,22 @@ export default {
             }
             updateMapView();
         });
-        model.on("change:fit_bounds_coords", () => {
-            const bounds = model.get("fit_bounds_coords");
-            if (bounds && bounds.length > 0) {
-                map.fitBounds(bounds);
+        // Fitting the view is a command, not state: asking to fit the same bounds twice
+        // must move the map both times, since the user may have panned away in between.
+        // The request carries a sequence number so an identical fit still fires a change.
+        model.on("change:fit_bounds_request", () => {
+            const req = model.get("fit_bounds_request") || {};
+            const bounds = req.bounds;
+            if (!bounds || bounds.length === 0) return;
+
+            const options = {};
+            if (req.padding != null) options.padding = [req.padding, req.padding];
+            if (req.max_zoom != null) options.maxZoom = req.max_zoom;
+            map.fitBounds(bounds, options);
+
+            // Applied after the fit, since it is relative to whatever zoom the fit chose.
+            if (req.zoom_offset) {
+                map.setZoom(map.getZoom() + req.zoom_offset);
             }
         });
 

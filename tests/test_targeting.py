@@ -245,3 +245,132 @@ def test_styling_can_target_one_geometry_of_a_collection(m):
 def test_styling_nothing_warns(m):
     with pytest.warns(SwiftMapWarning, match="set_feature_styles matched no layers"):
         m.set_feature_styles("Typo", {0: {"color": "#f00"}})
+
+
+# --- bounds and viewport --------------------------------------------------------------
+@pytest.fixture
+def dwells():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SwiftMapWarning)
+        mp = swiftmap.Map()
+        for i in range(4):
+            mp.add_circle_markers([[36.0 + i, -5.3], [36.1 + i, -5.2]],
+                                  name=f"Dwell {i + 1}", layer_group="Dwells")
+        mp.add_circle_markers([[40.0, -3.0]], name="Ports", layer_group="Other")
+    return mp
+
+
+def visible(m):
+    return {l["name"]: l.get("visible") for l in m.find_layers()
+            if l.get("type") != "basemap"}
+
+
+def test_bounds_come_from_the_layers_themselves(dwells):
+    """No coordinates need passing back in; each layer recorded its own extent."""
+    assert dwells.bounds_of("Dwell 1") == [[36.0, -5.3], [36.1, -5.2]]
+
+
+def test_bounds_of_several_layers_is_their_union(dwells):
+    box = dwells.bounds_of(["Dwell 1", "Dwell 3"])
+    assert box == [[36.0, -5.3], [38.1, -5.2]]
+
+
+def test_bounds_of_nothing_is_none(dwells):
+    assert dwells.bounds_of("Typo") is None
+
+
+def test_fitting_to_no_bounds_does_nothing(dwells):
+    """So m.fit_bounds(m.bounds_of(sel)) is safe on an empty selection."""
+    dwells.fit_bounds(None)
+    assert dwells.fit_bounds_request == {}
+
+
+def test_fitting_the_same_bounds_twice_still_moves_the_map(dwells):
+    """A viewport change is a command, not state -- the user may have panned away."""
+    dwells.fit_bounds([[36.0, -5.3], [36.1, -5.2]])
+    first = dwells.fit_bounds_request["seq"]
+    dwells.fit_bounds([[36.0, -5.3], [36.1, -5.2]])
+    assert dwells.fit_bounds_request["seq"] > first
+
+
+def test_fit_options_reach_the_request(dwells):
+    dwells.fit_bounds([[36.0, -5.3], [36.1, -5.2]], zoom_offset=-1, max_zoom=16, padding=20)
+    req = dwells.fit_bounds_request
+    assert (req["zoom_offset"], req["max_zoom"], req["padding"]) == (-1, 16, 20)
+
+
+# --- select ---------------------------------------------------------------------------
+def test_select_shows_the_chosen_and_hides_the_rest_of_scope(dwells):
+    ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
+    dwells.select([ids[1], ids[2]], scope="Dwells")
+    assert visible(dwells) == {"Dwell 1": False, "Dwell 2": True, "Dwell 3": True,
+                               "Dwell 4": False, "Ports": True}
+
+
+def test_selecting_again_needs_no_undoing(dwells):
+    """Each call describes the whole selection, so switching is one call."""
+    ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
+    dwells.select([ids[0]], scope="Dwells")
+    dwells.select([ids[3]], scope="Dwells")
+    assert visible(dwells)["Dwell 1"] is False
+    assert visible(dwells)["Dwell 4"] is True
+
+
+def test_clearing_restores_everything_in_scope(dwells):
+    ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
+    dwells.select([ids[0]], scope="Dwells")
+    dwells.select(None, scope="Dwells")
+    assert all(visible(dwells)[f"Dwell {i + 1}"] for i in range(4))
+
+
+def test_clearing_leaves_layers_outside_the_scope_alone(dwells):
+    """
+    A layer the user hid by hand is not the selection's to restore. Without a scope,
+    clearing a dwell selection would turn an unrelated layer back on.
+    """
+    dwells.hide("Ports")
+    ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
+    dwells.select([ids[0]], scope="Dwells")
+    dwells.select(None, scope="Dwells")
+    assert visible(dwells)["Ports"] is False
+
+
+def test_scope_is_inferred_from_the_selection(dwells):
+    ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
+    dwells.select([ids[1]], zoom=False)
+    assert visible(dwells)["Dwell 1"] is False, "siblings in the same group are hidden"
+    assert visible(dwells)["Ports"] is True, "a different group is untouched"
+
+
+def test_select_can_fit_the_view_to_what_it_selected(dwells):
+    ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
+    dwells.select([ids[0], ids[2]], scope="Dwells", zoom=True, zoom_offset=-1)
+    req = dwells.fit_bounds_request
+    assert req["bounds"] == [[36.0, -5.3], [38.1, -5.2]]
+    assert req["zoom_offset"] == -1
+
+
+def test_select_does_not_move_the_view_unless_asked(dwells):
+    ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
+    dwells.select([ids[0]], scope="Dwells")
+    assert dwells.fit_bounds_request == {}, "a highlight should not yank the map"
+
+
+def test_a_whole_selection_is_one_patch_message(dwells):
+    """Four visibility changes, one message -- the batch is what makes this per-click."""
+    ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
+    dwells.comm = Comm()
+    dwells.comm.msgs.clear()
+    dwells.select([ids[1]], scope="Dwells")
+    patches = [d for d in dwells.comm.msgs if (d.get("content") or {}).get("ops")]
+    assert len(patches) == 1
+    assert all(o["op"] == "set" for o in patches[0]["content"]["ops"])
+
+
+def test_reselecting_the_same_rows_emits_nothing(dwells):
+    ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
+    dwells.select([ids[1]], scope="Dwells")
+    dwells.comm = Comm()
+    dwells.comm.msgs.clear()
+    dwells.select([ids[1]], scope="Dwells")
+    assert ops_of(dwells.comm) == []
