@@ -144,3 +144,56 @@ def test_map_effect_requires_shiny_only_when_used():
     """swiftmap imports cleanly without shiny; the dependency is per-function."""
     import swiftmap.shiny as mod
     assert "shiny" not in getattr(mod, "__dict__", {}), "not imported at module scope"
+
+
+# --- composing with reactive.event ------------------------------------------------------
+# The regression that motivated these: the docstring originally said to stack
+# @reactive.event under @map_effect. Shiny validates at decoration time that the function
+# it wraps takes no parameters, and a map_effect body takes the map -- so an app written
+# that way raised TypeError at startup, before any session existed.
+
+def test_the_stacked_event_order_is_impossible_by_shinys_rules(m):
+    """Pins WHY event= is an argument. If shiny ever relaxes this, the argument can too."""
+    from shiny import reactive
+    with pytest.raises(TypeError, match="no required parameters"):
+        reactive.event(lambda: 1)(lambda mp: None)
+
+
+def test_event_as_an_argument_decorates_cleanly(m):
+    from swiftmap.shiny import map_effect
+
+    @map_effect(m, event=lambda: 1)
+    def handler(mp):
+        pass
+
+    assert type(handler).__name__ == "Effect_", "a registered effect came back"
+
+
+def test_event_accepts_a_list_of_dependencies(m):
+    from swiftmap.shiny import map_effect
+
+    @map_effect(m, event=[lambda: 1, lambda: 2])
+    def handler(mp):
+        pass
+
+    assert type(handler).__name__ == "Effect_"
+
+
+def test_async_bodies_compose_with_event(m):
+    from swiftmap.shiny import map_effect
+
+    @map_effect(m, event=lambda: 1)
+    async def handler(mp):
+        pass
+
+    assert type(handler).__name__ == "Effect_"
+
+
+def test_without_event_it_still_decorates(m):
+    from swiftmap.shiny import map_effect
+
+    @map_effect(m)
+    def handler(mp):
+        pass
+
+    assert type(handler).__name__ == "Effect_"

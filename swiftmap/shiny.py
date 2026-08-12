@@ -17,7 +17,6 @@ the live instance from an effect:
     def _(m):
         m.select(chosen, scope="Dwells", zoom=True, zoom_offset=-1)
 """
-import functools
 import inspect
 from typing import Any, Callable, Optional
 
@@ -47,7 +46,8 @@ def resolve_map(source: Any) -> Optional[Any]:
     return None
 
 
-def map_effect(source: Any, *, batch: bool = True) -> Callable:
+def map_effect(source: Any, *, event: Any = None, batch: bool = True,
+               ignore_none: bool = True, ignore_init: bool = False) -> Callable:
     """
     Runs a reactive effect against the live map, with the usual ceremony removed.
 
@@ -62,9 +62,17 @@ def map_effect(source: Any, *, batch: bool = True) -> Callable:
     ----------
     source
         A `@render_widget` renderer, a Map, or a callable returning either.
+    event
+        What `@reactive.event` would take: a reactive dependency, or a list of them, that
+        alone triggers the effect. This is an argument rather than a stacked decorator
+        because it cannot be one -- see Notes.
     batch : bool, default True
         Coalesce every update in the body into one message. Turn it off only if you need
         the client to see an intermediate state, which is rare and slower.
+    ignore_none : bool, default True
+        Forwarded to `reactive.event`: skip when the event value is None.
+    ignore_init : bool, default False
+        Forwarded to `reactive.event`: skip the value the event starts with.
 
     Returns
     -------
@@ -73,11 +81,13 @@ def map_effect(source: Any, *, batch: bool = True) -> Callable:
 
     Notes
     -----
-    Composes with `@reactive.event`, which goes underneath so it applies to the function
-    rather than to the effect:
+    Do NOT stack `@reactive.event` under this decorator. Shiny checks at decoration time
+    that the function it wraps takes no parameters, and the body here takes the map --
+    so the stacked form raises TypeError before the app even starts. The event goes
+    through the argument instead, and is applied where it belongs, between the zero-arg
+    wrapper and the effect registration:
 
-        @map_effect(mapview)
-        @reactive.event(input.search)
+        @map_effect(mapview, event=input.search)
         def _(m): ...
 
     `async def` is supported. The batch is held across any `await` inside the body, so the
@@ -92,13 +102,19 @@ def map_effect(source: Any, *, batch: bool = True) -> Callable:
     ...     rows = (table.cell_selection() or {}).get("rows", [])
     ...     m.select([dwell_ids[i] for i in rows], scope="Dwells",
     ...              zoom=True, zoom_offset=-1)
+
+    >>> @map_effect(mapview, event=input.btn_search)
+    ... async def handle_search(m):
+    ...     m.clear_group("Track")
+    ...     plot_track_on_map(m, generate_points())
     """
     from shiny import reactive
 
     def decorator(fn: Callable) -> Any:
+        # functools.wraps is deliberately NOT used: it sets __wrapped__, which
+        # inspect.signature follows, so the zero-arg wrapper would report the body's
+        # (m) parameter and fail shiny's no-parameters validation at decoration time.
         if inspect.iscoroutinefunction(fn):
-            @reactive.effect
-            @functools.wraps(fn)
             async def wrapper():
                 m = resolve_map(source)
                 if m is None:
@@ -108,8 +124,6 @@ def map_effect(source: Any, *, batch: bool = True) -> Callable:
                 with m.batch():
                     return await fn(m)
         else:
-            @reactive.effect
-            @functools.wraps(fn)
             def wrapper():
                 m = resolve_map(source)
                 if m is None:
@@ -118,6 +132,14 @@ def map_effect(source: Any, *, batch: bool = True) -> Callable:
                     return fn(m)
                 with m.batch():
                     return fn(m)
-        return wrapper
+
+        wrapper.__name__ = getattr(fn, "__name__", "map_effect_handler")
+        wrapper.__doc__ = fn.__doc__
+
+        if event is not None:
+            events = event if isinstance(event, (list, tuple)) else (event,)
+            wrapper = reactive.event(*events, ignore_none=ignore_none,
+                                     ignore_init=ignore_init)(wrapper)
+        return reactive.effect(wrapper)
 
     return decorator
