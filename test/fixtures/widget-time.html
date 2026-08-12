@@ -36,8 +36,9 @@ const layers = [
   { id: "pts", type: "circle_markers", name: "Sites", layer_group: "Feeds/Active",
     visible: true, radius: 12, color: "#ff0000", fillColor: "#ff0000", fillOpacity: 1.0,
     weight: 2, opacity: 1.0, autobind_popup: true, autobind_tooltip: true,
-    properties: { site: ["Alpha", "Bravo"] },
-    // One observation per day, so with duration "period" each tick draws exactly one.
+    properties: { site: ["Alpha", "Bravo", "Charlie"] },
+    // Observations on separate days, so with duration "period" each tick draws at most
+    // one -- and the trail handle has days of track to drag across.
     time: { field: "site", duration: "period" },
     bounds: [[35.98, -5.32], [36.12, -5.18]] },
   { id: "poly", type: "polygon", name: "Zone", layer_group: "Feeds/Zones", visible: true,
@@ -50,9 +51,10 @@ const model = makeModel({
   layers,
   group_configs: {},
   coordinate_buffers: {
-    pts: buffer([[36.00, -5.30], [36.10, -5.20]]),
+    pts: buffer([[36.00, -5.30], [36.10, -5.20], [36.05, -5.25]]),
     "pts::times": buffer([[Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 1)],
-                          [Date.UTC(2026, 0, 2), Date.UTC(2026, 0, 2)]]),
+                          [Date.UTC(2026, 0, 2, 12), Date.UTC(2026, 0, 2, 12)],
+                          [Date.UTC(2026, 0, 3, 12), Date.UTC(2026, 0, 3, 12)]]),
   },
   center: [36.05, -5.25], zoom: 12, crs: "EPSG:3857",
   auto_sync: true, sync_trigger: 0, show_logo: false,

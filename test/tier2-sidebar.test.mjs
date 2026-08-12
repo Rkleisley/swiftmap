@@ -390,3 +390,68 @@ test("no position means top-center, and nonsense falls back to it", () => {
     assert.equal(el2.style.top, "10px");
     assert.equal(el2.style.left, "50%");
 });
+
+// --- the track: span, ruler, trail handle -------------------------------------------
+const H = 3600 * 1000;
+const trackState = (over = {}) => ({
+    ticks: [T0, T0 + H, T0 + 2 * H, T0 + 3 * H], index: 3,
+    periodMs: H, gridMs: H / 2, window: null, ...over,
+});
+
+test("the window span shows one period by default", () => {
+    const { el } = mountTime(trackState());
+    const span = el.querySelector(".swiftmap-time-span");
+    // thumb at 3h of a 3h bar; one 1h period back = 2/3 of the track
+    assert.equal(span.style.left, "66.67%");
+    assert.equal(span.style.width, "33.33%");
+    assert.ok(!span.classList.contains("override"));
+});
+
+test("a dragged window widens the span and marks it as an override", () => {
+    const { el } = mountTime(trackState({ window: "PT2H30M" }));
+    const span = el.querySelector(".swiftmap-time-span");
+    assert.equal(span.style.left, "16.67%", "2.5h back on a 3h bar");
+    assert.ok(span.classList.contains("override"));
+});
+
+test("the trail handle parks on the thumb until a window is dragged out", () => {
+    const { el } = mountTime(trackState());
+    const trail = el.querySelector(".swiftmap-time-trail");
+    assert.equal(parseFloat(trail.style.left), 100, "on the thumb: not grabbed");
+    assert.ok(!trail.classList.contains("active"));
+    renderTimeControl(el.parentElement, trackState({ window: "PT1H" }), {});
+    assert.equal(trail.style.left, "66.67%");
+    assert.ok(trail.classList.contains("active"));
+    assert.equal(trail.getAttribute("aria-valuetext"), "PT1H");
+});
+
+test("the ruler draws labelled majors and silent minors", () => {
+    const { el } = mountTime(trackState());
+    const marks = el.querySelectorAll(".swiftmap-time-mark");
+    const majors = el.querySelectorAll(".swiftmap-time-mark.major");
+    const labels = el.querySelectorAll(".swiftmap-time-mark-label");
+    assert.equal(majors.length, 4, "one per interval boundary");
+    assert.equal(marks.length - majors.length, 3, "one 30-min minor inside each hour");
+    assert.ok(labels.length >= 1 && labels.length <= 4);
+    assert.ok([...labels].every(l => /^\d\d:\d\d$/.test(l.textContent)),
+        "hourly intervals label as HH:MM");
+});
+
+test("keyboard on the trail handle steps the window one grid at a time", () => {
+    const commits = [];
+    const { el, dom } = mountTime(trackState(),
+        { onWindowCommit: iso => commits.push(iso) });
+    const trail = el.querySelector(".swiftmap-time-trail");
+    trail.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowLeft" }));
+    renderTimeControl(el.parentElement, trackState({ window: "PT30M" }),
+        { onWindowCommit: iso => commits.push(iso) });
+    trail.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Delete" }));
+    assert.deepEqual(commits, ["PT30M", null],
+        "one 30-min grid step out, then cleared back to per-layer control");
+});
+
+test("a calendar period hides the trail handle rather than lying", () => {
+    const { el } = mountTime(trackState({ periodMs: null, gridMs: null }));
+    assert.equal(el.querySelector(".swiftmap-time-trail").style.display, "none",
+        "months have no fixed width, so there is no honest grid to drag on");
+});

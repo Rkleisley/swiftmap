@@ -274,3 +274,40 @@ suite("a highlight repaints the merged WebGL layer", async () => {
             "and its colour callback resolves the highlight, #ffcc00");
     });
 });
+
+suite("dragging the trail handle widens the window for every layer", async () => {
+    // The fixture's two points sit on consecutive days with duration "period", so the
+    // last tick draws one point. Dragging the trail handle a day back must bring the
+    // other into the window -- and release must write the override into time_config so
+    // Python sees the same window the bar shows.
+    await withPage(async (page, errors) => {
+        const result = await page.evaluate(() => new Promise(resolve => {
+            const slider = document.querySelector(".swiftmap-time-slider");
+            slider.value = slider.max;
+            slider.dispatchEvent(new Event("input"));
+            setTimeout(() => {
+                const count = () => {
+                    const a = window.L.glify.pointsInstances;
+                    return a[a.length - 1].settings.data.length;
+                };
+                const before = count();
+                const track = document.querySelector(".swiftmap-time-track");
+                const trail = document.querySelector(".swiftmap-time-trail");
+                const rect = track.getBoundingClientRect();
+                const opts = (x) => ({ bubbles: true, clientX: x, pointerId: 1 });
+                trail.dispatchEvent(new PointerEvent("pointerdown", opts(rect.right)));
+                trail.dispatchEvent(new PointerEvent("pointermove", opts(rect.left)));
+                trail.dispatchEvent(new PointerEvent("pointerup", opts(rect.left)));
+                setTimeout(() => resolve({
+                    before,
+                    after: count(),
+                    window: (window.__model.get("time_config") || {}).window || null,
+                }), 400);
+            }, 400);
+        }));
+        assert.equal(result.before, 1, "the last period alone holds one point");
+        assert.equal(result.after, 2, "the widened window brings an earlier point in");
+        assert.equal(result.window, "PT72H", "the release wrote the override back");
+        assert.deepEqual(errors, [], "no errors while dragging");
+    }, "widget-time.html");
+});

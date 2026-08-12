@@ -1,6 +1,6 @@
 import { loadJS, bindPopup, bindTooltip, parseColor } from "./utils.js";
 import { pinShader } from "./shaders.js";
-import { windowFor, featureInWindow, timesFor, layerInWindow } from "./timecontrol.js";
+import { windowFor, featureInWindow, timesFor, layerInWindow, effectiveDuration } from "./timecontrol.js";
 
 function setupGlifyProjection(glInstance) {
     if (glInstance && glInstance.layer) {
@@ -368,7 +368,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         // simply not pushed; indexMapping carries originalIndex, so popups and properties
         // on the survivors keep pointing at the right rows.
         const win = timeState && layer.time
-            ? windowFor(timeState.tick, layer.time.duration, timeState.period) : null;
+            ? windowFor(timeState.tick, effectiveDuration(layer, timeState), timeState.period)
+            : null;
         const times = win ? timesFor(layer, coordinateBuffers) : null;
 
         for (let i = 0; i < count; i++) {

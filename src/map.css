@@ -99,3 +99,113 @@
     padding: 2px;
     cursor: pointer;
 }
+
+/* The track: window span, ruler and trail handle under a transparent native range input.
+   The input stays for keyboard, screen readers and the thumb; the rest is what a native
+   slider cannot draw. */
+.swiftmap-time-control .swiftmap-time-track {
+    position: relative;
+    width: 260px;
+    height: 30px;
+    display: inline-block;
+}
+.swiftmap-time-track .swiftmap-time-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    height: 18px;
+    background: transparent;
+    cursor: pointer;
+}
+.swiftmap-time-track .swiftmap-time-span {
+    position: absolute;
+    top: 6px;
+    height: 6px;
+    background: #74b9e0;
+    border-radius: 3px;
+    pointer-events: none;
+}
+.swiftmap-time-track .swiftmap-time-span.override { background: #31708f; }
+.swiftmap-time-track .swiftmap-time-trail {
+    position: absolute;
+    top: 3px;
+    width: 12px;
+    height: 12px;
+    margin-left: -6px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #74b9e0;
+    cursor: ew-resize;
+    z-index: 2;
+    touch-action: none;
+}
+.swiftmap-time-track .swiftmap-time-trail.active { border-color: #31708f; background: #d9edf7; }
+.swiftmap-time-track .swiftmap-time-ruler {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 17px;
+    height: 13px;
+    pointer-events: none;
+}
+.swiftmap-time-ruler .swiftmap-time-mark {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 4px;
+    background: #999;
+}
+.swiftmap-time-ruler .swiftmap-time-mark.major { height: 6px; background: #555; }
+.swiftmap-time-ruler .swiftmap-time-mark-label {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    transform: translateX(-50%);
+    font-size: 8px;
+    color: #555;
+    white-space: nowrap;
+}
+
+/* The native input supplies only the thumb; its own track is stripped so the window span
+   is the visible bar, on a grey base rail. */
+.swiftmap-time-track .swiftmap-time-base {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: #e2e2e2;
+    border-radius: 3px;
+    pointer-events: none;
+}
+.swiftmap-time-track .swiftmap-time-slider {
+    -webkit-appearance: none;
+    appearance: none;
+}
+.swiftmap-time-track .swiftmap-time-slider::-webkit-slider-runnable-track {
+    background: transparent;
+    height: 18px;
+}
+.swiftmap-time-track .swiftmap-time-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    border-radius: 50%;
+    background: #31708f;
+    border: 2px solid #fff;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+}
+.swiftmap-time-track .swiftmap-time-slider::-moz-range-track { background: transparent; }
+.swiftmap-time-track .swiftmap-time-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #31708f;
+    border: 2px solid #fff;
+    cursor: pointer;
+}

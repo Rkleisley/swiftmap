@@ -2,7 +2,8 @@ import { loadCSS, loadJS } from "./utils.js";
 import { renderSidebarControls, normalizeRadioLayers } from "./sidebar.js";
 import { renderLayer, renderMergedGlLayer } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
-         layerInWindow, renderTimeControl, advance } from "./timecontrol.js";
+         layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
+         collectDurationsMs } from "./timecontrol.js";
 
 // True if a layer is visible and no folder above it is switched off.
 //
@@ -252,7 +253,8 @@ export default {
         // locally, and time_current is written back at most once a second while playing.
         let timeState = null;
         const timeUI = { ticks: [], key: "", index: 0, playing: false, loop: false,
-                         speed: 1, timer: null, lastWrite: 0, started: false };
+                         speed: 1, timer: null, lastWrite: 0, started: false,
+                         window: null, periodMs: null, gridMs: null };
 
         function stopPlayback() {
             if (timeUI.timer) clearInterval(timeUI.timer);
@@ -272,7 +274,8 @@ export default {
 
         function seekTo(index, { write = true } = {}) {
             timeUI.index = Math.max(0, Math.min(index, timeUI.ticks.length - 1));
-            timeState = { tick: timeUI.ticks[timeUI.index], period: timeState.period };
+            timeState = { tick: timeUI.ticks[timeUI.index], period: timeState.period,
+                          window: timeUI.window };
             if (write) writeTimeCurrent(!timeUI.playing);
             renderTimeControl(el, timeUI, timeHandlers);
             queueSync();
@@ -318,6 +321,26 @@ export default {
                 timeUI.speed = speed;
                 if (timeUI.playing) startPlayback();
             },
+            // Live during the drag: local state and a re-render only, no model chatter.
+            onWindowDrag: (iso) => {
+                timeUI.window = iso;
+                if (timeState) timeState = { ...timeState, window: iso };
+                renderTimeControl(el, timeUI, timeHandlers);
+                queueSync();
+            },
+            // On release (or a keyboard step): the override lands in time_config so
+            // Python and Shiny see the same window the bar shows. null clears the key,
+            // handing control back to per-layer durations.
+            onWindowCommit: (iso) => {
+                timeHandlers.onWindowDrag(iso);
+                if (model.comm) {
+                    const cfg = { ...(model.get("time_config") || {}) };
+                    if (iso) cfg.window = iso;
+                    else delete cfg.window;
+                    model.set("time_config", cfg);
+                    model.save_changes();
+                }
+            },
         };
 
         // Creates, retunes or removes the slider to match the layers present. Ticks are
@@ -345,7 +368,19 @@ export default {
                 timeUI.ticks = generateTicks(extent.min, extent.max, period);
                 timeUI.index = Math.min(timeUI.index, timeUI.ticks.length - 1);
             }
-            timeState = { tick: timeUI.ticks[timeUI.index], period };
+
+            // The shared window override, config-driven; a bad string clears rather than
+            // guessing. The drag grid is the gcd of the interval and every attached
+            // duration -- the largest step that lands on all of them -- so a 2.5h trail
+            // is draggable on a 1h bar. Calendar periods have no fixed width; the ruler
+            // then shows interval marks only and the trail handle hides.
+            timeUI.window = cfg.window && parsePeriod(cfg.window) ? cfg.window : null;
+            timeUI.periodMs = periodToMs(period);
+            timeUI.gridMs = timeUI.periodMs
+                ? gcdGridMs(timeUI.periodMs, collectDurationsMs(layerState, timeUI.window))
+                : null;
+
+            timeState = { tick: timeUI.ticks[timeUI.index], period, window: timeUI.window };
             timeUI.position = cfg.position || "top-center";
 
             if (!timeUI.started) {
@@ -511,6 +546,7 @@ export default {
                     featureStyles: l.feature_styles,
                     time: l.time,
                     tick: l.time && timeState ? timeState.tick : 0,
+                    win: l.time && timeState ? timeState.window : null,
                     bufLen: coordinateBuffers[l.id]?.byteLength || 0,
                     locLen: l.locations?.length || 0
                 })));

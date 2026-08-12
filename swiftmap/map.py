@@ -816,6 +816,13 @@ class Map(anywidget.AnyWidget):
             Start over when playback reaches the end. Default False.
         speed : float
             Playback rate in ticks per second. Default 1.
+        window : str or None
+            Shared trailing window as an ISO8601 duration ('PT2H30M'). While set it
+            overrides every layer's own `duration` -- it is the same override dragging
+            the bar's trail handle creates, so Python and the bar never disagree.
+            Pass None to clear it and hand control back to per-layer durations.
+            Fixed-width durations (hours, days) draw exactly on the bar; calendar
+            durations (months) filter correctly but cannot be depicted as a span.
         position : str
             Where the control sits on the map: 'top-left', 'top-center', 'top-right',
             'left-center', 'right-center', 'bottom-left', 'bottom-center' or
@@ -831,6 +838,20 @@ class Map(anywidget.AnyWidget):
             warn(f"configure_time: position {options['position']!r} is not one of "
                  f"{sorted(TIME_POSITIONS)}. Keeping the previous position.")
             options.pop("position")
+        if "window" in options:
+            window = options.pop("window")
+            if window is None:
+                # Clearing is removing the key, not storing None: the frontend treats a
+                # present window as an override, and per-layer durations return only
+                # when it is gone.
+                if "window" in self.time_config:
+                    self.time_config = {k: v for k, v in self.time_config.items()
+                                        if k != "window"}
+            elif not is_valid_period(window):
+                warn(f"configure_time: window {window!r} is not an ISO8601 duration "
+                     f"(like 'PT2H30M'). Keeping the previous window.")
+            else:
+                options["window"] = window
         if "period" in options and not is_valid_period(options["period"]):
             warn(f"configure_time: period {options['period']!r} is not an ISO8601 "
                  f"duration (like 'P1D' or 'PT1H'). Keeping the previous period.")

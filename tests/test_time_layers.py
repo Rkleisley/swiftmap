@@ -322,3 +322,22 @@ def test_vectorised_intervals_still_right_reversed_pairs():
     fast, _, _ = normalize_layer_times(
         {"datetime_start": [1781222401], "datetime_end": [1781222400]})
     assert list(fast) == [1781222400000.0, 1781222401000.0]
+
+
+def test_window_lands_in_the_shared_config(m):
+    m.configure_time(window="PT2H30M")
+    assert m.time_config["window"] == "PT2H30M"
+
+
+def test_clearing_the_window_removes_the_key_not_stores_none(m):
+    """The frontend treats a present key as an override; None must mean absent."""
+    m.configure_time(window="PT2H")
+    m.configure_time(window=None)
+    assert "window" not in m.time_config
+
+
+def test_a_bad_window_warns_and_keeps_the_old(m):
+    m.configure_time(window="PT1H")
+    with pytest.warns(SwiftMapWarning, match="not an ISO8601 duration"):
+        m.configure_time(window="2 hours")
+    assert m.time_config["window"] == "PT1H"

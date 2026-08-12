@@ -34,15 +34,18 @@ export function addPeriod(ms, p, sign = 1) {
         + p.hours * 3600 + p.minutes * 60 + p.seconds) * 1000);
 }
 
-// The slider's positions: the first tick sits one period after the earliest observation,
-// so the first window (tick - period, tick] contains it; the last tick is the first to
-// reach past the final observation. Capped because a mistyped PT1S over a year of data
+// The slider's positions: from the earliest observation to the first tick at or past the
+// final one, one per period. Capped because a mistyped PT1S over a year of data
 // would otherwise hang the tab building an array of millions.
 export const MAX_TICKS = 5000;
 
 export function generateTicks(startMs, endMs, p) {
-    const ticks = [];
+    // The first tick sits AT the earliest observation, not one period after it: windows
+    // are half-open (start, end], so a first tick at start+P would exclude the earliest
+    // point from its own window and it would never display at any tick.
+    const ticks = [startMs];
     let t = startMs;
+    if (t >= endMs) return ticks;
     while (ticks.length < MAX_TICKS) {
         t = addPeriod(t, p);
         ticks.push(t);
@@ -90,11 +93,19 @@ export function timesFor(layer, buffers) {
 // Whether a whole layer shows at the current tick. Lines, polygons and circles are one
 // geometry per layer, so they are in or out as a unit; a layer with no time metadata is
 // not the slider's to hide.
+// The duration a layer shows right now. A window dragged out on the bar is a user
+// gesture and outranks every layer's configured duration while it is active -- when the
+// user grabs the bar, the bar tells the truth for everything. Snapping the handle back
+// onto the thumb clears the override and layers return to their own settings.
+export function effectiveDuration(layer, timeState) {
+    return timeState.window || (layer.time && layer.time.duration);
+}
+
 export function layerInWindow(layer, buffers, timeState) {
     if (!layer.time || !timeState) return true;
     const times = timesFor(layer, buffers);
     if (!times || times.length < 2) return true;
-    const win = windowFor(timeState.tick, layer.time.duration, timeState.period);
+    const win = windowFor(timeState.tick, effectiveDuration(layer, timeState), timeState.period);
     return featureInWindow(times[0], times[1], win);
 }
 
@@ -157,6 +168,94 @@ function formatUTC(ms) {
     return new Date(ms).toISOString().slice(0, 19).replace("T", " ") + "Z";
 }
 
+// --- the window and the ruler --------------------------------------------------------
+
+// Fixed milliseconds for a period, or null when it moves through the calendar (months,
+// years) and has no fixed width. The ruler and the drag grid need fixed widths; calendar
+// periods fall back to the tick positions themselves.
+export function periodToMs(p) {
+    if (!p || p.years || p.months) return null;
+    return ((p.weeks * 7 + p.days) * 24 * 3600 + p.hours * 3600
+        + p.minutes * 60 + p.seconds) * 1000;
+}
+
+// Milliseconds as an ISO8601 duration, hours/minutes/seconds only -- PT26H is valid and
+// avoids calendar units entirely, so what the drag writes always parses back exactly.
+export function msToPeriodISO(ms) {
+    let rest = Math.round(ms / 1000);
+    const h = Math.floor(rest / 3600); rest -= h * 3600;
+    const m = Math.floor(rest / 60); rest -= m * 60;
+    let out = "PT";
+    if (h) out += `${h}H`;
+    if (m) out += `${m}M`;
+    if (rest || out === "PT") out += `${rest}S`;
+    return out;
+}
+
+// The ruler's increment: the largest step that lands on every boundary the user can care
+// about -- the gcd of the interval and every attached duration. An interval of 1h with a
+// 2.5h duration needs 30-minute marks for the duration to sit on one; 1h and 2h need only
+// the hours. "Lowest duration" is the special case where one divides the other.
+export function gcdGridMs(periodMs, durationsMs) {
+    const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+    let grid = periodMs;
+    for (const d of durationsMs) {
+        if (d > 0) grid = gcd(grid, Math.round(d));
+    }
+    return Math.max(grid, 1000);
+}
+
+// Every finite duration attached to a time layer, in ms, for the grid. "period" and null
+// contribute nothing new; calendar durations cannot join a fixed-ms grid and are skipped.
+export function collectDurationsMs(layers, windowIso) {
+    const out = [];
+    const visit = list => list.forEach(l => {
+        if (l.type === "group") return visit(l.layers || []);
+        const spec = l.time && l.time.duration;
+        if (typeof spec === "string" && spec !== "period") {
+            const ms = periodToMs(parsePeriod(spec));
+            if (ms) out.push(ms);
+        }
+    });
+    visit(layers);
+    if (windowIso) {
+        const ms = periodToMs(parsePeriod(windowIso));
+        if (ms) out.push(ms);
+    }
+    return out;
+}
+
+// Tick marks for the track: majors at every interval boundary (sparsely labelled so long
+// timelines stay readable), unlabelled minors at the grid in between. Minor DISPLAY is
+// thinned when dense; the snap grid stays exact, so a mark is a guide, not a constraint.
+export function buildRuler(ticks, gridMs, formatLabel, { maxLabels = 6, maxMinors = 240 } = {}) {
+    if (ticks.length < 2) return [];
+    const t0 = ticks[0], span = ticks[ticks.length - 1] - t0;
+    const marks = [];
+    const labelEvery = Math.max(1, Math.ceil(ticks.length / maxLabels));
+    ticks.forEach((t, i) => marks.push({
+        fraction: (t - t0) / span, major: true,
+        label: i % labelEvery === 0 ? formatLabel(t) : null,
+    }));
+    if (gridMs && gridMs < span) {
+        const total = Math.floor(span / gridMs);
+        const thin = Math.max(1, Math.ceil(total / maxMinors));
+        for (let k = 1; k * gridMs < span; k += thin) {
+            const t = t0 + k * gridMs;
+            if (ticks.includes(t)) continue;
+            marks.push({ fraction: (t - t0) / span, major: false, label: null });
+        }
+    }
+    return marks;
+}
+
+export function formatTickLabel(ms, periodMs) {
+    const iso = new Date(ms).toISOString();
+    if (periodMs != null && periodMs < 60 * 1000) return iso.slice(11, 19);
+    if (periodMs != null && periodMs < 24 * 3600 * 1000) return iso.slice(11, 16);
+    return iso.slice(5, 10);
+}
+
 // Glyphs as inline SVG rather than text: "↻" reads as refresh -- a loop toggle drawn with
 // it looks like a reset button, which is exactly how it got misread. currentColor lets
 // the pressed state restyle them from CSS.
@@ -173,6 +272,13 @@ const ICONS = {
 // which keeps it testable in jsdom and styleable from map.css. The layout follows
 // Leaflet.TimeDimension's control -- step/play/step/loop as a joined button bar, then the
 // date, slider and speed -- since that is the slider users of the folium apps know.
+//
+// The slider is a composite. A native <input type=range> stays on top as the thumb: it
+// keeps keyboard arrows, screen readers and every existing test working, and playback
+// drives it as before. Underneath sit the parts a native input cannot draw: the window
+// span showing exactly what interval is on the map, a ruler with labelled interval marks
+// and unlabelled gcd minors, and the trail handle -- drag it back to widen the window for
+// every layer at once, drop it onto the thumb to hand control back to per-layer durations.
 export function renderTimeControl(container, state, handlers) {
     let el = container.querySelector(".swiftmap-time-control");
     if (!state.ticks || state.ticks.length === 0) {
@@ -190,7 +296,14 @@ export function renderTimeControl(container, state, handlers) {
                 <button class="swiftmap-time-loop" aria-label="Loop">${ICONS.loop}</button>
             </span>
             <span class="swiftmap-time-label"></span>
-            <input class="swiftmap-time-slider" type="range" min="0" step="1">
+            <span class="swiftmap-time-track">
+                <span class="swiftmap-time-base"></span>
+                <span class="swiftmap-time-span"></span>
+                <span class="swiftmap-time-ruler"></span>
+                <input class="swiftmap-time-slider" type="range" min="0" step="1">
+                <span class="swiftmap-time-trail" role="slider" tabindex="0"
+                      aria-label="Trailing window" title="Drag back to widen the time window; drop on the thumb to clear"></span>
+            </span>
             <select class="swiftmap-time-speed" title="Playback speed">
                 <option value="0.5">0.5x</option>
                 <option value="1">1x</option>
@@ -209,6 +322,8 @@ export function renderTimeControl(container, state, handlers) {
         // `input` fires per drag step for live scrubbing; the model writeback is the
         // handler's problem, throttled there so dragging does not flood the kernel.
         slider.addEventListener("input", e => handlers.onSeek(parseInt(e.target.value, 10)));
+
+        attachTrailDrag(el, handlers);
     }
 
     el.querySelector(".swiftmap-time-slider").max = String(state.ticks.length - 1);
@@ -228,6 +343,121 @@ export function renderTimeControl(container, state, handlers) {
     loop.title = state.loop ? "Loop: on" : "Loop: off";
 
     el.querySelector(".swiftmap-time-speed").value = String(state.speed || 1);
+    renderTrack(el, state);
     applyPosition(el, state.position);
     return el;
+}
+
+// Geometry shared by rendering and dragging: where a time sits on the track, 0..1.
+function trackFraction(ticks, t) {
+    const span = ticks[ticks.length - 1] - ticks[0];
+    if (span <= 0) return 1;
+    return Math.min(1, Math.max(0, (t - ticks[0]) / span));
+}
+
+function renderTrack(el, state) {
+    const { ticks, index } = state;
+    const track = el.querySelector(".swiftmap-time-track");
+    track._state = state;      // the drag handler reads the freshest state from here
+
+    const thumbT = ticks[index];
+    const periodMs = state.periodMs;
+    const windowMs = state.window ? periodToMs(parsePeriod(state.window)) : null;
+    const shownMs = windowMs != null ? windowMs : periodMs;
+
+    // The span: what interval the map is showing right now. The span depicts the shared
+    // window -- one period by default -- and per-layer durations remain an API concern
+    // until a drag overrides them for everything at once.
+    const span = el.querySelector(".swiftmap-time-span");
+    const right = trackFraction(ticks, thumbT);
+    const left = shownMs != null ? trackFraction(ticks, thumbT - shownMs) : 0;
+    span.style.left = `${(left * 100).toFixed(2)}%`;
+    span.style.width = `${(Math.max(0, right - left) * 100).toFixed(2)}%`;
+    span.classList.toggle("override", windowMs != null);
+
+    // The trail handle parks ON the thumb when no override is active -- "not grabbed" --
+    // and sits at the window's start while one is. Dropping it back on the thumb clears.
+    const trail = el.querySelector(".swiftmap-time-trail");
+    const at = windowMs != null ? trackFraction(ticks, thumbT - windowMs) : right;
+    trail.style.left = `${(at * 100).toFixed(2)}%`;
+    trail.classList.toggle("active", windowMs != null);
+    trail.setAttribute("aria-valuetext", state.window || "no trailing window");
+    // No fixed-ms grid (calendar periods) means nothing sensible to snap to.
+    trail.style.display = state.gridMs ? "" : "none";
+
+    const ruler = el.querySelector(".swiftmap-time-ruler");
+    const key = `${ticks[0]}|${ticks.length}|${state.gridMs}|${periodMs}`;
+    if (ruler._key !== key) {
+        ruler._key = key;
+        ruler.innerHTML = "";
+        for (const mark of buildRuler(ticks, state.gridMs, t => formatTickLabel(t, periodMs))) {
+            const m = document.createElement("span");
+            m.className = mark.major ? "swiftmap-time-mark major" : "swiftmap-time-mark";
+            m.style.left = `${(mark.fraction * 100).toFixed(2)}%`;
+            if (mark.label) {
+                const lab = document.createElement("span");
+                lab.className = "swiftmap-time-mark-label";
+                lab.textContent = mark.label;
+                m.appendChild(lab);
+            }
+            ruler.appendChild(m);
+        }
+    }
+}
+
+// Dragging the trail handle. Snaps to the gcd grid so every stop is a boundary the data
+// or the interval actually names; the distance to the thumb, in whole grid steps, IS the
+// window. Zero steps -- dropped on the thumb -- clears the override.
+function attachTrailDrag(el, handlers) {
+    const track = el.querySelector(".swiftmap-time-track");
+    const trail = el.querySelector(".swiftmap-time-trail");
+
+    function isoFromEvent(ev) {
+        const state = track._state;
+        const rect = track.getBoundingClientRect();
+        if (!state || !state.gridMs || rect.width === 0) return undefined;
+        const frac = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+        const t0 = state.ticks[0];
+        const spanMs = state.ticks[state.ticks.length - 1] - t0;
+        const thumbT = state.ticks[state.index];
+        const dist = thumbT - (t0 + frac * spanMs);
+        const steps = Math.max(0, Math.round(dist / state.gridMs));
+        return steps === 0 ? null : msToPeriodISO(steps * state.gridMs);
+    }
+
+    let dragging = false;
+    trail.addEventListener("pointerdown", ev => {
+        dragging = true;
+        ev.preventDefault();
+        if (trail.setPointerCapture && ev.pointerId !== undefined) {
+            trail.setPointerCapture(ev.pointerId);
+        }
+    });
+    trail.addEventListener("pointermove", ev => {
+        if (!dragging) return;
+        const iso = isoFromEvent(ev);
+        if (iso !== undefined) handlers.onWindowDrag(iso);
+    });
+    const finish = ev => {
+        if (!dragging) return;
+        dragging = false;
+        const iso = isoFromEvent(ev);
+        if (iso !== undefined) handlers.onWindowCommit(iso);
+    };
+    trail.addEventListener("pointerup", finish);
+    trail.addEventListener("pointercancel", finish);
+
+    // Keyboard: one grid step per arrow, Delete/Home to clear. Same contract as the drag.
+    trail.addEventListener("keydown", ev => {
+        const state = track._state;
+        if (!state || !state.gridMs) return;
+        const current = state.window ? periodToMs(parsePeriod(state.window)) : 0;
+        let next;
+        if (ev.key === "ArrowLeft") next = current + state.gridMs;
+        else if (ev.key === "ArrowRight") next = Math.max(0, current - state.gridMs);
+        else if (ev.key === "Delete" || ev.key === "Home") next = 0;
+        else return;
+        ev.preventDefault();
+        handlers.onWindowCommit(next > 0 ? msToPeriodISO(next) : null);
+    });
 }

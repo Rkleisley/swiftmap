@@ -51,16 +51,22 @@ test("subtracting a period inverts adding it", () => {
 });
 
 // --- ticks -------------------------------------------------------------------------
-test("ticks cover the data: first period contains the earliest observation", () => {
+test("ticks cover the data, earliest observation included", () => {
+    // The first tick sits AT the earliest time: with half-open windows, starting one
+    // period later would exclude the earliest point from every window on the bar.
     const ticks = generateTicks(T0, T0 + 3 * DAY, parsePeriod("P1D"));
-    assert.deepEqual(ticks, [T0 + DAY, T0 + 2 * DAY, T0 + 3 * DAY]);
+    assert.deepEqual(ticks, [T0, T0 + DAY, T0 + 2 * DAY, T0 + 3 * DAY]);
+});
+
+test("a single instant is one tick, not a hang", () => {
+    assert.deepEqual(generateTicks(T0, T0, parsePeriod("P1D")), [T0]);
 });
 
 test("an empty period still gets its tick", () => {
     // Observations on day 1 and day 3, nothing on day 2 -- the tick exists anyway,
     // which is the entire reason ticks are period-generated.
     const ticks = generateTicks(T0, T0 + 3 * DAY, parsePeriod("P1D"));
-    assert.equal(ticks.length, 3, "day 2 is a tick even though nothing happened then");
+    assert.equal(ticks.length, 4, "day 2 is a tick even though nothing happened then");
 });
 
 test("tick generation is capped rather than hanging the tab", () => {
@@ -173,4 +179,80 @@ test("the end with loop wraps and keeps playing", () => {
 
 test("a single tick with loop spins in place rather than dying", () => {
     assert.deepEqual(advance(0, 1, true), { index: 0, playing: true });
+});
+
+// --- the window override and the ruler grid -------------------------------------------
+import { effectiveDuration, periodToMs, gcdGridMs, msToPeriodISO, buildRuler,
+         collectDurationsMs } from "../src/timecontrol.js";
+
+test("a dragged window outranks every layer's own duration", () => {
+    // A user gesture on the bar tells the truth for everything; per-layer settings
+    // return the moment the override clears.
+    const layer = { time: { duration: "PT6H" } };
+    assert.equal(effectiveDuration(layer, { window: "PT1H" }), "PT1H");
+    assert.equal(effectiveDuration(layer, { window: null }), "PT6H");
+});
+
+test("the override reaches whole-geometry filtering too", () => {
+    const layer = { id: "l1", type: "polyline", time: { duration: null } };  // cumulative
+    const buffers = { "l1::times": timesBuffer([[T0, T0]]) };
+    const at = (window) => layerInWindow(layer, buffers,
+        { tick: T0 + 3 * DAY, period: parsePeriod("P1D"), window });
+    assert.equal(at(null), true, "cumulative keeps history");
+    assert.equal(at("PT1H"), false, "the dragged window hides what fell out of it");
+});
+
+test("calendar periods have no fixed width", () => {
+    assert.equal(periodToMs(parsePeriod("P1M")), null);
+    assert.equal(periodToMs(parsePeriod("P1D")), 24 * 3600 * 1000);
+    assert.equal(periodToMs(parsePeriod("PT1H30M")), 1.5 * 3600 * 1000);
+});
+
+test("the grid is the gcd of the interval and every duration", () => {
+    const H = 3600 * 1000;
+    // Robert's examples: 1h+2h -> hour marks; 1h interval with a 2.5h duration needs
+    // 30-minute marks for the duration to land on one. "Lowest duration" is the special
+    // case where one divides the other; gcd also covers 2h+3h -> 1h, which lowest cannot.
+    assert.equal(gcdGridMs(H, [2 * H]), H);
+    assert.equal(gcdGridMs(H, [2.5 * H]), H / 2);
+    assert.equal(gcdGridMs(H, [2 * H, 3 * H]), H);
+    assert.equal(gcdGridMs(H, []), H, "no durations: the interval is the grid");
+});
+
+test("what the drag writes always parses back to the same width", () => {
+    for (const ms of [30 * 60000, 2.5 * 3600e3, 26 * 3600e3, 45000]) {
+        assert.equal(periodToMs(parsePeriod(msToPeriodISO(ms))), ms);
+    }
+});
+
+test("durations are collected from every time layer, groups included", () => {
+    const layers = [
+        { id: "a", time: { duration: "PT6H" } },
+        { type: "group", layers: [{ id: "b", time: { duration: "PT2H" } }] },
+        { id: "c", time: { duration: "period" } },     // contributes nothing new
+        { id: "d" },                                    // not a time layer
+    ];
+    assert.deepEqual(collectDurationsMs(layers, null).sort((x, y) => x - y),
+        [2 * 3600e3, 6 * 3600e3]);
+});
+
+test("the ruler labels intervals and leaves the minors silent", () => {
+    const H = 3600 * 1000;
+    const ticks = [T0, T0 + H, T0 + 2 * H];
+    const marks = buildRuler(ticks, H / 2, t => "L");
+    const majors = marks.filter(m => m.major);
+    const minors = marks.filter(m => !m.major);
+    assert.equal(majors.length, 3, "one major per interval boundary");
+    assert.equal(minors.length, 2, "one silent 30-min mark inside each hour");
+    assert.ok(minors.every(m => m.label === null), "duration marks are unlabelled");
+    assert.ok(majors.some(m => m.label), "interval marks carry the labels");
+});
+
+test("long timelines thin the labels, not the truth", () => {
+    const H = 3600 * 1000;
+    const ticks = Array.from({ length: 48 }, (_, i) => T0 + i * H);
+    const marks = buildRuler(ticks, H, t => "L");
+    const labelled = marks.filter(m => m.label);
+    assert.ok(labelled.length <= 7, "a two-day hourly bar cannot label every hour");
+    assert.equal(marks.filter(m => m.major).length, 48, "every boundary still gets a mark");
 });
