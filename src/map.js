@@ -323,6 +323,7 @@ export default {
             },
             // Live during the drag: local state and a re-render only, no model chatter.
             onWindowDrag: (iso) => {
+                timeUI.dragActive = true;
                 timeUI.window = iso;
                 if (timeState) timeState = { ...timeState, window: iso };
                 renderTimeControl(el, timeUI, timeHandlers);
@@ -333,6 +334,7 @@ export default {
             // handing control back to per-layer durations.
             onWindowCommit: (iso) => {
                 timeHandlers.onWindowDrag(iso);
+                timeUI.dragActive = false;
                 if (model.comm) {
                     const cfg = { ...(model.get("time_config") || {}) };
                     if (iso) cfg.window = iso;
@@ -374,7 +376,13 @@ export default {
             // duration -- the largest step that lands on all of them -- so a 2.5h trail
             // is draggable on a 1h bar. Calendar periods have no fixed width; the ruler
             // then shows interval marks only and the trail handle hides.
-            timeUI.window = cfg.window && parsePeriod(cfg.window) ? cfg.window : null;
+            // Never while a drag is live: the dragged window exists only locally until
+            // release commits it, and reading config here mid-drag reset the handle to
+            // "no window" on every debounced sync -- the handle followed the mouse, then
+            // snapped home, then followed again, once per sync.
+            if (!timeUI.dragActive) {
+                timeUI.window = cfg.window && parsePeriod(cfg.window) ? cfg.window : null;
+            }
             timeUI.periodMs = periodToMs(period);
             timeUI.gridMs = timeUI.periodMs
                 ? gcdGridMs(timeUI.periodMs, collectDurationsMs(layerState, timeUI.window))

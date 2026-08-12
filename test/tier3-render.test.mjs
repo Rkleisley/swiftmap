@@ -295,17 +295,29 @@ suite("dragging the trail handle widens the window for every layer", async () =>
                 const trail = document.querySelector(".swiftmap-time-trail");
                 const rect = track.getBoundingClientRect();
                 const opts = (x) => ({ bubbles: true, clientX: x, pointerId: 1 });
+                // A human drag spans hundreds of ms, so debounced map syncs run in the
+                // middle of it. The pause below is the regression: mid-drag state lived
+                // only locally, a sync re-read the not-yet-committed config, and the
+                // handle snapped home between mouse movements. Moves and the release go
+                // through document, as they do when the cursor slides off the 12px handle.
                 trail.dispatchEvent(new PointerEvent("pointerdown", opts(rect.right)));
-                trail.dispatchEvent(new PointerEvent("pointermove", opts(rect.left)));
-                trail.dispatchEvent(new PointerEvent("pointerup", opts(rect.left)));
-                setTimeout(() => resolve({
-                    before,
-                    after: count(),
-                    window: (window.__model.get("time_config") || {}).window || null,
-                }), 400);
+                document.dispatchEvent(new PointerEvent("pointermove", opts(rect.left)));
+                setTimeout(() => {
+                    const held = document.querySelector(".swiftmap-time-trail")
+                        .getAttribute("aria-valuetext");
+                    document.dispatchEvent(new PointerEvent("pointerup", opts(rect.left)));
+                    setTimeout(() => resolve({
+                        before,
+                        held,
+                        after: count(),
+                        window: (window.__model.get("time_config") || {}).window || null,
+                    }), 400);
+                }, 350);
             }, 400);
         }));
         assert.equal(result.before, 1, "the last period alone holds one point");
+        assert.equal(result.held, "PT72H",
+            "mid-drag, across map syncs, the handle holds instead of snapping home");
         assert.equal(result.after, 2, "the widened window brings an earlier point in");
         assert.equal(result.window, "PT72H", "the release wrote the override back");
         assert.deepEqual(errors, [], "no errors while dragging");

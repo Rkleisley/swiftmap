@@ -425,27 +425,29 @@ function attachTrailDrag(el, handlers) {
         return steps === 0 ? null : msToPeriodISO(steps * state.gridMs);
     }
 
-    let dragging = false;
+    // Move and release listen on the document for the duration of the drag: the handle
+    // is 12px wide, the cursor leaves it on the first fast movement, and events that
+    // target whatever is underneath would stutter the drag and could swallow the release
+    // entirely -- an uncommitted drag then snaps back on the next sync.
     trail.addEventListener("pointerdown", ev => {
-        dragging = true;
         ev.preventDefault();
-        if (trail.setPointerCapture && ev.pointerId !== undefined) {
-            trail.setPointerCapture(ev.pointerId);
-        }
+        ev.stopPropagation();
+
+        const move = e => {
+            const iso = isoFromEvent(e);
+            if (iso !== undefined) handlers.onWindowDrag(iso);
+        };
+        const finish = e => {
+            document.removeEventListener("pointermove", move);
+            document.removeEventListener("pointerup", finish);
+            document.removeEventListener("pointercancel", finish);
+            const iso = isoFromEvent(e);
+            if (iso !== undefined) handlers.onWindowCommit(iso);
+        };
+        document.addEventListener("pointermove", move);
+        document.addEventListener("pointerup", finish);
+        document.addEventListener("pointercancel", finish);
     });
-    trail.addEventListener("pointermove", ev => {
-        if (!dragging) return;
-        const iso = isoFromEvent(ev);
-        if (iso !== undefined) handlers.onWindowDrag(iso);
-    });
-    const finish = ev => {
-        if (!dragging) return;
-        dragging = false;
-        const iso = isoFromEvent(ev);
-        if (iso !== undefined) handlers.onWindowCommit(iso);
-    };
-    trail.addEventListener("pointerup", finish);
-    trail.addEventListener("pointercancel", finish);
 
     // Keyboard: one grid step per arrow, Delete/Home to clear. Same contract as the drag.
     trail.addEventListener("keydown", ev => {
