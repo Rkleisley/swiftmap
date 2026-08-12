@@ -2,7 +2,7 @@ import { loadCSS, loadJS } from "./utils.js";
 import { renderSidebarControls, normalizeRadioLayers } from "./sidebar.js";
 import { renderLayer, renderMergedGlLayer } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
-         layerInWindow, renderTimeControl } from "./timecontrol.js";
+         layerInWindow, renderTimeControl, advance } from "./timecontrol.js";
 
 // True if a layer is visible and no folder above it is switched off.
 //
@@ -282,22 +282,32 @@ export default {
             stopPlayback();
             timeUI.playing = true;
             timeUI.timer = setInterval(() => {
-                if (timeUI.index >= timeUI.ticks.length - 1) {
-                    if (timeUI.loop) return seekTo(0);
+                const next = advance(timeUI.index, timeUI.ticks.length, timeUI.loop);
+                if (!next.playing) {
                     stopPlayback();
                     renderTimeControl(el, timeUI, timeHandlers);
                     writeTimeCurrent(true);
                     return;
                 }
-                seekTo(timeUI.index + 1);
+                seekTo(next.index);
             }, 1000 / timeUI.speed);
         }
 
         const timeHandlers = {
             onSeek: (index) => seekTo(index),
+            onStepBack: () => seekTo(timeUI.index - 1),
+            onStepForward: () => seekTo(timeUI.index + 1),
             onPlayToggle: () => {
-                if (timeUI.playing) { stopPlayback(); writeTimeCurrent(true); }
-                else startPlayback();
+                if (timeUI.playing) {
+                    stopPlayback();
+                    writeTimeCurrent(true);
+                } else {
+                    // startOver, as the folium player was configured: pressing play at
+                    // the end restarts from the beginning immediately, rather than one
+                    // silent interval later deciding there is nowhere to go and stopping.
+                    if (timeUI.index >= timeUI.ticks.length - 1) seekTo(0);
+                    startPlayback();
+                }
                 renderTimeControl(el, timeUI, timeHandlers);
             },
             onLoopToggle: () => {

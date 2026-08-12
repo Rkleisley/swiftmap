@@ -122,13 +122,35 @@ export function hasTimeLayers(layers) {
         : Boolean(l.time));
 }
 
+// One playback step: the next index and whether playback survives it. Pure so the loop
+// semantics are testable without a timer -- looping wraps and keeps playing, the end
+// without loop stops where it is.
+export function advance(index, length, loop) {
+    if (index < length - 1) return { index: index + 1, playing: true };
+    if (loop) return { index: 0, playing: true };
+    return { index, playing: false };
+}
+
 function formatUTC(ms) {
     return new Date(ms).toISOString().slice(0, 19).replace("T", " ") + "Z";
 }
 
+// Glyphs as inline SVG rather than text: "↻" reads as refresh -- a loop toggle drawn with
+// it looks like a reset button, which is exactly how it got misread. currentColor lets
+// the pressed state restyle them from CSS.
+const ICONS = {
+    back: '<svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M3 2h2v12H3zM13 2 6 8l7 6z"/></svg>',
+    play: '<svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M4 2l9 6-9 6z"/></svg>',
+    pause: '<svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M4 2h3v12H4zM9 2h3v12H9z"/></svg>',
+    fwd: '<svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M11 2h2v12h-2zM3 2l7 6-7 6z"/></svg>',
+    loop: '<svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M8 2a6 6 0 0 1 5.65 4H16l-2.8 3.5L10.4 6h2.1A4.5 4.5 0 1 0 12.5 10l1.3.75A6 6 0 1 1 8 2z"/></svg>',
+};
+
 // --- the control -----------------------------------------------------------------------
 // Plain DOM inside the widget container, like the sidebar: no Leaflet control machinery,
-// which keeps it testable in jsdom and styleable from map.css.
+// which keeps it testable in jsdom and styleable from map.css. The layout follows
+// Leaflet.TimeDimension's control -- step/play/step/loop as a joined button bar, then the
+// date, slider and speed -- since that is the slider users of the folium apps know.
 export function renderTimeControl(container, state, handlers) {
     let el = container.querySelector(".swiftmap-time-control");
     if (!state.ticks || state.ticks.length === 0) {
@@ -139,18 +161,24 @@ export function renderTimeControl(container, state, handlers) {
         el = document.createElement("div");
         el.className = "swiftmap-time-control";
         el.innerHTML = `
-            <button class="swiftmap-time-play" title="Play/Pause"></button>
-            <input class="swiftmap-time-slider" type="range" min="0" step="1">
+            <span class="swiftmap-time-buttons">
+                <button class="swiftmap-time-back" title="Step back" aria-label="Step back">${ICONS.back}</button>
+                <button class="swiftmap-time-play" aria-label="Play">${ICONS.play}</button>
+                <button class="swiftmap-time-fwd" title="Step forward" aria-label="Step forward">${ICONS.fwd}</button>
+                <button class="swiftmap-time-loop" aria-label="Loop">${ICONS.loop}</button>
+            </span>
             <span class="swiftmap-time-label"></span>
-            <select class="swiftmap-time-speed" title="Ticks per second">
+            <input class="swiftmap-time-slider" type="range" min="0" step="1">
+            <select class="swiftmap-time-speed" title="Playback speed">
                 <option value="0.5">0.5x</option>
                 <option value="1">1x</option>
                 <option value="2">2x</option>
                 <option value="4">4x</option>
-            </select>
-            <button class="swiftmap-time-loop" title="Loop"></button>`;
+            </select>`;
         container.appendChild(el);
 
+        el.querySelector(".swiftmap-time-back").addEventListener("click", handlers.onStepBack);
+        el.querySelector(".swiftmap-time-fwd").addEventListener("click", handlers.onStepForward);
         el.querySelector(".swiftmap-time-play").addEventListener("click", handlers.onPlayToggle);
         el.querySelector(".swiftmap-time-loop").addEventListener("click", handlers.onLoopToggle);
         el.querySelector(".swiftmap-time-speed").addEventListener("change",
@@ -164,9 +192,19 @@ export function renderTimeControl(container, state, handlers) {
     el.querySelector(".swiftmap-time-slider").max = String(state.ticks.length - 1);
     el.querySelector(".swiftmap-time-slider").value = String(state.index);
     el.querySelector(".swiftmap-time-label").textContent = formatUTC(state.ticks[state.index]);
-    el.querySelector(".swiftmap-time-play").textContent = state.playing ? "⏸" : "▶";
-    el.querySelector(".swiftmap-time-loop").textContent = "↻";
-    el.querySelector(".swiftmap-time-loop").classList.toggle("active", Boolean(state.loop));
+
+    const play = el.querySelector(".swiftmap-time-play");
+    play.innerHTML = state.playing ? ICONS.pause : ICONS.play;
+    play.setAttribute("aria-label", state.playing ? "Pause" : "Play");
+    play.title = state.playing ? "Pause" : "Play";
+
+    // A mode, not an action: pressed styling and aria-pressed say "this stays on",
+    // where a bare icon invited a click expecting something to happen right now.
+    const loop = el.querySelector(".swiftmap-time-loop");
+    loop.classList.toggle("active", Boolean(state.loop));
+    loop.setAttribute("aria-pressed", String(Boolean(state.loop)));
+    loop.title = state.loop ? "Loop: on" : "Loop: off";
+
     el.querySelector(".swiftmap-time-speed").value = String(state.speed || 1);
     return el;
 }

@@ -153,3 +153,24 @@ test("timesFor reads the buffer under the layer's composite key", () => {
     assert.equal(times[0], T0);
     assert.equal(timesFor({ id: "l2" }, buffers), null);
 });
+
+// --- playback stepping ----------------------------------------------------------------
+import { advance } from "../src/timecontrol.js";
+
+test("playback advances one tick at a time", () => {
+    assert.deepEqual(advance(0, 3, false), { index: 1, playing: true });
+});
+
+test("the end without loop stops where it is", () => {
+    assert.deepEqual(advance(2, 3, false), { index: 2, playing: false });
+});
+
+test("the end with loop wraps and keeps playing", () => {
+    // The complaint that pinned this: loop enabled, playback reached the end, and time
+    // stopped anyway. Looping is a wrap, not a stop.
+    assert.deepEqual(advance(2, 3, true), { index: 0, playing: true });
+});
+
+test("a single tick with loop spins in place rather than dying", () => {
+    assert.deepEqual(advance(0, 1, true), { index: 0, playing: true });
+});

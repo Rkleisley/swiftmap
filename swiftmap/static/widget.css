@@ -36,3 +36,67 @@
 .leaflet-points-pane > svg {
     pointer-events: auto !important;
 }
+
+/* The shared time slider: one control for every time layer, laid out like the
+   Leaflet.TimeDimension bar users of the folium apps know -- a joined button group,
+   the date, the slider, the speed -- fixed top-centre with the same card styling as
+   the StructMap custom control it replaces. */
+.swiftmap-time-control {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    padding: 5px 12px;
+    font-size: 12px;
+}
+.swiftmap-time-buttons {
+    display: flex;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.swiftmap-time-buttons button {
+    width: 26px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-right: 1px solid #bbb;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    padding: 0;
+}
+.swiftmap-time-buttons button:last-child { border-right: none; }
+.swiftmap-time-buttons button:hover { background: #f4f4f4; }
+/* The loop toggle held down, so on/off is legible as a mode rather than an action. */
+.swiftmap-time-buttons .swiftmap-time-loop.active {
+    background: #d9edf7;
+    color: #31708f;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.swiftmap-time-control .swiftmap-time-slider { width: 220px; cursor: pointer; }
+.swiftmap-time-control .swiftmap-time-label {
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+    padding: 0 4px;
+    font-variant-numeric: tabular-nums;
+}
+.swiftmap-time-control .swiftmap-time-speed {
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #fff;
+    color: #333;
+    font-size: 11px;
+    padding: 2px;
+    cursor: pointer;
+}

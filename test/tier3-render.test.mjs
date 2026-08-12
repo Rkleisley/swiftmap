@@ -230,6 +230,23 @@ suite("the time slider filters what glify draws", async () => {
             parseInt(document.querySelector(".swiftmap-time-slider").max, 10));
         assert.equal(await countAt(0), 1, "the first period holds one observation");
         assert.equal(await countAt(max), 1, "the last period holds the other");
+        // startOver, as the folium player was configured: play pressed at the end
+        // restarts from tick 0 immediately -- not one silent interval later, and not
+        // the dead press it used to be.
+        const restarted = await page.evaluate(() => {
+            const slider = document.querySelector(".swiftmap-time-slider");
+            slider.value = slider.max;
+            slider.dispatchEvent(new Event("input"));
+            document.querySelector(".swiftmap-time-play").click();
+            return new Promise(resolve => setTimeout(() => resolve({
+                index: document.querySelector(".swiftmap-time-slider").value,
+                state: document.querySelector(".swiftmap-time-play").getAttribute("aria-label"),
+            }), 200));
+        });
+        assert.equal(restarted.index, "0", "play at the end starts over");
+        assert.equal(restarted.state, "Pause", "and playback is actually running");
+        await page.evaluate(() => document.querySelector(".swiftmap-time-play").click());
+
         assert.deepEqual(errors, [], "no errors while scrubbing");
     }, "widget-time.html");
 });

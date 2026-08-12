@@ -316,9 +316,43 @@ test("dragging the slider reports the tick index", () => {
 
 test("play state is reflected, not owned, by the button", () => {
     const { el } = mountTime({ ticks: [T0], index: 0, playing: true });
-    assert.equal(el.querySelector(".swiftmap-time-play").textContent, "⏸");
+    assert.equal(el.querySelector(".swiftmap-time-play").getAttribute("aria-label"), "Pause");
     renderTimeControl(el.parentElement, { ticks: [T0], index: 0, playing: false }, {});
-    assert.equal(el.querySelector(".swiftmap-time-play").textContent, "▶");
+    assert.equal(el.querySelector(".swiftmap-time-play").getAttribute("aria-label"), "Play");
+});
+
+test("the loop button reads as a toggle, not a reset", () => {
+    // It was a bare ↻ -- the refresh glyph -- and got read as "send time back to the
+    // start". Pressed styling plus aria-pressed make it legible as a mode that stays on.
+    const { el } = mountTime({ ticks: [T0], index: 0, loop: false });
+    const loop = el.querySelector(".swiftmap-time-loop");
+    assert.equal(loop.getAttribute("aria-pressed"), "false");
+    assert.equal(loop.title, "Loop: off");
+    renderTimeControl(el.parentElement, { ticks: [T0], index: 0, loop: true }, {});
+    assert.equal(loop.getAttribute("aria-pressed"), "true");
+    assert.equal(loop.title, "Loop: on");
+    assert.ok(loop.classList.contains("active"));
+});
+
+test("the step buttons ask the handlers to move one tick", () => {
+    const seeks = [];
+    const { el } = mountTime({ ticks: [T0, T0 + DAY, T0 + 2 * DAY], index: 1 }, {
+        onStepBack: () => seeks.push("back"),
+        onStepForward: () => seeks.push("fwd"),
+    });
+    el.querySelector(".swiftmap-time-back").click();
+    el.querySelector(".swiftmap-time-fwd").click();
+    assert.deepEqual(seeks, ["back", "fwd"]);
+});
+
+test("the button bar carries the timedimension layout", () => {
+    // back | play | forward | loop as one joined group, then date, slider, speed --
+    // the shape users of the folium apps already know.
+    const { el } = mountTime({ ticks: [T0], index: 0 });
+    const kids = [...el.querySelector(".swiftmap-time-buttons").children]
+        .map(b => b.className);
+    assert.deepEqual(kids, ["swiftmap-time-back", "swiftmap-time-play",
+                            "swiftmap-time-fwd", "swiftmap-time-loop"]);
 });
 
 test("one slider serves however many time layers exist", () => {
