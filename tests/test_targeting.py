@@ -500,3 +500,37 @@ def test_a_circle_encloses_its_radius():
     (min_lat, _), (max_lat, _) = mp.find_layers("C")[0]["bounds"]
     assert min_lat < 36.0 < max_lat
     assert 0.017 < (max_lat - min_lat) < 0.019, "~2km of latitude across"
+
+
+# --- json-safety of large property columns ----------------------------------------------
+def test_a_clean_column_passes_through_unchanged_by_identity():
+    from swiftmap.layers._add_child import _json_safe
+    col = [1, 2.5, "x", None, True] * 1000
+    assert _json_safe(col) is col, "no per-element recursion for the common tabular case"
+
+
+def test_one_unsafe_element_anywhere_still_coerces_the_column():
+    """The gate is a full scan, not a sample: a Timestamp at the tail must be caught."""
+    import datetime
+    from swiftmap.layers._add_child import _json_safe
+    col = [1] * 5000 + [datetime.datetime(2026, 1, 1)]
+    out = _json_safe(col)
+    assert out is not col
+    assert out[-1] == "2026-01-01T00:00:00"
+
+
+def test_numpy_ints_do_not_slip_through_the_gate():
+    """
+    np.int64 is not an int subclass and json.dumps rejects it outright, so a column
+    holding one must fall off the fast path and be coerced. (np.float64 is harmless --
+    it subclasses float and serialises -- but the type() gate treats it the same way,
+    which costs a recursion and never a broken wire.)
+    """
+    import json
+    import numpy as np
+    from swiftmap.layers._add_child import _json_safe
+    col = [1, np.int64(2)]
+    out = _json_safe(col)
+    assert out is not col, "the gate rejected the column"
+    json.dumps(out)
+    assert out[1] == 2 and type(out[1]) is int

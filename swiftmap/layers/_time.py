@@ -14,6 +14,8 @@ as timeless -- always shown, never animated -- so one bad row dims nothing else.
 import datetime
 import math
 import re
+
+import numpy as np
 from typing import Any, Dict, List, Optional, Tuple
 
 # Property names probed when no field is given, most specific first. "times" is the
@@ -110,6 +112,30 @@ def _values_of(props: Dict[str, Any], field: str) -> List[Any]:
     return [value]
 
 
+def _numeric_epochs(values: List[Any]):
+    """
+    The whole column as epoch-ms, vectorised, or None if it is not purely numeric.
+
+    A 200k-point track arrives as a plain int64 epoch column, and walking it one value at
+    a time through parse_timestamp cost ~2s per 5M points -- the largest share of a big
+    ingest. The gate is a full pass over the column's types at C speed (set over map),
+    not a sample of the head: a stray string past the sample would crash np.asarray, but
+    a stray bool would silently become 1970 -- sampling trades the crash we can catch for
+    the corruption we cannot. bool is excluded exactly because it subclasses int.
+
+    None joins the set because np.asarray maps it to NaN under float64, which is already
+    the timeless marker; the seconds/ms heuristic is applied per element, mirroring
+    parse_timestamp.
+    """
+    if not values or set(map(type, values)) - {int, float, type(None)}:
+        return None
+    arr = np.asarray(values, dtype=np.float64)
+    invalid = ~np.isfinite(arr) | (arr <= 0)
+    arr = np.where(arr >= 1e10, arr, arr * 1000.0)
+    arr[invalid] = np.nan
+    return arr
+
+
 def normalize_layer_times(
     props: Optional[Dict[str, Any]],
     time_field: Optional[str] = None,
@@ -119,8 +145,9 @@ def normalize_layer_times(
     Reads a layer's per-feature times out of its properties.
 
     Returns (interleaved, field_description, timeless_count): `interleaved` is
-    [s0, e0, s1, e1, ...] in epoch ms with NaN marking a feature that carries no readable
-    time, or None when no time field exists at all -- the caller warns, since a time layer
+    [s0, e0, s1, e1, ...] in epoch ms -- a list or float64 ndarray, so treat it as
+    array-like -- with NaN marking a feature that carries no readable time, or None when
+    no time field exists at all -- the caller warns, since a time layer
     with no time is a request that cannot be honoured.
     """
     props = props or {}
@@ -133,6 +160,28 @@ def normalize_layer_times(
     ends = _values_of(props, end_field) if end_field and end_field in props else None
     if ends is not None and len(ends) != len(starts):
         ends = None
+
+    # Vectorised fast path for numeric epoch columns; anything else -- ISO strings,
+    # datetimes, [start, end] pairs, mixed data -- takes the per-value loop below.
+    start_arr = _numeric_epochs(starts)
+    if start_arr is not None:
+        end_arr = _numeric_epochs(ends) if ends is not None else start_arr
+        if end_arr is not None:
+            if ends is not None:
+                lo = np.minimum(start_arr, end_arr)
+                hi = np.maximum(start_arr, end_arr)
+                bad = np.isnan(start_arr) | np.isnan(end_arr)
+                lo[bad] = np.nan
+                hi[bad] = np.nan
+                start_arr, end_arr = lo, hi
+            interleaved_arr = np.empty(len(start_arr) * 2, dtype=np.float64)
+            interleaved_arr[0::2] = start_arr
+            interleaved_arr[1::2] = end_arr
+            timeless = int(np.isnan(start_arr).sum())
+            described = start_field if not end_field else f"{start_field}/{end_field}"
+            # Returned as the array itself: the caller's np.asarray is then a no-copy
+            # view, where a tolist() here round-tripped 10M floats through Python objects.
+            return interleaved_arr, described, timeless
 
     interleaved: List[float] = []
     timeless = 0

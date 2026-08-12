@@ -93,32 +93,32 @@ def test_a_column_of_stamps_becomes_degenerate_intervals():
         {"timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"]})
     assert field == "timestamp"
     assert timeless == 0
-    assert interleaved == [T0, T0, T0 + HOUR, T0 + HOUR]
+    assert list(interleaved) == [T0, T0, T0 + HOUR, T0 + HOUR]
 
 
 def test_interval_columns_keep_start_and_end():
     interleaved, field, _ = normalize_layer_times(
         {"datetime_start": ["2026-01-01T00:00:00Z"], "datetime_end": ["2026-01-01T01:00:00Z"]})
     assert field == "datetime_start/datetime_end"
-    assert interleaved == [T0, T0 + HOUR]
+    assert list(interleaved) == [T0, T0 + HOUR]
 
 
 def test_a_scalar_layer_normalises_as_one_feature():
     """Single-geometry layers store scalar properties, not columns."""
     interleaved, _, _ = normalize_layer_times({"timestamp": "2026-01-01T00:00:00Z"})
-    assert interleaved == [T0, T0]
+    assert list(interleaved) == [T0, T0]
 
 
 def test_a_scalar_times_pair_is_one_interval_not_two_features():
     interleaved, _, _ = normalize_layer_times(
         {"times": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"]})
-    assert interleaved == [T0, T0 + HOUR]
+    assert list(interleaved) == [T0, T0 + HOUR]
 
 
 def test_a_reversed_interval_is_righted_not_rejected():
     interleaved, _, _ = normalize_layer_times(
         {"times": [["2026-01-01T01:00:00Z", "2026-01-01T00:00:00Z"]]})
-    assert interleaved == [T0, T0 + HOUR]
+    assert list(interleaved) == [T0, T0 + HOUR]
 
 
 def test_bad_rows_become_nan_and_are_counted():
@@ -278,3 +278,47 @@ def test_python_and_js_agree_on_the_position_names():
     block = source[source.index("export const POSITIONS"):]
     js_names = set(re.findall(r'"([a-z]+-[a-z]+)"\s*:', block[:block.index("};")]))
     assert js_names == set(TIME_POSITIONS)
+
+
+# --- the vectorised fast path is indistinguishable from the loop ------------------------
+def loop_normalize(props, **kw):
+    """The per-value path, forced by making the gate reject the column."""
+    from swiftmap.layers import _time
+    values = props[list(props)[0]]
+    assert _time._numeric_epochs(values) is None or True
+    # append one string to defeat the gate, normalise, then strip the extra feature
+    poisoned = {list(props)[0]: list(values) + ["x"]}
+    interleaved, field, timeless = normalize_layer_times(poisoned, **kw)
+    return list(interleaved)[:-2], field, timeless - 1
+
+
+@pytest.mark.parametrize("values", [
+    pytest.param([1781222400, 1781222401, 1781222402], id="epoch-seconds"),
+    pytest.param([1781222400000.0, 1781222400500.0], id="epoch-ms"),
+    pytest.param([1781222400, None, 1781222402], id="with-none"),
+    pytest.param([1781222400, -5, 1781222402], id="with-invalid"),
+])
+def test_vector_and_loop_paths_agree(values):
+    import math
+    fast, _, fast_timeless = normalize_layer_times({"timestamp": values})
+    slow, _, slow_timeless = loop_normalize({"timestamp": values})
+    assert fast_timeless == slow_timeless
+    for a, b in zip(list(fast), slow):
+        assert (math.isnan(a) and math.isnan(b)) or a == b
+
+
+def test_bools_do_not_ride_the_vector_path():
+    """
+    bool subclasses int; vectorised it would become epoch 1000ms -- a point in 1970 --
+    where the loop marks it timeless. The gate must reject the column, not corrupt it.
+    """
+    import math
+    interleaved, _, timeless = normalize_layer_times({"timestamp": [1781222400, True]})
+    assert timeless == 1
+    assert math.isnan(list(interleaved)[2])
+
+
+def test_vectorised_intervals_still_right_reversed_pairs():
+    fast, _, _ = normalize_layer_times(
+        {"datetime_start": [1781222401], "datetime_end": [1781222400]})
+    assert list(fast) == [1781222400000.0, 1781222401000.0]

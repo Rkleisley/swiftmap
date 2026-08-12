@@ -16,6 +16,25 @@ def build_group_specs(layer_group: Any, props: Dict[str, List[Any]]) -> List[Tup
     return [(layer_group, layer_group in props)]
 
 
+def static_group_path(
+    group_specs: Sequence[Tuple[Any, bool]],
+    default: str,
+) -> Optional[str]:
+    """
+    The folder path when it does not depend on the data, else None.
+
+    Callers resolve the path inside their per-feature loop, because a column-backed part
+    makes it differ per feature. When no part is column-backed the answer is identical for
+    every feature -- and at 200k points per layer, rebuilding the same string 200k times
+    was one of the three hot spots of large ingests. Hoist this outside the loop.
+    """
+    if not group_specs:
+        return default
+    if any(is_col for _, is_col in group_specs):
+        return None
+    return "/".join(str(value) for value, _ in group_specs)
+
+
 def resolve_group_path(
     group_specs: Sequence[Tuple[Any, bool]],
     props: Dict[str, List[Any]],

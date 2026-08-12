@@ -105,7 +105,7 @@ def map_effect(source: Any, *, event: Any = None, batch: bool = True,
 
     >>> @map_effect(mapview, event=input.btn_search)
     ... async def handle_search(m):
-    ...     m.clear_group("Track")
+    ...     m.remove_layers(m.find_layers(group="Track"))
     ...     plot_track_on_map(m, generate_points())
     """
     from shiny import reactive

@@ -4,7 +4,7 @@ from ..parsers import parse_points
 from ._display import extract_display_config
 from ._style import pop_style_options, resolve_styles
 from ._batching import batched
-from ._grouping import build_group_specs, resolve_group_path, is_column
+from ._grouping import build_group_specs, resolve_group_path, is_column, static_group_path
 from .._warnings import warn, EmptyLayerWarning
 
 @batched
@@ -118,27 +118,38 @@ def add_circle_markers(
 
     # 3. Group the dataset by the unique combinations of these columns/strings
     group_map = {}
-    for i in range(num_points):
-        g_val = resolve_group_path(group_specs, props, i, "Circle Markers Group")
-        n_val = props[name][i] if name_is_col else name
+    static_path = static_group_path(group_specs, "Circle Markers Group")
+    if static_path is not None and not name_is_col:
+        # One group, one name: every point shares a single key, and iterating 200k times
+        # to discover that was a measurable share of large ingests.
+        group_map[(static_path, name)] = list(range(num_points))
+    else:
+        for i in range(num_points):
+            g_val = (static_path if static_path is not None
+                     else resolve_group_path(group_specs, props, i, "Circle Markers Group"))
+            n_val = props[name][i] if name_is_col else name
         
-        key = (g_val, n_val)
-        if key not in group_map:
-            group_map[key] = []
-        group_map[key].append(i)
+            key = (g_val, n_val)
+            if key not in group_map:
+                group_map[key] = []
+            group_map[key].append(i)
 
     # 4. Create separate layers for each group
     for (g_val, n_val), indices in group_map.items():
-        sub_lats = lats[indices]
-        sub_lons = lons[indices]
-        
-        sub_feature_styles = ([feature_styles[idx] for idx in indices]
-                              if feature_styles else None)
+        # The single-group fast path selects every point, and subsetting 200k-element
+        # columns into identical copies was a measurable share of large ingests.
+        whole = len(indices) == num_points
+        sub_lats = lats if whole else lats[indices]
+        sub_lons = lons if whole else lons[indices]
+
+        sub_feature_styles = (None if not feature_styles
+                              else feature_styles if whole
+                              else [feature_styles[idx] for idx in indices])
 
         # Subset properties
         sub_props = {}
         for k, v in props.items():
-            sub_props[k] = [v[idx] for idx in indices]
+            sub_props[k] = v if whole else [v[idx] for idx in indices]
 
         # Merge dict popups/tooltips into sub_props
         sub_props_copy = dict(sub_props)

@@ -5,6 +5,13 @@ from .._infra import LayerConfig
 from ._display import DISPLAY_KEYS
 
 
+# Types that pass through _json_safe unchanged. type() membership, not isinstance:
+# an isinstance gate would wave numpy scalars through as float/int lookalikes, and
+# np.int64 is not an int subclass -- json.dumps rejects it outright. (np.float64 does
+# subclass float and would serialise, but the strict gate just costs it a recursion.)
+_SAFE_SCALARS = frozenset({bool, int, float, str, type(None)})
+
+
 def _json_safe(value: Any) -> Any:
     """
     Coerces a property value into something the widget transport can serialize.
@@ -28,6 +35,14 @@ def _json_safe(value: Any) -> Any:
         except (ValueError, TypeError):
             pass
     if isinstance(value, (list, tuple)):
+        # A property column from a 200k-row frame is usually a plain list of ints or
+        # strings, and recursing per element re-derived "already safe" 200k times -- one
+        # of the three hot spots of large ingests. The gate is a full pass over the
+        # element types at C speed, not a sample: one pandas Timestamp past a sampled
+        # head would revive exactly the far-from-cause sync failure this function exists
+        # to prevent. bool is fine here -- True serialises as true.
+        if isinstance(value, list) and not set(map(type, value)) - _SAFE_SCALARS:
+            return value
         return [_json_safe(v) for v in value]
     if isinstance(value, dict):
         return {str(k): _json_safe(v) for k, v in value.items()}
