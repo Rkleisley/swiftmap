@@ -1,10 +1,8 @@
 # Swiftmap Custom AnyWidget Map Controller
 import anywidget
 import traitlets
-import numpy as np
 import contextlib
 from typing import Optional, List, Dict, Any, Union
-import pathlib
 from ._infra import LayerConfig, _load_esm, _widget_css_path
 from .layers._targeting import find_layers, apply_to_layers
 from ._warnings import warn
