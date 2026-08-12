@@ -42,10 +42,9 @@
    the date, the slider, the speed -- fixed top-centre with the same card styling as
    the StructMap custom control it replaces. */
 .swiftmap-time-control {
+    /* Anchoring (top/left/right/bottom/transform) is applied inline by the control from
+       time_config.position; only what every position shares lives here. */
     position: absolute;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
     z-index: 1000;
     display: flex;
     align-items: center;

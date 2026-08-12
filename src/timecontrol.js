@@ -131,6 +131,28 @@ export function advance(index, length, loop) {
     return { index, playing: false };
 }
 
+// Where the control sits, as inline styles so the choice travels with the state rather
+// than needing a stylesheet rule per corner. Every property is written on every render --
+// including the ones a position does not use -- so moving the control clears the old
+// anchor instead of accumulating both.
+export const POSITIONS = {
+    "top-left":      { top: "10px", bottom: "", left: "10px", right: "", transform: "" },
+    "top-center":    { top: "10px", bottom: "", left: "50%", right: "", transform: "translateX(-50%)" },
+    "top-right":     { top: "10px", bottom: "", left: "", right: "10px", transform: "" },
+    "left-center":   { top: "50%", bottom: "", left: "10px", right: "", transform: "translateY(-50%)" },
+    "right-center":  { top: "50%", bottom: "", left: "", right: "10px", transform: "translateY(-50%)" },
+    "bottom-left":   { top: "", bottom: "10px", left: "10px", right: "", transform: "" },
+    "bottom-center": { top: "", bottom: "10px", left: "50%", right: "", transform: "translateX(-50%)" },
+    "bottom-right":  { top: "", bottom: "10px", left: "", right: "10px", transform: "" },
+};
+
+function applyPosition(el, position) {
+    const styles = POSITIONS[position] || POSITIONS["top-center"];
+    for (const [prop, value] of Object.entries(styles)) {
+        el.style[prop] = value;
+    }
+}
+
 function formatUTC(ms) {
     return new Date(ms).toISOString().slice(0, 19).replace("T", " ") + "Z";
 }
@@ -206,5 +228,6 @@ export function renderTimeControl(container, state, handlers) {
     loop.title = state.loop ? "Loop: on" : "Loop: off";
 
     el.querySelector(".swiftmap-time-speed").value = String(state.speed || 1);
+    applyPosition(el, state.position);
     return el;
 }

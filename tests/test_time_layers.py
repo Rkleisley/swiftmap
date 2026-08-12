@@ -254,3 +254,27 @@ def test_geostructures_intervals_are_found_without_being_named():
     mp.add_circle_markers(track, name="Track").make_time_layer("Track")
     stamped = mp.find_layers("Track")[0]
     assert stamped["time"]["field"].startswith("datetime_start")
+
+
+def test_position_lands_in_the_shared_config(m):
+    m.configure_time(position="bottom-right")
+    assert m.time_config["position"] == "bottom-right"
+
+
+def test_an_unknown_position_warns_and_keeps_the_old(m):
+    m.configure_time(position="left-center")
+    with pytest.warns(SwiftMapWarning, match="is not one of"):
+        m.configure_time(position="middle")
+    assert m.time_config["position"] == "left-center"
+
+
+def test_python_and_js_agree_on_the_position_names():
+    """The two sets live on either side of the wire; drift means a silently ignored value."""
+    import pathlib
+    import re
+    from swiftmap.map import TIME_POSITIONS
+    source = (pathlib.Path(__file__).resolve().parent.parent / "src" / "timecontrol.js") \
+        .read_text(encoding="utf-8")
+    block = source[source.index("export const POSITIONS"):]
+    js_names = set(re.findall(r'"([a-z]+-[a-z]+)"\s*:', block[:block.index("};")]))
+    assert js_names == set(TIME_POSITIONS)

@@ -170,7 +170,8 @@ finding, not a gap in the slider.
 
 By default each tick shows its own period. Pass `duration=None` to accumulate history
 instead, or an ISO8601 duration (`'PT6H'`) for a fixed trailing window. Playback options
-are shared: `m.configure_time(period="PT1H", auto_play=True, loop=True, speed=2)`.
+are shared: `m.configure_time(period="PT1H", auto_play=True, loop=True, speed=2,
+position="bottom-center")`.
 
 The slider's position syncs both ways: `m.time_current` holds the current tick (epoch
 ms) for Shiny to react to, and setting it from Python jumps the slider to that moment.

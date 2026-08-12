@@ -346,6 +346,7 @@ export default {
                 timeUI.index = Math.min(timeUI.index, timeUI.ticks.length - 1);
             }
             timeState = { tick: timeUI.ticks[timeUI.index], period };
+            timeUI.position = cfg.position || "top-center";
 
             if (!timeUI.started) {
                 timeUI.started = true;

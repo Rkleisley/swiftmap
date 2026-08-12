@@ -363,3 +363,30 @@ test("one slider serves however many time layers exist", () => {
     assert.equal(host.querySelectorAll(".swiftmap-time-control").length, 1);
     assert.equal(host.querySelector(".swiftmap-time-slider").max, "2");
 });
+
+test("the control sits where the config says", () => {
+    const { el } = mountTime({ ticks: [T0], index: 0, position: "bottom-right" });
+    assert.equal(el.style.bottom, "10px");
+    assert.equal(el.style.right, "10px");
+    assert.equal(el.style.top, "");
+});
+
+test("moving the control clears the previous anchor", () => {
+    // Every position writes every property, so bottom-right to top-center cannot leave
+    // a stale `right` pinning it to the corner.
+    const { host } = mountTime({ ticks: [T0], index: 0, position: "bottom-right" });
+    renderTimeControl(host, { ticks: [T0], index: 0, position: "top-center" }, {});
+    const el = host.querySelector(".swiftmap-time-control");
+    assert.equal(el.style.right, "");
+    assert.equal(el.style.bottom, "");
+    assert.equal(el.style.top, "10px");
+    assert.equal(el.style.left, "50%");
+});
+
+test("no position means top-center, and nonsense falls back to it", () => {
+    const { el } = mountTime({ ticks: [T0], index: 0 });
+    assert.equal(el.style.top, "10px");
+    const { el: el2 } = mountTime({ ticks: [T0], index: 0, position: "over-there" });
+    assert.equal(el2.style.top, "10px");
+    assert.equal(el2.style.left, "50%");
+});

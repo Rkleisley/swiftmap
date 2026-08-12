@@ -7,6 +7,12 @@ from ._infra import LayerConfig, _load_esm, _widget_css_path
 import numpy as np
 from .layers._targeting import find_layers, apply_to_layers
 from .layers._time import normalize_layer_times, is_valid_period
+
+# Mirrors POSITIONS in src/timecontrol.js; the two sets must not drift.
+TIME_POSITIONS = frozenset({
+    "top-left", "top-center", "top-right", "left-center", "right-center",
+    "bottom-left", "bottom-center", "bottom-right",
+})
 from ._warnings import warn
 from .layers._style import (STYLE_KEYS, POINTS, LINES, AREAS, pop_style_options,
                             warn_on_undrawn_options, normalize as normalize_style)
@@ -810,12 +816,21 @@ class Map(anywidget.AnyWidget):
             Start over when playback reaches the end. Default False.
         speed : float
             Playback rate in ticks per second. Default 1.
+        position : str
+            Where the control sits on the map: 'top-left', 'top-center', 'top-right',
+            'left-center', 'right-center', 'bottom-left', 'bottom-center' or
+            'bottom-right'. Default 'top-center'. The sidebar lives at top-right, so
+            that corner works but crowds it.
 
         Returns
         -------
         Map
             Self reference for method chaining.
         """
+        if "position" in options and options["position"] not in TIME_POSITIONS:
+            warn(f"configure_time: position {options['position']!r} is not one of "
+                 f"{sorted(TIME_POSITIONS)}. Keeping the previous position.")
+            options.pop("position")
         if "period" in options and not is_valid_period(options["period"]):
             warn(f"configure_time: period {options['period']!r} is not an ISO8601 "
                  f"duration (like 'P1D' or 'PT1H'). Keeping the previous period.")
