@@ -112,8 +112,13 @@
 .swiftmap-time-track .swiftmap-time-slider {
     position: absolute;
     top: 0;
-    left: 0;
-    width: 100%;
+    /* A native thumb's CENTER travels [thumbWidth/2, width - thumbWidth/2], while the
+       span, ruler and trail handle use the track's full width. Overhanging the input by
+       half a thumb (7px) each side puts the thumb's centre on the same 0-100% scale, so
+       the parked trail sits exactly under the lead at every position instead of drifting
+       left of it at the start and right of it at the end. */
+    left: -7px;
+    width: calc(100% + 14px);
     margin: 0;
     height: 18px;
     background: transparent;
