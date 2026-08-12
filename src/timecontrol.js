@@ -416,7 +416,12 @@ function attachTrailDrag(el, handlers) {
         const state = track._state;
         const rect = track.getBoundingClientRect();
         if (!state || !state.gridMs || rect.width === 0) return undefined;
-        const frac = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+        // Deliberately unclamped on the left: the window is "how far back from the
+        // lead point", and that may reach past the bar's start -- especially when the
+        // lead sits early on the bar and most of its trail is off-screen. Clamping here
+        // capped the window at the visible past, which pinned the handle to the bar's
+        // start and made anything wider impossible to set. Only the DRAWING clamps.
+        const frac = Math.min(1, (ev.clientX - rect.left) / rect.width);
         const t0 = state.ticks[0];
         const spanMs = state.ticks[state.ticks.length - 1] - t0;
         const thumbT = state.ticks[state.index];
