@@ -437,9 +437,25 @@ function attachTrailDrag(el, handlers) {
     trail.addEventListener("pointerdown", ev => {
         ev.preventDefault();
         ev.stopPropagation();
+        // Capture retargets every pointer event to the handle until release, no matter
+        // where the cursor is. Without it, letting go with the pointer over the map hands
+        // pointerup to Leaflet's container handlers, and a release they swallow never
+        // reaches the document listener -- the drag stays uncommitted and the next sync
+        // snaps the handle home. The document listeners below remain as the fallback for
+        // environments without capture; with it, retargeted events still bubble to them.
+        let captured = false;
+        try {
+            if (trail.setPointerCapture) { trail.setPointerCapture(ev.pointerId); captured = true; }
+        } catch (err) { /* synthetic events have no active pointer; fall back to bubbling */ }
+        console.log(`[swiftmap-time] drag start: captured=${captured} pointerId=${ev.pointerId}`);
 
+        let lastIso;
         const move = e => {
             const iso = isoFromEvent(e);
+            if (iso !== undefined && iso !== lastIso) {
+                lastIso = iso;
+                console.log(`[swiftmap-time] drag: ${iso}`);
+            }
             if (iso !== undefined) handlers.onWindowDrag(iso);
         };
         const finish = e => {
@@ -447,6 +463,7 @@ function attachTrailDrag(el, handlers) {
             document.removeEventListener("pointerup", finish);
             document.removeEventListener("pointercancel", finish);
             const iso = isoFromEvent(e);
+            console.log(`[swiftmap-time] release: type=${e.type} target=${e.target.className || e.target.tagName} iso=${iso}`);
             if (iso !== undefined) handlers.onWindowCommit(iso);
         };
         document.addEventListener("pointermove", move);

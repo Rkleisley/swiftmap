@@ -339,8 +339,11 @@ export default {
                     const cfg = { ...(model.get("time_config") || {}) };
                     if (iso) cfg.window = iso;
                     else delete cfg.window;
+                    console.log(`[swiftmap-time] commit: window=${iso} -> time_config=${JSON.stringify(cfg)}`);
                     model.set("time_config", cfg);
                     model.save_changes();
+                } else {
+                    console.log(`[swiftmap-time] commit SKIPPED: no comm (window=${iso})`);
                 }
             },
         };
@@ -381,7 +384,11 @@ export default {
             // "no window" on every debounced sync -- the handle followed the mouse, then
             // snapped home, then followed again, once per sync.
             if (!timeUI.dragActive) {
-                timeUI.window = cfg.window && parsePeriod(cfg.window) ? cfg.window : null;
+                const resolved = cfg.window && parsePeriod(cfg.window) ? cfg.window : null;
+                if (resolved !== timeUI.window) {
+                    console.log(`[swiftmap-time] sync resolves window: ${timeUI.window} -> ${resolved} (cfg.window=${cfg.window})`);
+                }
+                timeUI.window = resolved;
             }
             timeUI.periodMs = periodToMs(period);
             timeUI.gridMs = timeUI.periodMs
@@ -395,7 +402,12 @@ export default {
                 timeUI.started = true;
                 timeUI.speed = cfg.speed || 1;
                 timeUI.loop = Boolean(cfg.loop);
-                if (cfg.auto_play) startPlayback();
+                // Only the first configuration may auto-start. Every config change resets
+                // `started` to re-read speed and loop -- including the change a window
+                // drag commits -- and re-running auto_play there would start playback as
+                // a side effect of releasing the handle.
+                if (cfg.auto_play && !timeUI.everStarted) startPlayback();
+                timeUI.everStarted = true;
             }
             renderTimeControl(el, timeUI, timeHandlers);
         }
@@ -741,7 +753,8 @@ export default {
         });
         model.on("change:group_configs", queueSync);
         model.on("change:time_config", () => {
-            timeUI.started = false;   // re-apply speed/loop/auto_play from the new config
+            console.log(`[swiftmap-time] time_config changed: ${JSON.stringify(model.get("time_config"))}`);
+            timeUI.started = false;   // re-apply speed/loop from the new config
             queueSync();
         });
         // Python steering the slider: snap to the nearest tick at or after the requested
