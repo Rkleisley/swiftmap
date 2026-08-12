@@ -4,7 +4,9 @@ import traitlets
 import contextlib
 from typing import Optional, List, Dict, Any, Union
 from ._infra import LayerConfig, _load_esm, _widget_css_path
+import numpy as np
 from .layers._targeting import find_layers, apply_to_layers
+from .layers._time import normalize_layer_times, is_valid_period
 from ._warnings import warn
 from .layers._style import (STYLE_KEYS, POINTS, LINES, AREAS, pop_style_options,
                             warn_on_undrawn_options, normalize as normalize_style)
@@ -102,6 +104,10 @@ class Map(anywidget.AnyWidget):
     selected_index = traitlets.Int(-1).tag(sync=True)
     clicked_layer_id = traitlets.Unicode("").tag(sync=True)
     fit_bounds_request = traitlets.Dict({}).tag(sync=True)
+    # Shared time-slider settings and its current position (epoch ms). One slider serves
+    # every time layer, so its configuration is map state rather than layer state.
+    time_config = traitlets.Dict({}).tag(sync=True)
+    time_current = traitlets.Float(0).tag(sync=True)
     js_console_logs = traitlets.List([]).tag(sync=True)
     auto_sync = traitlets.Bool(True).tag(sync=True)
     sync_trigger = traitlets.Int(0).tag(sync=True)
@@ -219,14 +225,18 @@ class Map(anywidget.AnyWidget):
 
     def _remove_layer_buffers(self, layer_ids: Any) -> None:
         buffers = dict(self.coordinate_buffers)
-        removed = [lid for lid in layer_ids if lid in buffers]
+        # A layer may own auxiliary buffers under "<id>::<kind>" -- per-feature times ride
+        # that way -- so removing a layer removes everything keyed under its id.
+        removed = [key for key in buffers
+                   for lid in layer_ids
+                   if key == lid or (lid is not None and key.startswith(f"{lid}::"))]
         if not removed:
             return
-        for layer_id in removed:
-            del buffers[layer_id]
+        for key in removed:
+            del buffers[key]
         self._set_trait_quietly("coordinate_buffers", buffers)
-        for layer_id in removed:
-            self._emit({"op": "buffer_remove", "id": layer_id})
+        for key in removed:
+            self._emit({"op": "buffer_remove", "id": key})
 
     def resync(self) -> "Map":
         """
@@ -668,6 +678,150 @@ class Map(anywidget.AnyWidget):
             if zoom and chosen:
                 self.fit_bounds(self.bounds_of(chosen), zoom_offset=zoom_offset,
                                 max_zoom=max_zoom, padding=padding)
+        return self
+
+    def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = None,
+                        time_end_field: Optional[str] = None, period: Optional[str] = None,
+                        duration: Optional[str] = "period", **criteria) -> "Map":
+        """
+        Animates the matching layers along the time their features already carry.
+
+        Timestamps are read from the layer's own properties -- a DataFrame's timestamp
+        column, or the datetime_start/datetime_end the geostructures parser records --
+        so nothing is re-parsed and nothing extra is passed in. One slider serves every
+        time layer on the map; making a second time layer joins it to the same slider
+        rather than adding another control.
+
+        The slider steps through generated periods rather than through the observed
+        timestamps, so a period in which nothing happened still gets its tick: an empty
+        map at 03:00 is a finding, not a gap in the slider.
+
+        Parameters
+        ----------
+        target : str or layer or list, optional
+            Which layers, as in `hide`. Chaining works since every method returns the map:
+            `m.add_circle_markers(df, name="V").make_time_layer("V")`.
+        time_field : str, optional
+            Property holding each feature's time -- a single stamp or a [start, end] pair.
+            When omitted, the known names are probed: "times", "datetime_start"(/"_end"),
+            "timestamp", "datetime", "time", "date".
+        time_end_field : str, optional
+            Property holding the interval end, for data with separate start/end columns.
+        period : str, optional
+            Slider step as an ISO8601 duration ('P1D', 'PT1H', 'PT15M'). Shared by the one
+            slider, so setting it here reconfigures the map's time axis. Default 'P1D'.
+        duration : str or None, default "period"
+            How long a feature stays visible after its time. "period" shows each tick's
+            own period -- absence reads as absence. None accumulates history instead, and
+            an ISO8601 duration gives a fixed trailing window ('PT6H').
+        **criteria
+            Further narrowing -- `types`, `exclude_types`, `group`; see `hide`.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+
+        Warns
+        -----
+        SwiftMapWarning
+            If nothing matched, a matched layer has no readable time property, some
+            features carry no parseable time (those stay permanently visible), or the
+            period/duration strings are not ISO8601 durations.
+
+        Examples
+        --------
+        >>> m.add_circle_markers(df, name="Vessel")     # df has a timestamp column
+        >>> m.make_time_layer("Vessel", period="PT1H")
+
+        >>> m.make_time_layer(group="Tracks", period="PT15M", duration="PT1H")
+        """
+        matched = self.find_layers(target, **criteria)
+        if not matched:
+            warn(f"make_time_layer matched no layers ({_describe_target(target, criteria)}). "
+                 f"Nothing was animated.")
+            return self
+
+        if duration not in (None, "period") and not is_valid_period(duration):
+            warn(f"make_time_layer: duration {duration!r} is not an ISO8601 duration "
+                 f"(like 'PT1H'). Falling back to 'period'.")
+            duration = "period"
+
+        with self.batch():
+            for layer in matched:
+                interleaved, field, timeless = normalize_layer_times(
+                    layer.get("properties"), time_field, time_end_field)
+                if interleaved is None:
+                    warn(f"make_time_layer: layer {layer.get('name')!r} has no time "
+                         f"property. Pass time_field= naming one; its features stay "
+                         f"visible at every tick until then.")
+                    continue
+                if timeless:
+                    total = len(interleaved) // 2
+                    warn(f"make_time_layer: {timeless} of {total} feature(s) in "
+                         f"{layer.get('name')!r} carry no parseable time and will stay "
+                         f"visible at every tick.")
+
+                payload = np.asarray(interleaved, dtype=np.float64).tobytes()
+                key = f"{layer.get('id')}::times"
+                if self.coordinate_buffers.get(key) != payload:
+                    self._set_layer_buffer(key, payload)
+                self._set_layer_fields([layer], {"time": {"field": field,
+                                                          "duration": duration}})
+            if period is not None:
+                self.configure_time(period=period)
+        return self
+
+    def clear_time_layer(self, target: Any = None, **criteria) -> "Map":
+        """
+        Stops animating the matching layers; with no target, every time layer on the map.
+
+        The slider disappears once nothing is animated. Features return to being always
+        visible; the layer itself is untouched.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
+        if target is None and not criteria:
+            matched = [l for l in self.find_layers() if l.get("time")]
+        else:
+            matched = [l for l in self.find_layers(target, **criteria) if l.get("time")]
+        if not matched:
+            return self
+        with self.batch():
+            self._set_layer_fields(matched, {"time": None})
+            self._remove_layer_buffers([l.get("id") for l in matched
+                                        if f"{l.get('id')}::times" in self.coordinate_buffers])
+        return self
+
+    def configure_time(self, **options) -> "Map":
+        """
+        Configures the shared time slider.
+
+        Options
+        -------
+        period : str
+            Slider step, ISO8601 ('P1D', 'PT1H'). Default 'P1D'.
+        auto_play : bool
+            Start playing as soon as the slider appears. Default False.
+        loop : bool
+            Start over when playback reaches the end. Default False.
+        speed : float
+            Playback rate in ticks per second. Default 1.
+
+        Returns
+        -------
+        Map
+            Self reference for method chaining.
+        """
+        if "period" in options and not is_valid_period(options["period"]):
+            warn(f"configure_time: period {options['period']!r} is not an ISO8601 "
+                 f"duration (like 'P1D' or 'PT1H'). Keeping the previous period.")
+            options.pop("period")
+        if options:
+            self.time_config = {**self.time_config, **options}
         return self
 
     def highlight(self, target: Any = None, *, markers: Optional[Dict[str, Any]] = None,

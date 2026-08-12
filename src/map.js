@@ -1,6 +1,8 @@
 import { loadCSS, loadJS } from "./utils.js";
 import { renderSidebarControls, normalizeRadioLayers } from "./sidebar.js";
 import { renderLayer, renderMergedGlLayer } from "./layers.js";
+import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
+         layerInWindow, renderTimeControl } from "./timecontrol.js";
 
 // True if a layer is visible and no folder above it is switched off.
 //
@@ -244,6 +246,106 @@ export default {
             polygon: { layer: null, ids: "", meta: "" }
         };
 
+        // The shared time slider. `timeState` is what rendering reads -- the current tick
+        // and the period, or null when nothing is animated -- and `timeUI` is the slider's
+        // own bookkeeping. Playback never round-trips through Python: ticks re-render
+        // locally, and time_current is written back at most once a second while playing.
+        let timeState = null;
+        const timeUI = { ticks: [], key: "", index: 0, playing: false, loop: false,
+                         speed: 1, timer: null, lastWrite: 0, started: false };
+
+        function stopPlayback() {
+            if (timeUI.timer) clearInterval(timeUI.timer);
+            timeUI.timer = null;
+            timeUI.playing = false;
+        }
+
+        function writeTimeCurrent(force) {
+            const now = Date.now();
+            if (!force && now - timeUI.lastWrite < 1000) return;
+            timeUI.lastWrite = now;
+            if (model.comm) {
+                model.set("time_current", timeUI.ticks[timeUI.index]);
+                model.save_changes();
+            }
+        }
+
+        function seekTo(index, { write = true } = {}) {
+            timeUI.index = Math.max(0, Math.min(index, timeUI.ticks.length - 1));
+            timeState = { tick: timeUI.ticks[timeUI.index], period: timeState.period };
+            if (write) writeTimeCurrent(!timeUI.playing);
+            renderTimeControl(el, timeUI, timeHandlers);
+            queueSync();
+        }
+
+        function startPlayback() {
+            stopPlayback();
+            timeUI.playing = true;
+            timeUI.timer = setInterval(() => {
+                if (timeUI.index >= timeUI.ticks.length - 1) {
+                    if (timeUI.loop) return seekTo(0);
+                    stopPlayback();
+                    renderTimeControl(el, timeUI, timeHandlers);
+                    writeTimeCurrent(true);
+                    return;
+                }
+                seekTo(timeUI.index + 1);
+            }, 1000 / timeUI.speed);
+        }
+
+        const timeHandlers = {
+            onSeek: (index) => seekTo(index),
+            onPlayToggle: () => {
+                if (timeUI.playing) { stopPlayback(); writeTimeCurrent(true); }
+                else startPlayback();
+                renderTimeControl(el, timeUI, timeHandlers);
+            },
+            onLoopToggle: () => {
+                timeUI.loop = !timeUI.loop;
+                renderTimeControl(el, timeUI, timeHandlers);
+            },
+            onSpeed: (speed) => {
+                timeUI.speed = speed;
+                if (timeUI.playing) startPlayback();
+            },
+        };
+
+        // Creates, retunes or removes the slider to match the layers present. Ticks are
+        // regenerated only when the data's time extent or the period changes, so a
+        // playback tick -- which re-enters here via queueSync -- does not rebuild them.
+        function updateTimeDimension() {
+            if (!hasTimeLayers(layerState)) {
+                if (timeState) {
+                    stopPlayback();
+                    renderTimeControl(el, { ticks: [] }, timeHandlers);
+                    timeState = null;
+                    timeUI.key = "";
+                    timeUI.started = false;
+                }
+                return;
+            }
+            const cfg = model.get("time_config") || {};
+            const period = parsePeriod(cfg.period || "P1D") || parsePeriod("P1D");
+            const extent = collectTimeExtent(layerState, bufferState);
+            if (!extent) return;
+
+            const key = `${extent.min}|${extent.max}|${cfg.period || "P1D"}`;
+            if (key !== timeUI.key) {
+                timeUI.key = key;
+                timeUI.ticks = generateTicks(extent.min, extent.max, period);
+                timeUI.index = Math.min(timeUI.index, timeUI.ticks.length - 1);
+            }
+            timeState = { tick: timeUI.ticks[timeUI.index], period };
+
+            if (!timeUI.started) {
+                timeUI.started = true;
+                timeUI.speed = cfg.speed || 1;
+                timeUI.loop = Boolean(cfg.loop);
+                if (cfg.auto_play) startPlayback();
+            }
+            renderTimeControl(el, timeUI, timeHandlers);
+        }
+
         // Sidebar Layers Control UI
         const sidebar = document.createElement("div");
         sidebar.className = "swiftmap-sidebar";
@@ -293,6 +395,7 @@ export default {
 
         async function syncMapState() {
             console.time("[Performance] syncMapState Total");
+            updateTimeDimension();
             const layers = layerState;
             const groupConfigs = model.get("group_configs") || {};
             const coordinateBuffers = bufferState;
@@ -355,7 +458,7 @@ export default {
                     continue;
                 }
 
-                if (!effectiveVisible) {
+                if (!effectiveVisible || !layerInWindow(layer, bufferState, timeState)) {
                     if (activeOverlayLayers[layer.id]) {
                         activeOverlayLayers[layer.id].remove();
                         delete activeOverlayLayers[layer.id];
@@ -382,6 +485,9 @@ export default {
             // Helper to sync WebGL layer states and rebuild only if changed
             async function syncGlLayer(type, visibleLayers) {
                 const idsString = visibleLayers.map(l => l.id).sort().join(",");
+                // Everything the built buffers depend on belongs in this key: a change that
+                // is not in it renders stale. highlight_style and style_overrides were
+                // missing at first, so a highlight landed in state and never repainted.
                 const metaString = JSON.stringify(visibleLayers.map(l => ({
                     id: l.id,
                     color: l.color,
@@ -389,6 +495,11 @@ export default {
                     weight: l.weight,
                     opacity: l.opacity,
                     fillOpacity: l.fillOpacity,
+                    highlight: l.highlight_style,
+                    overrides: l.style_overrides,
+                    featureStyles: l.feature_styles,
+                    time: l.time,
+                    tick: l.time && timeState ? timeState.tick : 0,
                     bufLen: coordinateBuffers[l.id]?.byteLength || 0,
                     locLen: l.locations?.length || 0
                 })));
@@ -401,7 +512,7 @@ export default {
                         state.layer.remove();
                     }
                     if (visibleLayers.length > 0) {
-                        state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, model);
+                        state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, model, timeState);
                         if (state.layer) {
                             state.layer.addTo(map);
                         }
@@ -574,6 +685,20 @@ export default {
             queueSync();
         });
         model.on("change:group_configs", queueSync);
+        model.on("change:time_config", () => {
+            timeUI.started = false;   // re-apply speed/loop/auto_play from the new config
+            queueSync();
+        });
+        // Python steering the slider: snap to the nearest tick at or after the requested
+        // time. Guarded so the widget's own writeback does not loop through here.
+        model.on("change:time_current", () => {
+            const wanted = model.get("time_current");
+            if (!timeState || !timeUI.ticks.length) return;
+            if (Math.abs(wanted - timeUI.ticks[timeUI.index]) < 1) return;
+            let idx = timeUI.ticks.findIndex(t => t >= wanted);
+            if (idx === -1) idx = timeUI.ticks.length - 1;
+            seekTo(idx, { write: false });
+        });
         model.on("change:show_logo", queueSync);
 
         // Announce this view so Python replies with a full snapshot. Layers added before

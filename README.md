@@ -151,6 +151,31 @@ passed through to the layer untouched.
 
 ---
 
+## Time Layers
+
+Any layer whose features carry timestamps can be animated. Timestamps are read from the
+layer's own properties -- a DataFrame's `timestamp` column, or the interval a
+geostructures `Track` already records -- so nothing extra is passed in:
+
+```python
+m.add_circle_markers(df, name="Vessel")          # df has a timestamp column
+m.make_time_layer("Vessel", period="PT1H")
+```
+
+One slider serves every time layer on the map; animating a second layer joins it to the
+same slider rather than adding another control. The slider steps through generated
+periods (`'P1D'`, `'PT15M'`, ...) rather than through the observed timestamps, so a
+period in which nothing happened still gets its tick -- an empty map at 03:00 is a
+finding, not a gap in the slider.
+
+By default each tick shows its own period. Pass `duration=None` to accumulate history
+instead, or an ISO8601 duration (`'PT6H'`) for a fixed trailing window. Playback options
+are shared: `m.configure_time(period="PT1H", auto_play=True, loop=True, speed=2)`.
+
+The slider's position syncs both ways: `m.time_current` holds the current tick (epoch
+ms) for Shiny to react to, and setting it from Python jumps the slider to that moment.
+`m.clear_time_layer()` stops animating and removes the control.
+
 ## Popups & Tooltips
 
 By default every property is listed as `name: value`. Narrow the list with `*_fields`, and give

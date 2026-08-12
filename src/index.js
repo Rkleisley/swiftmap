@@ -8,6 +8,9 @@ export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers } from 
 export { renderLayer, renderMergedGlLayer, styleFor, getIndexedProperties } from "./layers.js";
 export { renderSidebarControls, normalizeRadioLayers, getLayerBounds } from "./sidebar.js";
 export { pinShader } from "./shaders.js";
+export { parsePeriod, addPeriod, generateTicks, windowFor, featureInWindow,
+         timesFor, layerInWindow, collectTimeExtent, hasTimeLayers,
+         renderTimeControl } from "./timecontrol.js";
 export {
     parseColor,
     escapeHtml,

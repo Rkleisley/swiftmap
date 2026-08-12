@@ -45,7 +45,7 @@ function serve() {
         () => resolve({ server, port: server.address().port })));
 }
 
-async function withPage(fn) {
+async function withPage(fn, fixture = "widget.html") {
     const { server, port } = await serve();
     // SwiftShader gives software WebGL, so this runs on machines and CI images with no GPU.
     const browser = await chromium.launch({
@@ -55,7 +55,7 @@ async function withPage(fn) {
         const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
         const errors = [];
         page.on("pageerror", e => errors.push(String(e)));
-        await page.goto(`http://127.0.0.1:${port}/test/fixtures/widget.html`);
+        await page.goto(`http://127.0.0.1:${port}/test/fixtures/${fixture}`);
         await page.waitForFunction("window.__ready === true", { timeout: 30000 });
         // Wait for glify's canvas rather than sleeping: the first WebGL draw happens on a
         // later frame than render() resolving, and a fixed delay is a flaky test waiting
@@ -205,5 +205,55 @@ suite("a layer's radius reaches the renderer", async () => {
         assert.ok(out.declared, "the fixture declares a radius to test against");
         assert.equal(out.resolved, out.declared,
             "the radius the layer declares is the size glify draws");
+    });
+});
+
+suite("the time slider filters what glify draws", async () => {
+    // The fixture's two points sit on consecutive days with duration "period": tick 0
+    // must draw exactly one, the final tick the other. Only a real glify instance can
+    // say whether filtering reached the GPU rather than just the state.
+    await withPage(async (page, errors) => {
+        assert.equal(await page.locator(".swiftmap-time-control").count(), 1,
+            "a time layer summons the shared control");
+
+        const countAt = (index) => page.evaluate((i) => {
+            const slider = document.querySelector(".swiftmap-time-slider");
+            slider.value = String(i);
+            slider.dispatchEvent(new Event("input"));
+            return new Promise(resolve => setTimeout(() => {
+                const inst = window.L.glify.pointsInstances;
+                resolve(inst[inst.length - 1].settings.data.length);
+            }, 300));
+        }, index);
+
+        const max = await page.evaluate(() =>
+            parseInt(document.querySelector(".swiftmap-time-slider").max, 10));
+        assert.equal(await countAt(0), 1, "the first period holds one observation");
+        assert.equal(await countAt(max), 1, "the last period holds the other");
+        assert.deepEqual(errors, [], "no errors while scrubbing");
+    }, "widget-time.html");
+});
+
+suite("a highlight repaints the merged WebGL layer", async () => {
+    // Regression: highlight_style was absent from the rebuild key, so a highlight landed
+    // in layer state and the skip-if-unchanged guard threw the repaint away. Only this
+    // tier can catch that class of bug -- state and tests on state looked perfect.
+    await withPage(async page => {
+        const result = await page.evaluate(() => {
+            const last = () => {
+                const a = window.L.glify.pointsInstances;
+                return a[a.length - 1];
+            };
+            const before = last();
+            window.__model.set("layers", window.__model.get("layers").map(l =>
+                l.id === "pts" ? { ...l, highlight_style: { color: "#ffcc00" } } : l));
+            return new Promise(resolve => setTimeout(() => {
+                const inst = last();
+                resolve({ rebuilt: inst !== before, color: inst.settings.color(0, null) });
+            }, 400));
+        });
+        assert.ok(result.rebuilt, "a new glify instance was built for the new styling");
+        assert.ok(Math.abs(result.color.r - 1) < 1e-6 && Math.abs(result.color.g - 0.8) < 1e-6,
+            "and its colour callback resolves the highlight, #ffcc00");
     });
 });

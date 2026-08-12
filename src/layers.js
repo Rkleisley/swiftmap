@@ -1,5 +1,6 @@
 import { loadJS, bindPopup, bindTooltip, parseColor } from "./utils.js";
 import { pinShader } from "./shaders.js";
+import { windowFor, featureInWindow, timesFor, layerInWindow } from "./timecontrol.js";
 
 function setupGlifyProjection(glInstance) {
     if (glInstance && glInstance.layer) {
@@ -95,7 +96,13 @@ export async function renderLayer(map, layer, coordBuffer, model) {
     return null;
 }
 
-export async function renderMergedGlLayer(map, type, layersList, coordinateBuffers, model) {
+export async function renderMergedGlLayer(map, type, layersList, coordinateBuffers, model, timeState = null) {
+    // Lines, polygons and circles are one geometry per layer, so the time slider includes
+    // or excludes them whole. Points carry per-feature times and filter inside their loop.
+    if (timeState && type !== "circle_markers" && type !== "markers") {
+        layersList = layersList.filter(l => layerInWindow(l, coordinateBuffers, timeState));
+        if (layersList.length === 0) return null;
+    }
     if (type === "polyline") {
         const features = [];
         for (const layer of layersList) {
@@ -333,7 +340,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
 
         const coordBuffer = coordinateBuffers[layer.id];
         if (!coordBuffer) {
-            if (layer.location) {
+            if (layer.location && layerInWindow(layer, coordinateBuffers, timeState)) {
                 pointsList.push([layer.location[0], layer.location[1]]);
                 indexMapping.push({
                     layer: layer,
@@ -357,8 +364,15 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         // Same precedence as styleFor: data, then whole-layer highlight, then per-feature.
         const highlight = layer.highlight_style || null;
         const overrides = layer.style_overrides || null;
+        // The current time window, when this layer is animated. Features outside it are
+        // simply not pushed; indexMapping carries originalIndex, so popups and properties
+        // on the survivors keep pointing at the right rows.
+        const win = timeState && layer.time
+            ? windowFor(timeState.tick, layer.time.duration, timeState.period) : null;
+        const times = win ? timesFor(layer, coordinateBuffers) : null;
 
         for (let i = 0; i < count; i++) {
+            if (times && !featureInWindow(times[i * 2], times[i * 2 + 1], win)) continue;
             const fromData = perFeature ? perFeature[i] : null;
             const selected = overrides ? overrides[i] : null;
             const color = (selected && selected.color)

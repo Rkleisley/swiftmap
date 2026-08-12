@@ -261,3 +261,71 @@ test("toggling still works when the trait and the rendered list agree", () => {
 
     assert.equal(model.get("layers").find(l => l.id === "a").visible, false);
 });
+
+// --- the time control -------------------------------------------------------------
+// Pure DOM like the sidebar, so jsdom covers it: creation, teardown, seeking, and the
+// handler contract. Playback timing and WebGL filtering live in tiers 1 and 3.
+import { renderTimeControl } from "../src/timecontrol.js";
+
+function mountTime(state, handlers = {}) {
+    const dom = new JSDOM("<!doctype html><div id='host'></div>");
+    globalThis.document = dom.window.document;
+    const host = dom.window.document.getElementById("host");
+    const el = renderTimeControl(host, state, {
+        onSeek: () => {}, onPlayToggle: () => {}, onLoopToggle: () => {}, onSpeed: () => {},
+        ...handlers,
+    });
+    return { host, el, dom };
+}
+
+const T0 = Date.UTC(2026, 0, 1);
+const DAY = 24 * 3600 * 1000;
+
+test("the control renders once ticks exist", () => {
+    const { el } = mountTime({ ticks: [T0, T0 + DAY], index: 0, playing: false, speed: 1 });
+    assert.ok(el.querySelector(".swiftmap-time-slider"));
+    assert.equal(el.querySelector(".swiftmap-time-slider").max, "1");
+    assert.equal(el.querySelector(".swiftmap-time-label").textContent,
+        "2026-01-01 00:00:00Z", "dates display in UTC with the Z said out loud");
+});
+
+test("no ticks means no control, and an existing one is torn down", () => {
+    const { host } = mountTime({ ticks: [T0], index: 0 });
+    assert.ok(host.querySelector(".swiftmap-time-control"));
+    renderTimeControl(host, { ticks: [] }, {});
+    assert.equal(host.querySelector(".swiftmap-time-control"), null,
+        "clearing the last time layer removes the slider");
+});
+
+test("re-rendering updates the one control rather than stacking a second", () => {
+    const { host } = mountTime({ ticks: [T0, T0 + DAY], index: 0 });
+    renderTimeControl(host, { ticks: [T0, T0 + DAY], index: 1 }, {});
+    assert.equal(host.querySelectorAll(".swiftmap-time-control").length, 1);
+    assert.equal(host.querySelector(".swiftmap-time-slider").value, "1");
+});
+
+test("dragging the slider reports the tick index", () => {
+    const seeks = [];
+    const { el, dom } = mountTime({ ticks: [T0, T0 + DAY, T0 + 2 * DAY], index: 0 },
+        { onSeek: i => seeks.push(i) });
+    const slider = el.querySelector(".swiftmap-time-slider");
+    slider.value = "2";
+    slider.dispatchEvent(new dom.window.Event("input"));
+    assert.deepEqual(seeks, [2]);
+});
+
+test("play state is reflected, not owned, by the button", () => {
+    const { el } = mountTime({ ticks: [T0], index: 0, playing: true });
+    assert.equal(el.querySelector(".swiftmap-time-play").textContent, "⏸");
+    renderTimeControl(el.parentElement, { ticks: [T0], index: 0, playing: false }, {});
+    assert.equal(el.querySelector(".swiftmap-time-play").textContent, "▶");
+});
+
+test("one slider serves however many time layers exist", () => {
+    // The control renders from merged state -- ticks spanning every layer -- so a second
+    // time layer widens the range instead of adding a second control.
+    const { host } = mountTime({ ticks: [T0, T0 + DAY], index: 0 });
+    renderTimeControl(host, { ticks: [T0, T0 + DAY, T0 + 9 * DAY], index: 0 }, {});
+    assert.equal(host.querySelectorAll(".swiftmap-time-control").length, 1);
+    assert.equal(host.querySelector(".swiftmap-time-slider").max, "2");
+});
