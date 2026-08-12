@@ -321,13 +321,20 @@ export default {
                 timeUI.speed = speed;
                 if (timeUI.playing) startPlayback();
             },
-            // Live during the drag: local state and a re-render only, no model chatter.
+            // Live during the drag: local state and a re-render of the control on every
+            // move, but map rebuilds at most every 300ms. At 5M points a rebuild costs
+            // seconds, and a drag fires dozens of moves -- unthrottled, the rebuilds
+            // stack faster than they finish and the allocation churn crashes the tab.
             onWindowDrag: (iso) => {
                 timeUI.dragActive = true;
                 timeUI.window = iso;
                 if (timeState) timeState = { ...timeState, window: iso };
                 renderTimeControl(el, timeUI, timeHandlers);
-                queueSync();
+                const now = Date.now();
+                if (now - (timeUI.lastDragSync || 0) >= 300) {
+                    timeUI.lastDragSync = now;
+                    queueSync();
+                }
             },
             // On release (or a keyboard step): the override lands in time_config so
             // Python and Shiny see the same window the bar shows. null clears the key,
@@ -335,10 +342,10 @@ export default {
             onWindowCommit: (iso) => {
                 timeHandlers.onWindowDrag(iso);
                 timeUI.dragActive = false;
+                queueSync();       // the release always lands, throttle or not
                 const cfg = { ...(model.get("time_config") || {}) };
                 if (iso) cfg.window = iso;
                 else delete cfg.window;
-                console.log(`[swiftmap-time] commit: window=${iso} -> time_config=${JSON.stringify(cfg)}`);
                 try {
                     model.set("time_config", cfg);
                     model.save_changes();
@@ -382,11 +389,7 @@ export default {
             // "no window" on every debounced sync -- the handle followed the mouse, then
             // snapped home, then followed again, once per sync.
             if (!timeUI.dragActive) {
-                const resolved = cfg.window && parsePeriod(cfg.window) ? cfg.window : null;
-                if (resolved !== timeUI.window) {
-                    console.log(`[swiftmap-time] sync resolves window: ${timeUI.window} -> ${resolved} (cfg.window=${cfg.window})`);
-                }
-                timeUI.window = resolved;
+                timeUI.window = cfg.window && parsePeriod(cfg.window) ? cfg.window : null;
             }
             timeUI.periodMs = periodToMs(period);
             timeUI.gridMs = timeUI.periodMs
@@ -751,7 +754,6 @@ export default {
         });
         model.on("change:group_configs", queueSync);
         model.on("change:time_config", () => {
-            console.log(`[swiftmap-time] time_config changed: ${JSON.stringify(model.get("time_config"))}`);
             timeUI.started = false;   // re-apply speed/loop from the new config
             queueSync();
         });
