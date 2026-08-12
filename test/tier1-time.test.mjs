@@ -256,3 +256,85 @@ test("long timelines thin the labels, not the truth", () => {
     assert.ok(labelled.length <= 7, "a two-day hourly bar cannot label every hour");
     assert.equal(marks.filter(m => m.major).length, 48, "every boundary still gets a mark");
 });
+
+// --- GPU time attributes ---------------------------------------------------------------
+// The window test itself runs in the vertex shader, which tier 1 cannot execute; what it
+// CAN pin is everything fed to it: attribute order, float32 rebasing, the encodings for
+// timeless points and cumulative layers, and that the shader's boolean is the same
+// half-open test featureInWindow applies on the CPU side.
+import { buildTimeAttributes, timeVertexShader } from "../src/gputime.js";
+
+const coordBuf = (n) => new DataView(new Float64Array(n * 2).buffer);
+const spanBuf = (pairs) => new DataView(new Float64Array(pairs.flat()).buffer);
+
+test("attributes follow the bucket's feeding order, layer by layer", () => {
+    const layers = [
+        { id: "a", time: { duration: "period" } },
+        { id: "b", time: { duration: "PT2H" } },
+    ];
+    const buffers = {
+        a: coordBuf(2), "a::times": spanBuf([[T0, T0], [T0 + DAY, T0 + DAY]]),
+        b: coordBuf(1), "b::times": spanBuf([[T0 + 2 * DAY, T0 + 2 * DAY]]),
+    };
+    const attrs = buildTimeAttributes(layers, buffers, DAY);
+    assert.equal(attrs.count, 3);
+    assert.equal(attrs.base, T0, "rebased to the bucket's earliest start");
+    assert.deepEqual([...attrs.spans], [0, 0, 86400, 86400, 172800, 172800]);
+    assert.deepEqual([...attrs.durs], [86400, 86400, 7200],
+        "each point carries its own layer's duration, in seconds");
+});
+
+test("a bucket with no time layers builds nothing", () => {
+    assert.deepEqual(buildTimeAttributes([{ id: "a" }], { a: coordBuf(2) }, DAY),
+        { hasTime: false });
+});
+
+test("timeless points and cumulative layers encode as always-visible", () => {
+    const layers = [{ id: "a", time: { duration: null } }];
+    const buffers = { a: coordBuf(2), "a::times": spanBuf([[T0, T0], [NaN, NaN]]) };
+    const attrs = buildTimeAttributes(layers, buffers, DAY);
+    assert.ok(attrs.durs[0] > 1e8, "cumulative: a duration longer than any dataset");
+    assert.ok(attrs.spans[2] < -1e8 && attrs.spans[3] > 1e8,
+        "NaN times: a span containing every tick");
+});
+
+test("a layer without time in a mixed bucket stays permanently visible", () => {
+    const layers = [
+        { id: "t", time: { duration: "period" } },
+        { id: "plain" },
+    ];
+    const buffers = {
+        t: coordBuf(1), "t::times": spanBuf([[T0, T0]]),
+        plain: coordBuf(1),
+    };
+    const attrs = buildTimeAttributes(layers, buffers, DAY);
+    assert.ok(attrs.spans[2] < -1e8 && attrs.spans[3] > 1e8,
+        "the slider is not the plain layer's to hide");
+});
+
+test("the shader's window test is featureInWindow, boolean for boolean", () => {
+    // Mirror of `aTimeSpan.y > (uTick - dur) && aTimeSpan.x <= uTick` from the shader.
+    const glsl = (start, end, tick, dur) => end > (tick - dur) && start <= tick;
+    const cases = [
+        [T0, T0, T0, DAY],                    // on the tick itself
+        [T0, T0, T0 + DAY, DAY],              // exactly one window behind: excluded
+        [T0, T0, T0 + DAY / 2, DAY],          // inside
+        [T0 - DAY, T0 + DAY, T0, DAY / 2],    // interval spanning the window
+        [T0, T0, T0 - 1, DAY],                // in the future of the tick
+    ];
+    for (const [s, e, tick, dur] of cases) {
+        const win = { start: tick - dur, end: tick };
+        assert.equal(glsl(s, e, tick, dur), featureInWindow(s, e, win),
+            `divergence at start=${s} end=${e} tick=${tick} dur=${dur}`);
+    }
+});
+
+test("the vertex shader carries glify's own contract plus the window", () => {
+    const src = timeVertexShader();
+    for (const needed of ["uniform mat4 matrix", "attribute vec4 vertex",
+                          "attribute vec4 color", "attribute float pointSize",
+                          "varying vec4 _color", "aTimeSpan", "aDuration",
+                          "uTick", "uOverride"]) {
+        assert.ok(src.includes(needed), `shader must declare ${needed}`);
+    }
+});

@@ -209,27 +209,43 @@ suite("a layer's radius reaches the renderer", async () => {
 });
 
 suite("the time slider filters what glify draws", async () => {
-    // The fixture's two points sit on consecutive days with duration "period": tick 0
-    // must draw exactly one, the final tick the other. Only a real glify instance can
-    // say whether filtering reached the GPU rather than just the state.
+    // Time filtering happens in the vertex shader: glify holds EVERY point (that count is
+    // the probe that the GPU path engaged -- the CPU fallback would hold one), and what
+    // changes per tick is what gets drawn. readPixels is unavailable (no
+    // preserveDrawingBuffer), so ticks are compared by same-session screenshots: the
+    // fixture's three points sit on separate days, and tick 1's period holds nothing --
+    // an empty map that must differ from both neighbours.
     await withPage(async (page, errors) => {
         assert.equal(await page.locator(".swiftmap-time-control").count(), 1,
             "a time layer summons the shared control");
 
-        const countAt = (index) => page.evaluate((i) => {
-            const slider = document.querySelector(".swiftmap-time-slider");
-            slider.value = String(i);
-            slider.dispatchEvent(new Event("input"));
-            return new Promise(resolve => setTimeout(() => {
-                const inst = window.L.glify.pointsInstances;
-                resolve(inst[inst.length - 1].settings.data.length);
-            }, 300));
-        }, index);
+        const container = page.locator(".swiftmap-container");
+        const shotAt = async (index) => {
+            await page.evaluate((i) => {
+                const slider = document.querySelector(".swiftmap-time-slider");
+                slider.value = String(i);
+                slider.dispatchEvent(new Event("input"));
+            }, index);
+            await page.waitForTimeout(500);
+            return container.screenshot();
+        };
 
         const max = await page.evaluate(() =>
             parseInt(document.querySelector(".swiftmap-time-slider").max, 10));
-        assert.equal(await countAt(0), 1, "the first period holds one observation");
-        assert.equal(await countAt(max), 1, "the last period holds the other");
+
+        const fed = await page.evaluate(() => {
+            const inst = window.L.glify.pointsInstances;
+            return inst[inst.length - 1].settings.data.length;
+        });
+        assert.equal(fed, 3, "every point is on the GPU; the shader does the filtering");
+
+        const first = await shotAt(0);
+        const empty = await shotAt(1);
+        const last = await shotAt(max);
+        assert.notEqual(Buffer.compare(first, empty), 0,
+            "tick 0 draws its point; tick 1's period holds nothing");
+        assert.notEqual(Buffer.compare(last, empty), 0,
+            "the last tick draws its point too");
         // startOver, as the folium player was configured: play pressed at the end
         // restarts from tick 0 immediately -- not one silent interval later, and not
         // the dead press it used to be.
@@ -281,45 +297,45 @@ suite("dragging the trail handle widens the window for every layer", async () =>
     // other into the window -- and release must write the override into time_config so
     // Python sees the same window the bar shows.
     await withPage(async (page, errors) => {
-        const result = await page.evaluate(() => new Promise(resolve => {
+        const container = page.locator(".swiftmap-container");
+        await page.evaluate(() => {
             const slider = document.querySelector(".swiftmap-time-slider");
             slider.value = slider.max;
             slider.dispatchEvent(new Event("input"));
+        });
+        await page.waitForTimeout(500);
+        const narrow = await container.screenshot();
+
+        const result = await page.evaluate(() => new Promise(resolve => {
+            const track = document.querySelector(".swiftmap-time-track");
+            const trail = document.querySelector(".swiftmap-time-trail");
+            const rect = track.getBoundingClientRect();
+            const opts = (x) => ({ bubbles: true, clientX: x, pointerId: 1 });
+            // A human drag spans hundreds of ms, so debounced map syncs run in the
+            // middle of it. The pause below is the regression: mid-drag state lived
+            // only locally, a sync re-read the not-yet-committed config, and the
+            // handle snapped home between mouse movements. Moves and the release go
+            // through document, as they do when the cursor slides off the 12px handle.
+            trail.dispatchEvent(new PointerEvent("pointerdown", opts(rect.right)));
+            document.dispatchEvent(new PointerEvent("pointermove", opts(rect.left)));
             setTimeout(() => {
-                const count = () => {
-                    const a = window.L.glify.pointsInstances;
-                    return a[a.length - 1].settings.data.length;
-                };
-                const before = count();
-                const track = document.querySelector(".swiftmap-time-track");
-                const trail = document.querySelector(".swiftmap-time-trail");
-                const rect = track.getBoundingClientRect();
-                const opts = (x) => ({ bubbles: true, clientX: x, pointerId: 1 });
-                // A human drag spans hundreds of ms, so debounced map syncs run in the
-                // middle of it. The pause below is the regression: mid-drag state lived
-                // only locally, a sync re-read the not-yet-committed config, and the
-                // handle snapped home between mouse movements. Moves and the release go
-                // through document, as they do when the cursor slides off the 12px handle.
-                trail.dispatchEvent(new PointerEvent("pointerdown", opts(rect.right)));
-                document.dispatchEvent(new PointerEvent("pointermove", opts(rect.left)));
-                setTimeout(() => {
-                    const held = document.querySelector(".swiftmap-time-trail")
-                        .getAttribute("aria-valuetext");
-                    document.dispatchEvent(new PointerEvent("pointerup", opts(rect.left)));
-                    setTimeout(() => resolve({
-                        before,
-                        held,
-                        after: count(),
-                        window: (window.__model.get("time_config") || {}).window || null,
-                    }), 400);
-                }, 350);
-            }, 400);
+                const held = document.querySelector(".swiftmap-time-trail")
+                    .getAttribute("aria-valuetext");
+                document.dispatchEvent(new PointerEvent("pointerup", opts(rect.left)));
+                setTimeout(() => resolve({
+                    held,
+                    window: (window.__model.get("time_config") || {}).window || null,
+                }), 400);
+            }, 350);
         }));
-        assert.equal(result.before, 1, "the last period alone holds one point");
+        await page.waitForTimeout(400);
+        const widened = await container.screenshot();
+
         assert.equal(result.held, "PT72H",
             "mid-drag, across map syncs, the handle holds instead of snapping home");
-        assert.equal(result.after, 2, "the widened window brings an earlier point in");
         assert.equal(result.window, "PT72H", "the release wrote the override back");
+        assert.notEqual(Buffer.compare(narrow, widened), 0,
+            "the widened window draws points the narrow one did not");
         assert.deepEqual(errors, [], "no errors while dragging");
     }, "widget-time.html");
 });

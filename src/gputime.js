@@ -1,0 +1,168 @@
+// Time filtering on the GPU, for point layers.
+//
+// The coordinates already live in GPU buffers; rebuilding the merged layer per tick threw
+// that away and re-fed glify all 5M points through JS -- measured at ~2.6s per window
+// change at that scale, with allocation churn that could crash the tab when changes
+// stacked. Instead, each point's time interval and its layer's duration ride along as
+// vertex attributes uploaded once, and the current tick is a uniform: a tick or window
+// change costs two floats and a redraw.
+//
+// glify makes this possible without forking it: vertexShaderSource is an overridable
+// setting (the pin fragment shader already uses the same door), instances expose their
+// gl/program/canvas, attributes are bound once at setup, and the per-frame draw touches
+// only the matrix uniform -- so extra attributes bound after setup persist, and uniform
+// updates take effect on the next redraw.
+import { parsePeriod, periodToMs, timesFor } from "./timecontrol.js";
+
+// Times travel as float32 on the GPU, whose integers are exact only to 2^24. Epoch ms is
+// hopeless at that precision, so times are rebased to the bucket's earliest start and
+// expressed in seconds: exact to ~194 days of span, and a 2s rounding beyond that is
+// invisible at any zoom a time slider makes sense at.
+const ALWAYS = 6.3e8;   // ~20 years, in seconds: the "duration" of cumulative layers,
+                        // and the span half-width of points with no readable time.
+
+// Cheap global kill switch: if wiring the GL state ever fails (a future glify version
+// moving its internals), everything falls back to the CPU rebuild path.
+let gpuOk = true;
+export function gpuTimeAvailable() { return gpuOk; }
+export function disableGpuTime(reason) {
+    if (gpuOk) console.warn(`[SwiftMap] GPU time filtering disabled: ${reason}. ` +
+        `Falling back to rebuild-per-tick.`);
+    gpuOk = false;
+}
+
+// The default points vertex shader (read out of leaflet.glify 3.3.0) with the window
+// test added. A hidden point gets size 0 and a position outside clip space, so neither
+// the visible pass nor the shared-program picking pass ever rasterises it.
+export function timeVertexShader() {
+    return `uniform mat4 matrix;
+attribute vec4 vertex;
+attribute vec4 color;
+attribute float pointSize;
+attribute vec2 aTimeSpan;
+attribute float aDuration;
+uniform float uTick;
+uniform float uOverride;
+varying vec4 _color;
+
+void main() {
+  float dur = uOverride >= 0.0 ? uOverride : aDuration;
+  // Half-open (tick - dur, tick], matching featureInWindow on the CPU side.
+  bool visible = aTimeSpan.y > (uTick - dur) && aTimeSpan.x <= uTick;
+  gl_PointSize = visible ? pointSize : 0.0;
+  gl_Position = visible ? matrix * vertex : vec4(2.0, 2.0, 2.0, 1.0);
+  _color = color;
+}
+`;
+}
+
+// Per-layer duration in seconds: null accumulates, "period" is the shared interval,
+// an ISO string is itself; anything unparseable falls back to the interval.
+function durationSeconds(spec, periodMs) {
+    if (spec === null || spec === undefined) return ALWAYS;
+    if (spec === "period") return (periodMs || 24 * 3600 * 1000) / 1000;
+    const ms = periodToMs(parsePeriod(spec));
+    return ms ? ms / 1000 : (periodMs || 24 * 3600 * 1000) / 1000;
+}
+
+// Builds the per-point attribute arrays for one merged bucket, in the exact order the
+// bucket feeds points to glify: layer by layer, index 0..n-1, with single-`location`
+// layers contributing one point. Points in layers without time metadata -- and points
+// whose time was unreadable (NaN) -- get a span that is visible at every tick.
+export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
+    let total = 0;
+    let hasTime = false;
+    const perLayer = [];
+    for (const layer of layersList) {
+        const buf = coordinateBuffers[layer.id];
+        const count = buf ? buf.byteLength / 16 : (layer.location ? 1 : 0);
+        const times = layer.time ? timesFor(layer, coordinateBuffers) : null;
+        if (layer.time) hasTime = true;
+        perLayer.push({ layer, count, times });
+        total += count;
+    }
+    if (!hasTime) return { hasTime: false };
+
+    let base = Infinity;
+    for (const { times } of perLayer) {
+        if (!times) continue;
+        for (let i = 0; i < times.length; i += 2) {
+            if (!Number.isNaN(times[i]) && times[i] < base) base = times[i];
+        }
+    }
+    if (base === Infinity) base = 0;
+
+    const spans = new Float32Array(total * 2);
+    const durs = new Float32Array(total);
+    let out = 0;
+    for (const { layer, count, times } of perLayer) {
+        const dur = layer.time ? durationSeconds(layer.time.duration, periodMs) : ALWAYS;
+        for (let i = 0; i < count; i++) {
+            const start = times ? times[i * 2] : NaN;
+            const end = times ? times[i * 2 + 1] : NaN;
+            if (Number.isNaN(start)) {
+                spans[out * 2] = -ALWAYS;
+                spans[out * 2 + 1] = ALWAYS;
+                durs[out] = ALWAYS;
+            } else {
+                spans[out * 2] = (start - base) / 1000;
+                spans[out * 2 + 1] = (end - base) / 1000;
+                durs[out] = dur;
+            }
+            out++;
+        }
+    }
+    return { hasTime: true, base, spans, durs, count: total };
+}
+
+// Wires the attribute buffers and uniforms into a live glify points instance. Returns a
+// handle whose setWindow costs two uniforms and a redraw, or null if anything about the
+// instance is not where glify 3.3.0 keeps it -- in which case GPU time is disabled and
+// the caller's rebuild path takes over.
+export function attachTimeToInstance(instance, attrs) {
+    try {
+        const gl = instance.gl;
+        const program = instance.program;
+        const layer = instance.layer;
+        if (!gl || !program || !layer) throw new Error("instance lacks gl/program/layer");
+
+        gl.useProgram(program);
+
+        const spanLoc = gl.getAttribLocation(program, "aTimeSpan");
+        const durLoc = gl.getAttribLocation(program, "aDuration");
+        const tickLoc = gl.getUniformLocation(program, "uTick");
+        const overrideLoc = gl.getUniformLocation(program, "uOverride");
+        if (spanLoc < 0 || durLoc < 0 || !tickLoc || !overrideLoc) {
+            throw new Error("time attributes/uniforms missing from the linked program");
+        }
+
+        const spanBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, spanBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, attrs.spans, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(spanLoc, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(spanLoc);
+
+        const durBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, durBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, attrs.durs, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(durLoc, 1, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(durLoc);
+
+        // Until the slider says otherwise, everything is visible.
+        gl.uniform1f(tickLoc, ALWAYS);
+        gl.uniform1f(overrideLoc, -1);
+
+        return {
+            // tickMs in epoch ms; overrideMs a shared-window width or null.
+            setWindow(tickMs, overrideMs) {
+                gl.useProgram(program);
+                gl.uniform1f(tickLoc, tickMs === null ? ALWAYS : (tickMs - attrs.base) / 1000);
+                gl.uniform1f(overrideLoc, overrideMs === null ? -1 : overrideMs / 1000);
+                layer.redraw();
+            },
+        };
+    } catch (err) {
+        disableGpuTime(err.message);
+        return null;
+    }
+}

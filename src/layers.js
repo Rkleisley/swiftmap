@@ -1,6 +1,9 @@
 import { loadJS, bindPopup, bindTooltip, parseColor } from "./utils.js";
 import { pinShader } from "./shaders.js";
-import { windowFor, featureInWindow, timesFor, layerInWindow, effectiveDuration } from "./timecontrol.js";
+import { windowFor, featureInWindow, timesFor, layerInWindow, effectiveDuration,
+         periodToMs } from "./timecontrol.js";
+import { buildTimeAttributes, attachTimeToInstance, timeVertexShader,
+         gpuTimeAvailable } from "./gputime.js";
 
 function setupGlifyProjection(glInstance) {
     if (glInstance && glInstance.layer) {
@@ -342,6 +345,16 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
     // circle because the glyph is drawn inside the point's own quad by the shader.
     const defaultSize = type === "markers" ? 64 : 5;
 
+    // GPU time path: when this bucket holds time layers, every point is fed to glify and
+    // per-point time rides along as vertex attributes -- the window test happens in the
+    // vertex shader, so a tick costs two uniforms instead of rebuilding 5M points in JS.
+    // The CPU filter below stays as the fallback when the GL wiring is unavailable.
+    const gpuAttrs = gpuTimeAvailable()
+        ? buildTimeAttributes(layersList, coordinateBuffers,
+            timeState && timeState.period ? periodToMs(timeState.period) : null)
+        : { hasTime: false };
+    const gpuTime = Boolean(gpuAttrs.hasTime);
+
     for (const layer of layersList) {
         const colorRGB = parseColor(layer.color, fallbackColor);
         const layerSize = layer.radius != null ? Number(layer.radius) : defaultSize;
@@ -375,7 +388,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         // The current time window, when this layer is animated. Features outside it are
         // simply not pushed; indexMapping carries originalIndex, so popups and properties
         // on the survivors keep pointing at the right rows.
-        const win = timeState && layer.time
+        const win = !gpuTime && timeState && layer.time
             ? windowFor(timeState.tick, effectiveDuration(layer, timeState), timeState.period)
             : null;
         const times = win ? timesFor(layer, coordinateBuffers) : null;
@@ -502,8 +515,16 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 glifyOptions.fragmentShaderSource = () => pinShader;
             }
 
+            if (gpuTime) {
+                glifyOptions.vertexShaderSource = () => timeVertexShader();
+            }
             this.glPoints = L.glify.points(glifyOptions);
             setupGlifyProjection(this.glPoints);
+            if (gpuTime) {
+                // Null on failure, which also flips the global flag: the next sync's
+                // rebuild key changes with it and the CPU path takes over.
+                this._swiftmapTime = attachTimeToInstance(this.glPoints, gpuAttrs);
+            }
         },
         onRemove: function(m) {
             if (this._mapMouseMoveHandler) {

@@ -4,6 +4,7 @@ import { renderLayer, renderMergedGlLayer } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
          collectDurationsMs } from "./timecontrol.js";
+import { gpuTimeAvailable } from "./gputime.js";
 
 // True if a layer is visible and no folder above it is switched off.
 //
@@ -555,6 +556,12 @@ export default {
                 // Everything the built buffers depend on belongs in this key: a change that
                 // is not in it renders stale. highlight_style and style_overrides were
                 // missing at first, so a highlight landed in state and never repainted.
+                // Point buckets on the GPU path exclude the tick and window from the key:
+                // those change per tick and are applied as uniforms, not by rebuilding.
+                // The period stays in, since it is baked into the duration attributes.
+                // Everything else -- and every non-point bucket -- rebuilds as before.
+                const gpuPoints = (type === "circle_markers" || type === "markers")
+                    && gpuTimeAvailable();
                 const metaString = JSON.stringify(visibleLayers.map(l => ({
                     id: l.id,
                     color: l.color,
@@ -566,8 +573,11 @@ export default {
                     overrides: l.style_overrides,
                     featureStyles: l.feature_styles,
                     time: l.time,
-                    tick: l.time && timeState ? timeState.tick : 0,
-                    win: l.time && timeState ? timeState.window : null,
+                    gpu: gpuPoints,
+                    tick: l.time && timeState && !gpuPoints ? timeState.tick : 0,
+                    win: l.time && timeState && !gpuPoints ? timeState.window : null,
+                    per: l.time && gpuPoints && timeState
+                        ? JSON.stringify(timeState.period) : null,
                     bufLen: coordinateBuffers[l.id]?.byteLength || 0,
                     locLen: l.locations?.length || 0
                 })));
@@ -596,6 +606,20 @@ export default {
             await syncGlLayer("markers", webglMarkerLayers);
             await syncGlLayer("polyline", webglPolylineLayers);
             await syncGlLayer("polygon", webglPolygonLayers);
+
+            // Push the current window into the GPU-filtered point buckets: two uniforms
+            // and a redraw, which is the entire per-tick cost of the time slider there.
+            for (const type of ["circle_markers", "markers"]) {
+                const handle = glStates[type].layer && glStates[type].layer._swiftmapTime;
+                if (!handle) continue;
+                if (timeState) {
+                    const overrideMs = timeState.window
+                        ? periodToMs(parsePeriod(timeState.window)) : null;
+                    handle.setWindow(timeState.tick, overrideMs);
+                } else {
+                    handle.setWindow(null, null);
+                }
+            }
 
             renderSidebarControls(sidebar, layers, model, map, () => {
                 performSync();
