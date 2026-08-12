@@ -13,7 +13,10 @@ import widget from "/dist/anywidget.js";
 function makeModel(state) {
   const listeners = {};
   const model = {
-    comm: { comm_id: "test" },
+    // Deliberately no comm: shinywidgets' model exposes none, and gating writebacks on
+    // it silently killed them all under Shiny -- the drag test below fails against any
+    // code that checks model.comm before writing.
+    comm: null,
     sent: [],
     get: k => state[k],
     set(k, v) { state[k] = v; (listeners["change:" + k] || []).forEach(f => f()); },

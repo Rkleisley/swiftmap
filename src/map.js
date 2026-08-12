@@ -138,7 +138,7 @@ export default {
 
         // Helper to safely write back to Python only if the widget view is active and attached
         function safeSetAndSave(key, value) {
-            if (model.comm && document.body.contains(el)) {
+            if (document.body.contains(el)) {
                 try {
                     model.set(key, value);
                     model.save_changes();
@@ -149,7 +149,7 @@ export default {
         }
 
         function safeSaveChanges() {
-            if (model.comm && document.body.contains(el)) {
+            if (document.body.contains(el)) {
                 try {
                     model.save_changes();
                 } catch (e) {
@@ -266,10 +266,10 @@ export default {
             const now = Date.now();
             if (!force && now - timeUI.lastWrite < 1000) return;
             timeUI.lastWrite = now;
-            if (model.comm) {
+            try {
                 model.set("time_current", timeUI.ticks[timeUI.index]);
                 model.save_changes();
-            }
+            } catch (err) { /* no live backend */ }
         }
 
         function seekTo(index, { write = true } = {}) {
@@ -335,16 +335,14 @@ export default {
             onWindowCommit: (iso) => {
                 timeHandlers.onWindowDrag(iso);
                 timeUI.dragActive = false;
-                if (model.comm) {
-                    const cfg = { ...(model.get("time_config") || {}) };
-                    if (iso) cfg.window = iso;
-                    else delete cfg.window;
-                    console.log(`[swiftmap-time] commit: window=${iso} -> time_config=${JSON.stringify(cfg)}`);
+                const cfg = { ...(model.get("time_config") || {}) };
+                if (iso) cfg.window = iso;
+                else delete cfg.window;
+                console.log(`[swiftmap-time] commit: window=${iso} -> time_config=${JSON.stringify(cfg)}`);
+                try {
                     model.set("time_config", cfg);
                     model.save_changes();
-                } else {
-                    console.log(`[swiftmap-time] commit SKIPPED: no comm (window=${iso})`);
-                }
+                } catch (err) { /* no live backend; the local model still holds it */ }
             },
         };
 
@@ -468,7 +466,7 @@ export default {
 
             // Enforce mutually exclusive radio group visibility before collecting or rendering WebGL layers
             const radioChanged = normalizeRadioLayers(layers, groupConfigs);
-            if (radioChanged && model.comm && document.body.contains(el)) {
+            if (radioChanged && document.body.contains(el)) {
                 model.set("layers", [...layers]);
                 model.set("group_configs", groupConfigs);
                 model.save_changes();
@@ -772,9 +770,9 @@ export default {
         // Announce this view so Python replies with a full snapshot. Layers added before
         // the view attached would otherwise be missing: their patches were emitted into a
         // window where nothing was listening.
-        if (model.comm) {
+        try {
             model.send({ kind: "swiftmap_ready" });
-        }
+        } catch (err) { /* no live backend; the initial state message is all there is */ }
 
         // Respect initial auto_sync state or manual sync requests sent during map building
         if (model.get("auto_sync") || model.get("sync_trigger") > 0) {
