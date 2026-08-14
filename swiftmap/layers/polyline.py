@@ -6,6 +6,7 @@ from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
 from ._targeting import bounds_of_coords
+import numpy as np
 
 @batched
 def add_line(
@@ -153,13 +154,23 @@ def add_line(
         line_props = {k: v[i] for k, v in props.items()} if props else {}
         line_name = resolve_layer_name(name, props, i, is_multi, "Line")
 
+        # Coordinates travel as a binary float64 buffer under the layer's id, exactly
+        # like point layers -- never as JSON inside the layer config. Carried as
+        # `locations`, 25 tracks of 200k vertices made every sidebar toggle serialise
+        # ~187 MB of layers JSON per click, which is what actually crashed large maps
+        # after the per-click rebuilds were already gone.
+        layer_id = f"layer_{self._layer_counter}"
+        self._layer_counter += 1
+        self._set_layer_buffer(
+            layer_id, np.asarray(coords, dtype=np.float64).flatten().tobytes())
+
         self.add_child({
+            "id": layer_id,
             "type": "polyline",
             "name": line_name,
             "layer_group": resolve_group_path(group_specs, props, i, "Line Group"),
             "group_multi_select": group_multi_select,
             "visible": True,
-            "locations": coords,
             "bounds": bounds_of_coords(coords),
             **(feature_styles[i] if feature_styles else layer_style),
             "properties": line_props,

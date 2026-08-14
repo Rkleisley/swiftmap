@@ -25,12 +25,15 @@ function makeModel(state) {
 
 const model = makeModel({
   layers: [
+    // Python-built vectors ship coordinates as a binary buffer under the layer id and
+    // put nothing in the config -- the route and zone here ride that path. The timed
+    // pair below keeps inline `locations`, the hand-built-config fallback.
     { id: "ln", type: "polyline", name: "Route", layer_group: "Vectors", visible: true,
       color: "#ff6600", weight: 8, opacity: 1, properties: { kind: "route" },
-      locations: [[36.00, -5.35], [36.10, -5.15]] },
+      bounds: [[36.00, -5.35], [36.10, -5.15]] },
     { id: "pg", type: "polygon", name: "Zone", layer_group: "Vectors", visible: true,
       color: "#00ff00", fillOpacity: 0.8, properties: { kind: "zone" },
-      locations: [[35.98, -5.32], [35.98, -5.22], [36.04, -5.22], [35.98, -5.32]] },
+      bounds: [[35.98, -5.32], [36.04, -5.22]] },
     // A timed pair alongside the timeless pair: the bucket engages the GPU time path
     // (some layer has time), timeless features stay always-visible, and these two swap
     // in and out per tick without the bucket ever rebuilding.
@@ -46,6 +49,10 @@ const model = makeModel({
   ],
   group_configs: {},
   coordinate_buffers: {
+    "ln": new DataView(new Float64Array(
+        [36.00, -5.35, 36.10, -5.15]).buffer),
+    "pg": new DataView(new Float64Array(
+        [35.98, -5.32, 35.98, -5.22, 36.04, -5.22, 35.98, -5.32]).buffer),
     "ln2::times": new DataView(new Float64Array(
         [Date.UTC(2026, 0, 2, 12), Date.UTC(2026, 0, 2, 12)]).buffer),
     "pg2::times": new DataView(new Float64Array(

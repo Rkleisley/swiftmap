@@ -99,6 +99,23 @@ export async function renderLayer(map, layer, coordBuffer, model) {
     return null;
 }
 
+// A vector layer's coordinates: the binary buffer under its id when Python built it
+// (the layers JSON then carries no coordinates at all), or inline `locations` for
+// hand-built configs and fixtures. Materialised only on rebuild, which vector buckets
+// on the GPU path rarely do.
+function vectorCoords(layer, coordinateBuffers) {
+    if (layer.locations) return layer.locations;
+    const raw = coordinateBuffers[layer.id];
+    if (!raw) return null;
+    const flat = new Float64Array(raw.buffer || raw, raw.byteOffset || 0,
+        (raw.byteLength || raw.length) / 8);
+    const out = new Array(flat.length / 2);
+    for (let i = 0; i < out.length; i++) {
+        out[i] = [flat[i * 2], flat[i * 2 + 1]];
+    }
+    return out;
+}
+
 export async function renderMergedGlLayer(map, type, layersList, coordinateBuffers, model,
                                            timeState = null, vectorGpu = false) {
     // Lines, polygons and circles are one geometry per layer. On the GPU path (map.js
@@ -119,7 +136,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         const features = [];
         const vertexCounts = [];
         for (const layer of layersList) {
-            const geojsonCoords = layer.locations.map(c => [c[1], c[0]]);
+            const locs = vectorCoords(layer, coordinateBuffers) || [];
+            const geojsonCoords = locs.map(c => [c[1], c[0]]);
             vertexCounts.push(Math.max(0, 2 * (geojsonCoords.length - 1)));
             const style = styleFor(layer, 0);
             const rgb = parseColor(style.color, "#3388ff");
@@ -246,7 +264,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         for (const layer of layersList) {
             let geojsonCoords = [];
             if (layer.type === "polygon") {
-                geojsonCoords = layer.locations.map(c => [c[1], c[0]]);
+                const locs = vectorCoords(layer, coordinateBuffers) || [];
+                geojsonCoords = locs.map(c => [c[1], c[0]]);
                 if (geojsonCoords.length > 0) {
                     const first = geojsonCoords[0];
                     const last = geojsonCoords[geojsonCoords.length - 1];

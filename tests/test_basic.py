@@ -4,6 +4,12 @@ from swiftmap._warnings import EmptyLayerWarning
 import pandas as pd
 import numpy as np
 
+def vector_coords(m, layer):
+    """A vector layer's coordinates live in its binary buffer, never in the config."""
+    assert getattr(layer, "locations", None) is None
+    raw = m.coordinate_buffers[layer.id]
+    return np.frombuffer(raw, dtype=np.float64).reshape(-1, 2).tolist()
+
 def test_map_initialization():
     m = Map(center=[34.05, -118.24], zoom=10)
     assert m.center == [34.05, -118.24]
@@ -68,13 +74,13 @@ def test_add_polyline_and_polygon():
     layer1 = m.layers[-1]
     assert layer1.name == "My Polyline"
     assert layer1.type == "polyline"
-    assert layer1.locations == [[10, 20], [30, 40]]
+    assert vector_coords(m, layer1) == [[10, 20], [30, 40]]
 
     m.add_polygon([[10, 20], [30, 40], [50, 60]], name="My Polygon")
     layer2 = m.layers[-1]
     assert layer2.name == "My Polygon"
     assert layer2.type == "polygon"
-    assert layer2.locations == [[10, 20], [30, 40], [50, 60], [10, 20]]
+    assert vector_coords(m, layer2) == [[10, 20], [30, 40], [50, 60], [10, 20]]
 
 def test_parse_lines_geojson_and_df():
     geojson_line = {
@@ -92,7 +98,7 @@ def test_parse_lines_geojson_and_df():
     m.add_polyline(geojson_line, name="California Route")
     layer = m.layers[-1]
     assert layer.type == "polyline"
-    assert layer.locations == [[34.05, -118.24], [37.77, -122.41]]
+    assert vector_coords(m, layer) == [[34.05, -118.24], [37.77, -122.41]]
 
     df_track = pd.DataFrame({
         "lat": [10.0, 11.0, 20.0, 21.0],
@@ -130,7 +136,7 @@ def test_geopandas_points_and_lines():
     m2.add_polyline(gdf_lines, name="GPD Route")
     layer2 = m2.layers[-1]
     assert layer2.type == "polyline"
-    assert layer2.locations == [[34.05, -118.24], [37.77, -122.41]]
+    assert vector_coords(m2, layer2) == [[34.05, -118.24], [37.77, -122.41]]
 
 def test_add_line_patterns():
     # 1. WKT string column test
@@ -142,7 +148,7 @@ def test_add_line_patterns():
     m.add_line(df_wkt, name="WKT Line")
     layer = m.layers[-1]
     assert layer.type == "polyline"
-    assert layer.locations == [[34.05, -118.24], [37.77, -122.41]]
+    assert vector_coords(m, layer) == [[34.05, -118.24], [37.77, -122.41]]
 
     # 2. Wide vertex columns test (lat1, lon1, lat2, lon2)
     df_wide = pd.DataFrame({
@@ -153,7 +159,7 @@ def test_add_line_patterns():
     m2.add_line(df_wide, name="Wide Line")
     layer2 = m2.layers[-1]
     assert layer2.type == "polyline"
-    assert layer2.locations == [[34.05, -118.24], [37.77, -122.41]]
+    assert vector_coords(m2, layer2) == [[34.05, -118.24], [37.77, -122.41]]
 
     # 3. Explicit coord_order test
     df_order = pd.DataFrame({
@@ -162,7 +168,7 @@ def test_add_line_patterns():
     m3 = Map()
     m3.add_line(df_order, coord_order="lon_lat", name="Explicit LonLat")
     layer3 = m3.layers[-1]
-    assert layer3.locations == [[34.05, -118.24], [37.77, -122.41]]
+    assert vector_coords(m3, layer3) == [[34.05, -118.24], [37.77, -122.41]]
 
 def test_polygon_and_shapes_patterns():
     # 1. WKT Polygon test
@@ -174,7 +180,7 @@ def test_polygon_and_shapes_patterns():
     m.add_polygon(df_wkt, name="WKT Zone")
     layer = m.layers[-1]
     assert layer.type == "polygon"
-    assert len(layer.locations) >= 4
+    assert len(vector_coords(m, layer)) >= 4
 
     # 2. Aliases test (add_polygons, add_shape, add_shapes)
     m.add_polygons([[36.0, -5.35], [36.05, -5.30], [36.02, -5.25]], name="Poly Test")
