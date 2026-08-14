@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
-from ._utils import _ensure_closed_ring
+from ._utils import _ensure_closed_ring, PolygonGeom
 
 def is_geojson(data: Any) -> bool:
     if isinstance(data, dict) and "type" in data:
@@ -102,27 +102,37 @@ def parse_geojson_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]]]
     polygons = []
     props_list = []
 
+    def to_ring(ring):
+        coords = [[float(c[1]), float(c[0])] for c in ring if len(c) >= 2]
+        return _ensure_closed_ring(coords) if len(coords) >= 3 else None
+
+    def to_part(rings):
+        """One polygon: outer ring first, holes after -- holes without an outer drop."""
+        converted = [r for r in (to_ring(ring) for ring in rings) if r]
+        return converted if converted else None
+
     for feature in features:
         geom = feature.get('geometry') or {}
         p = feature.get('properties', {}) or {}
         gtype = geom.get('type')
 
+        # Holes and multipolygon parts survive as a PolygonGeom; the bare-ring shape
+        # stays a plain list, so the common case is unchanged. A MultiPolygon is ONE
+        # feature and stays one layer -- it used to split into a layer per part, each
+        # stripped to its outer ring.
         if gtype == 'Polygon':
-            rings = geom.get('coordinates', [])
-            if rings:
-                coords = [[float(c[1]), float(c[0])] for c in rings[0] if len(c) >= 2]
-                if len(coords) >= 3:
-                    coords = _ensure_closed_ring(coords)
-                    polygons.append(coords)
-                    props_list.append(p)
+            part = to_part(geom.get('coordinates', []))
+            if part:
+                polygons.append(part[0] if len(part) == 1 else PolygonGeom([part]))
+                props_list.append(p)
         elif gtype == 'MultiPolygon':
-            for poly_rings in geom.get('coordinates', []):
-                if poly_rings:
-                    coords = [[float(c[1]), float(c[0])] for c in poly_rings[0] if len(c) >= 2]
-                    if len(coords) >= 3:
-                        coords = _ensure_closed_ring(coords)
-                        polygons.append(coords)
-                        props_list.append(p)
+            parts = [pt for pt in (to_part(rings) for rings in geom.get('coordinates', [])) if pt]
+            if parts:
+                if len(parts) == 1 and len(parts[0]) == 1:
+                    polygons.append(parts[0][0])
+                else:
+                    polygons.append(PolygonGeom(parts))
+                props_list.append(p)
 
     props = {}
     if props_list:

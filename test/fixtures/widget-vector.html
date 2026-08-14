@@ -46,6 +46,15 @@ const model = makeModel({
       visible: true, color: "#ff00ff", fillOpacity: 0.8, properties: { kind: "timed" },
       time: { field: "kind", duration: "period" },
       locations: [[36.05, -5.24], [36.05, -5.18], [36.09, -5.18], [36.05, -5.24]] },
+    // A donut: the `rings` table slices the flat coordinate run into outer ring and
+    // hole. Sitting in a bucket whose GPU time path is engaged, it also pins the
+    // hole-aware vertex-count formula against real earcut output -- a wrong count
+    // disables vector GPU and the no-rebuild assertions catch it.
+    { id: "pg3", type: "polygon", name: "Donut", layer_group: "Vectors",
+      visible: true, color: "#ffaa00", fillOpacity: 0.9, properties: { kind: "donut" },
+      rings: [[5, 5]],
+      locations: [[35.95, -5.34], [35.95, -5.26], [35.90, -5.26], [35.90, -5.34], [35.95, -5.34],
+                  [35.935, -5.32], [35.935, -5.28], [35.915, -5.28], [35.915, -5.32], [35.935, -5.32]] },
   ],
   group_configs: {},
   coordinate_buffers: {

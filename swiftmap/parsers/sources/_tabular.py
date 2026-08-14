@@ -8,6 +8,7 @@ from ._utils import (
     _parse_polygon_wkt_string,
     _parse_point_wkt_string,
     _ensure_closed_ring,
+    PolygonGeom,
     wkt_kind,
     coord_string_parts,
     detect_coord_order_multi,
@@ -387,7 +388,10 @@ def parse_tabular_polygons_by_coord_column(data: Any, cols: List[str], lat_col: 
     order = detect_coord_order_multi(
         (pairs for _, pairs, _ in rows if pairs is not None), coord_order)
 
-    polygons = [_ensure_closed_ring(resolved if pairs is None else apply_coord_order(pairs, order))
+    # A PolygonGeom (holes / multipolygon) arrives with every ring already closed.
+    polygons = [resolved if isinstance(resolved, PolygonGeom)
+                else _ensure_closed_ring(resolved if pairs is None
+                                         else apply_coord_order(pairs, order))
                 for resolved, pairs, _ in rows]
     props_list = [p for _, _, p in rows]
 

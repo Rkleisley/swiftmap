@@ -68,13 +68,25 @@ def test_multilinestring_yields_each_line():
     assert len(lines) == 2
 
 
-def test_multipolygon_yields_each_polygon():
+def test_multipolygon_stays_one_feature_with_parts():
+    # One MultiPolygon is one feature -- it used to split into a layer per part.
     gdf = gpd.GeoDataFrame({"n": ["a"]}, geometry=[MultiPolygon([
         Polygon([xy(A), xy(C), xy(B), xy(A)]),
         Polygon([xy(B), xy(C), xy(A), xy(B)]),
     ])])
     polygons, _ = parse_polygons(gdf)
-    assert len(polygons) == 2
+    assert len(polygons) == 1
+    assert polygons[0].ring_lengths() == [[4], [4]]
+
+
+def test_polygon_interiors_are_kept():
+    # Shapely holes (interiors) survive as extra rings of the same part.
+    outer = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]
+    hole = [(2.0, 2.0), (4.0, 2.0), (4.0, 4.0), (2.0, 4.0), (2.0, 2.0)]
+    gdf = gpd.GeoDataFrame({"n": ["a"]}, geometry=[Polygon(outer, [hole])])
+    polygons, _ = parse_polygons(gdf)
+    assert len(polygons) == 1
+    assert polygons[0].ring_lengths() == [[5, 5]]
 
 
 # --- filtering --------------------------------------------------------------------

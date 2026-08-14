@@ -28,6 +28,74 @@ def _wkt_coord_pairs(val: str) -> List[List[float]]:
     return [[nums[i + 1], nums[i]] for i in range(0, len(nums) - 1, 2)]
 
 
+class PolygonGeom:
+    """
+    A polygon with holes and/or multiple parts: parts -> rings -> [lat, lon] pairs,
+    every ring closed, ring 0 of a part the outer boundary and the rest its holes.
+
+    A plain list of pairs remains the representation of the common hole-free
+    single-ring polygon, so nothing on that path changes; this exists only where
+    there is structure to carry. Downstream it flattens into the one coordinate
+    buffer a layer already ships, with the ring lengths as a small `rings` table in
+    the layer config for the renderer to slice by.
+    """
+    __slots__ = ("parts",)
+
+    def __init__(self, parts: List[List[List[List[float]]]]):
+        self.parts = parts
+
+    def __len__(self) -> int:
+        return sum(len(ring) for part in self.parts for ring in part)
+
+    def flat(self) -> List[List[float]]:
+        return [pair for part in self.parts for ring in part for pair in ring]
+
+    def ring_lengths(self) -> List[List[int]]:
+        return [[len(ring) for ring in part] for part in self.parts]
+
+
+def _wkt_polygon_structure(val: str) -> List[List[List[List[float]]]]:
+    """
+    Parts -> rings -> [lat, lon] pairs for a POLYGON or MULTIPOLYGON body.
+
+    A paren-depth walk rather than a number sweep: the flat sweep merged every ring
+    and every part into one garbled boundary, which is exactly the holes/multipolygon
+    oversight. Rings live at depth 2 of a POLYGON and depth 3 of a MULTIPOLYGON, with
+    depth 2 delimiting the parts. Malformed parens yield [], and the caller falls back
+    to the permissive flat sweep.
+    """
+    match = _WKT_PREFIX.match(val)
+    is_multi = match is not None and match.group(1) is not None
+    ring_depth = 3 if is_multi else 2
+    parts: List[List[List[List[float]]]] = []
+    rings: List[List[List[float]]] = []
+    buf: Optional[List[str]] = None
+    depth = 0
+    for ch in val:
+        if ch == "(":
+            depth += 1
+            if is_multi and depth == 2:
+                rings = []
+            if depth == ring_depth:
+                buf = []
+        elif ch == ")":
+            if depth == ring_depth and buf is not None:
+                nums = [float(n) for n in FLOAT_REGEX.findall("".join(buf))]
+                ring = [[nums[i + 1], nums[i]] for i in range(0, len(nums) - 1, 2)]
+                if len(ring) >= 3:
+                    rings.append(_ensure_closed_ring(ring))
+                buf = None
+            if is_multi and depth == 2 and rings:
+                parts.append(rings)
+                rings = []
+            depth -= 1
+        elif buf is not None:
+            buf.append(ch)
+    if not is_multi and rings:
+        parts.append(rings)
+    return [p for p in parts if p]
+
+
 def _parse_point_wkt_string(val: Any) -> List[List[float]]:
     """Returns [[lat, lon], ...] for a POINT or MULTIPOINT string, else []."""
     return _wkt_coord_pairs(val) if wkt_kind(val) == "point" else []
@@ -146,6 +214,12 @@ def coord_string_parts(val: Any, kind_wanted: str, min_nums: int) -> Tuple[Optio
         return [], None
     kind = wkt_kind(val)
     if kind == kind_wanted:
+        if kind_wanted == "polygon":
+            parts = _wkt_polygon_structure(val)
+            if len(parts) == 1 and len(parts[0]) == 1:
+                return parts[0][0], None      # the common hole-free ring, as before
+            if parts:
+                return PolygonGeom(parts), None
         return _wkt_coord_pairs(val), None
     if kind is not None:
         # Recognisable WKT of another kind. Falling through would extract its numbers as
@@ -165,8 +239,8 @@ def _parse_coord_string(val: str, coord_order: str = "auto") -> List[List[float]
     return apply_coord_order(pairs, detect_coord_order(pairs, coord_order))
 
 
-def _parse_polygon_wkt_string(val: str, coord_order: str = "auto") -> List[List[float]]:
+def _parse_polygon_wkt_string(val: str, coord_order: str = "auto") -> Any:
     resolved, pairs = coord_string_parts(val, "polygon", 6)
     if pairs is None:
-        return _ensure_closed_ring(resolved)
+        return resolved if isinstance(resolved, PolygonGeom) else _ensure_closed_ring(resolved)
     return _ensure_closed_ring(apply_coord_order(pairs, detect_coord_order(pairs, coord_order)))

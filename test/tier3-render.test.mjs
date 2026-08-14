@@ -367,11 +367,16 @@ suite("lines and polygons each earn their own pixels", async () => {
         await setVis("ln", true);
         await setVis("pg", false);
         const noPoly = await shot();
+        await setVis("pg", true);
+        await setVis("pg3", false);
+        const noDonut = await shot();
 
         assert.notEqual(Buffer.compare(both, noLine), 0,
             "the polyline draws pixels of its own");
         assert.notEqual(Buffer.compare(both, noPoly), 0,
             "the polygon draws pixels of its own");
+        assert.notEqual(Buffer.compare(both, noDonut), 0,
+            "the holed polygon draws pixels of its own");
         assert.deepEqual(errors, [], "no errors while toggling");
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });

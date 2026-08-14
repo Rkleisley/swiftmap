@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
-from ._utils import _ensure_closed_ring
+from ._utils import _ensure_closed_ring, PolygonGeom
 
 def is_geopandas_dataframe(data: Any) -> bool:
     try:
@@ -121,19 +121,30 @@ def parse_geopandas_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]
 
         row_props = {col: row[col] for col in non_geom_cols}
 
+        # Holes (shapely `interiors`) and multipolygon parts survive as a PolygonGeom;
+        # a bare exterior stays a plain ring. A MultiPolygon is ONE feature and stays
+        # one layer -- it used to split into a layer per part, each stripped to its
+        # outer ring.
+        def shapely_part(poly):
+            rings = [[[float(y), float(x)] for x, y in poly.exterior.coords]]
+            rings += [[[float(y), float(x)] for x, y in hole.coords]
+                      for hole in poly.interiors]
+            rings = [_ensure_closed_ring(r) for r in rings if len(r) >= 3]
+            return rings if rings else None
+
         if isinstance(geom, Polygon):
-            coords = [[float(y), float(x)] for x, y in geom.exterior.coords]
-            if len(coords) >= 3:
-                coords = _ensure_closed_ring(coords)
-                polygons.append(coords)
+            part = shapely_part(geom)
+            if part:
+                polygons.append(part[0] if len(part) == 1 else PolygonGeom([part]))
                 props_list.append(row_props)
         elif isinstance(geom, MultiPolygon):
-            for poly in geom.geoms:
-                coords = [[float(y), float(x)] for x, y in poly.exterior.coords]
-                if len(coords) >= 3:
-                    coords = _ensure_closed_ring(coords)
-                    polygons.append(coords)
-                    props_list.append(row_props)
+            parts = [pt for pt in (shapely_part(poly) for poly in geom.geoms) if pt]
+            if parts:
+                if len(parts) == 1 and len(parts[0]) == 1:
+                    polygons.append(parts[0][0])
+                else:
+                    polygons.append(PolygonGeom(parts))
+                props_list.append(row_props)
 
     props = {}
     if props_list:

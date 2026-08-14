@@ -70,12 +70,16 @@ def test_multilinestring_yields_each_line():
     assert_coords(lines[1], SECOND_LINE, label="second")
 
 
-def test_multipolygon_yields_each_polygon():
+def test_multipolygon_stays_one_feature_with_parts():
+    # One MultiPolygon is one feature -- it used to split into a layer per part.
     fc = gj_collection(gj_feature("MultiPolygon", [[lonlat(RING)], [lonlat(SECOND_RING)]]))
     polygons, _ = parse_polygons(fc)
-    assert len(polygons) == 2
-    for ring in polygons:
-        assert_closed(ring)
+    assert len(polygons) == 1
+    geom = polygons[0]
+    assert geom.ring_lengths() == [[len(RING)], [len(SECOND_RING)]]
+    for part in geom.parts:
+        for ring in part:
+            assert_closed(ring)
 
 
 # --- filtering --------------------------------------------------------------------
@@ -117,10 +121,13 @@ def test_feature_without_properties_is_tolerated():
     assert props == {}
 
 
-def test_multipolygon_uses_only_the_exterior_ring():
-    """A hole is not currently rendered, so only the outer ring is taken."""
+def test_polygon_holes_are_kept():
+    """A hole survives as a second ring of the same part: outer first, hole after."""
     outer, hole = lonlat(RING), lonlat(SECOND_RING)
     fc = gj_collection(gj_feature("Polygon", [outer, hole]))
     polygons, _ = parse_polygons(fc)
     assert len(polygons) == 1
-    assert_coords(polygons[0], RING, label="exterior ring")
+    geom = polygons[0]
+    assert len(geom.parts) == 1 and len(geom.parts[0]) == 2
+    assert_coords(geom.parts[0][0], RING, label="exterior ring")
+    assert_coords(geom.parts[0][1], SECOND_RING, label="hole ring")

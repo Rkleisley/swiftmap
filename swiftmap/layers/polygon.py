@@ -6,6 +6,7 @@ from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
 from ._targeting import bounds_of_coords
+from ..parsers.sources._utils import PolygonGeom
 import numpy as np
 
 @batched
@@ -156,10 +157,19 @@ def add_polygon(
         # `locations`, 25 tracks of 200k vertices made every sidebar toggle serialise
         # ~187 MB of layers JSON per click, which is what actually crashed large maps
         # after the per-click rebuilds were already gone.
+        #
+        # Holes and multipolygon parts arrive as a PolygonGeom. The buffer stays one
+        # flat [lat, lon] run; the ring lengths ride the config as a small `rings`
+        # table ([[outer, hole, ...], ...]) for the renderer to slice parts back out.
+        if isinstance(coords, PolygonGeom):
+            flat, rings = coords.flat(), coords.ring_lengths()
+        else:
+            flat, rings = coords, None
+
         layer_id = f"layer_{self._layer_counter}"
         self._layer_counter += 1
         self._set_layer_buffer(
-            layer_id, np.asarray(coords, dtype=np.float64).flatten().tobytes())
+            layer_id, np.asarray(flat, dtype=np.float64).flatten().tobytes())
 
         self.add_child({
             "id": layer_id,
@@ -168,7 +178,8 @@ def add_polygon(
             "layer_group": resolve_group_path(group_specs, props, i, "Polygon Group"),
             "group_multi_select": group_multi_select,
             "visible": True,
-            "bounds": bounds_of_coords(coords),
+            **({"rings": rings} if rings else {}),
+            "bounds": bounds_of_coords(flat),
             **(feature_styles[i] if feature_styles else layer_style),
             "properties": poly_props,
             "autobind_popup": bool(popup),

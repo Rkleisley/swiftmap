@@ -52,7 +52,7 @@ def _json_safe(value: Any) -> Any:
 _SUB_LAYER_ATTRS = (
     "radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity",
     "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations",
-    "location", "geojson",
+    "location", "geojson", "rings",
 ) + DISPLAY_KEYS
 
 # Same set, plus the flags that are carried down but not stripped from the group.

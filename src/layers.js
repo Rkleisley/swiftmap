@@ -259,25 +259,45 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
     }
 
     if (type === "polygon") {
+        const closeRing = ring => {
+            if (ring.length > 0) {
+                const first = ring[0];
+                const last = ring[ring.length - 1];
+                if (first[0] !== last[0] || first[1] !== last[1]) {
+                    ring.push([first[0], first[1]]);
+                }
+            }
+            return ring;
+        };
+
         const features = [];
         const vertexCounts = [];
         for (const layer of layersList) {
-            let geojsonCoords = [];
+            // parts -> rings -> closed [lon, lat] pairs. `layer.rings` slices the flat
+            // coordinate run into parts and holes ([[outer, hole, ...], ...]); without
+            // it the run is the classic single hole-free ring.
+            let parts = [];
             if (layer.type === "polygon") {
                 const locs = vectorCoords(layer, coordinateBuffers) || [];
-                geojsonCoords = locs.map(c => [c[1], c[0]]);
-                if (geojsonCoords.length > 0) {
-                    const first = geojsonCoords[0];
-                    const last = geojsonCoords[geojsonCoords.length - 1];
-                    if (first[0] !== last[0] || first[1] !== last[1]) {
-                        geojsonCoords.push([first[0], first[1]]);
+                const lonlat = locs.map(c => [c[1], c[0]]);
+                const ringTable = layer.rings ||
+                    (lonlat.length > 0 ? [[lonlat.length]] : []);
+                let at = 0;
+                for (const partLens of ringTable) {
+                    const rings = [];
+                    for (const len of partLens) {
+                        const ring = closeRing(lonlat.slice(at, at + len));
+                        at += len;
+                        if (ring.length >= 4) rings.push(ring);
                     }
+                    if (rings.length > 0) parts.push(rings);
                 }
             } else if (layer.type === "circle") {
                 const lat = layer.location[0];
                 const lon = layer.location[1];
                 const radiusMeters = layer.radius || 10;
                 const earthRadius = 6378137;
+                const ring = [];
                 for (let i = 0; i <= 32; i++) {
                     const angle = (i * 360) / 32;
                     const angleRad = (angle * Math.PI) / 180;
@@ -285,28 +305,34 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     const dLon = (radiusMeters * Math.sin(angleRad)) / (earthRadius * Math.cos((lat * Math.PI) / 180));
                     const newLat = lat + (dLat * 180) / Math.PI;
                     const newLon = lon + (dLon * 180) / Math.PI;
-                    geojsonCoords.push([newLon, newLat]);
+                    ring.push([newLon, newLat]);
                 }
+                parts = [[ring]];
             }
 
-            if (geojsonCoords.length === 0) {
+            if (parts.length === 0) {
                 vertexCounts.push(0);   // no feature, but the slot must stay aligned
                 continue;
             }
-            // Any triangulation of a simple ring has exactly n-2 triangles, n counting
-            // distinct vertices -- a property of geometry, not of glify's earcut. The
-            // ring is closed by now (first == last), so distinct = length - 1.
-            const distinct = geojsonCoords.length - 1;
-            vertexCounts.push(Math.max(0, 3 * (distinct - 2)));
+            // Any triangulation of a polygon with D distinct vertices and h holes has
+            // exactly D + 2h - 2 triangles -- a property of geometry, not of glify's
+            // earcut; h = 0 gives the familiar D - 2. Rings are closed by now, so each
+            // contributes length - 1 distinct vertices. Parts triangulate separately
+            // (glify explodes a MultiPolygon into per-part draws) and sum.
+            let triangles = 0;
+            for (const rings of parts) {
+                const distinct = rings.reduce((sum, r) => sum + r.length - 1, 0);
+                triangles += Math.max(0, distinct + 2 * (rings.length - 1) - 2);
+            }
+            vertexCounts.push(3 * triangles);
 
             const style = styleFor(layer, 0);
             const rgb = parseColor(style.color, "#3388ff");
             features.push({
                 type: "Feature",
-                geometry: {
-                    type: "Polygon",
-                    coordinates: [geojsonCoords]
-                },
+                geometry: parts.length === 1
+                    ? { type: "Polygon", coordinates: parts[0] }
+                    : { type: "MultiPolygon", coordinates: parts },
                 properties: {
                     layer: layer,
                     colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: style.fillOpacity || 0.2 }

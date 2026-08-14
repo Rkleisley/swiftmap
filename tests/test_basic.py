@@ -212,6 +212,47 @@ def test_wkt_of_the_wrong_kind_via_the_id_col_adds_nothing():
     with pytest.warns(EmptyLayerWarning):
         m.add_polygon(df, shape_id_col="g", name="Zones")
 
+def test_polygon_holes_and_multipolygons_survive():
+    # A WKT hole: one layer whose flat buffer holds both rings, with a `rings` table
+    # ([[outer, hole]]) for the renderer to slice by. The hole used to be regex-merged
+    # into the outer boundary -- one garbled ring.
+    df = pd.DataFrame({"wkt": [
+        "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 4 2, 4 4, 2 4, 2 2))"]})
+    m = Map()
+    m.add_polygon(df, name="Donut")
+    layer = m.layers[-1]
+    assert layer.rings == [[5, 5]]
+    assert len(vector_coords(m, layer)) == 10
+
+    # A MULTIPOLYGON is ONE feature and stays one layer with two parts -- it used to
+    # become a layer per part (via geojson/geopandas) or one garbled ring (via WKT).
+    df2 = pd.DataFrame({"wkt": [
+        "MULTIPOLYGON (((0 0, 1 0, 1 1, 0 0)), ((5 5, 6 5, 6 6, 5 5)))"]})
+    m2 = Map()
+    m2.add_polygon(df2, name="Archipelago")
+    polys = [l for l in m2.layers if l.type == "polygon"]
+    assert len(polys) == 1
+    assert polys[0].rings == [[4], [4]]
+    assert len(vector_coords(m2, polys[0])) == 8
+
+    # The common hole-free ring is untouched: no rings table at all.
+    m3 = Map()
+    m3.add_polygon([[10, 20], [30, 40], [50, 60]], name="Simple")
+    assert m3.layers[-1].rings is None
+
+def test_geojson_polygon_holes_survive():
+    gj = {"type": "Feature", "properties": {"zone": "A"}, "geometry": {
+        "type": "Polygon", "coordinates": [
+            [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
+            [[2, 2], [4, 2], [4, 4], [2, 4], [2, 2]],
+        ]}}
+    m = Map()
+    m.add_polygon(gj, name="Donut")
+    layer = m.layers[-1]
+    assert layer.rings == [[5, 5]]
+    assert len(vector_coords(m, layer)) == 10
+    assert layer.properties["zone"] == "A"
+
 def test_polygon_and_shapes_patterns():
     # 1. WKT Polygon test
     df_wkt = pd.DataFrame({
