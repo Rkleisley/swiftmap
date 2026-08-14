@@ -67,8 +67,15 @@ ALIASES = {
 
 BEHAVIOUR_OPTIONS = frozenset({"popup", "tooltip", "multi_select", "static_style"})
 
+# Data-driven styling: a column drives the option per feature, through a colormap or a
+# radius range. Universal kwargs like every other style option -- popped centrally and
+# warned about honestly per geometry -- never per-builder signature parameters.
+DATA_OPTIONS = ("color_col", "colormap", "vmin", "vmax", "color_bins",
+                "radius_col", "radius_range")
+
 KNOWN_OPTIONS = (
     frozenset(STYLE_KEYS) | frozenset(ALIASES) | BEHAVIOUR_OPTIONS | frozenset(DISPLAY_KEYS)
+    | frozenset(DATA_OPTIONS)
 )
 
 # The property auto-detected as per-feature styling. Only this exact name is claimed: a
@@ -148,6 +155,38 @@ def warn_on_undrawn_options(styles: Iterable[str], method: str, layer_type: Opti
         else:
             warn(f"{method}: {name!r} is not drawn for {layer_type} layers yet{detail}. "
                  f"It was accepted but will not change how the layer draws.")
+
+
+def pop_data_options(kwargs: Dict[str, Any], method: str,
+                     layer_type: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Takes the data-driven styling options out of kwargs, same contract as
+    pop_style_options: popped before any parser sees kwargs, honest per-geometry
+    warnings, nothing rejected. Returns a dict holding every DATA_OPTIONS key.
+
+    `color_col` colours features from a column (any geometry with features);
+    `radius_col` sizes points -- lines size with `weight`, so it warns there.
+    `vmin`/`vmax`/`color_bins`/`colormap` shape the colour ramp only.
+    """
+    opts = {name: kwargs.pop(name, None) for name in DATA_OPTIONS}
+    if opts["radius_range"] is None:
+        opts["radius_range"] = (3.0, 18.0)
+    if layer_type:
+        if opts["color_col"] and layer_type == "circle":
+            warn(f"{method}: 'color_col' does not apply to a circle -- it colours "
+                 f"features from a column, and a circle is a single feature. "
+                 f"It was accepted but will not change how the layer draws.")
+        if opts["radius_col"] and layer_type not in POINTS:
+            warn(f"{method}: 'radius_col' does not apply to {layer_type} layers -- "
+                 f"points size by radius, lines by `weight`. It was accepted but "
+                 f"will not change how the layer draws.")
+        if not opts["color_col"]:
+            stray = [n for n in ("colormap", "vmin", "vmax", "color_bins")
+                     if opts[n] is not None]
+            if stray:
+                warn(f"{method}: {', '.join(repr(n) for n in stray)} shape the colour "
+                     f"ramp and do nothing without 'color_col'.")
+    return opts
 
 
 def pop_style_options(kwargs: Dict[str, Any], method: str,

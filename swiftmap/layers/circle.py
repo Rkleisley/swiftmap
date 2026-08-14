@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from ._display import extract_display_config
-from ._style import pop_style_options, resolve_styles
+from ._style import pop_style_options, pop_data_options, resolve_styles
 from ._batching import batched
 from ._targeting import bounds_of_circle
 
@@ -65,6 +65,7 @@ def add_circle(
     tooltip = kwargs.pop("tooltip", True)
     display_config = extract_display_config(kwargs, name)
     explicit_style, static_style = pop_style_options(kwargs, "add_circle", "circle")
+    pop_data_options(kwargs, "add_circle", "circle")   # warns; a circle is one feature
     layer_style, _ = resolve_styles(
         explicit_style, static_style, {}, 1,
         {"color": "#3388ff", "fill_color": "#3388ff", "fill_opacity": 0.2})

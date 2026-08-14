@@ -508,6 +508,21 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         // Same precedence as styleFor: data, then whole-layer highlight, then per-feature.
         const highlight = layer.highlight_style || null;
         const overrides = layer.style_overrides || null;
+        // Data-driven styling arrives as binary buffers beside the coordinates --
+        // u8 RGBA under "<id>::colors", f32 pixels under "<id>::radii" -- computed
+        // in Python from color_col/radius_col. Buffers, never per-feature style
+        // dicts: at millions of points, style dicts in the layers JSON are the
+        // payload that used to kill sessions. Explicit styles still outrank them.
+        const colorsRaw = coordinateBuffers[`${layer.id}::colors`];
+        const bufColors = colorsRaw
+            ? new Uint8Array(colorsRaw.buffer || colorsRaw, colorsRaw.byteOffset || 0,
+                             colorsRaw.byteLength)
+            : null;
+        const radiiRaw = coordinateBuffers[`${layer.id}::radii`];
+        const bufRadii = radiiRaw
+            ? new Float32Array(radiiRaw.buffer || radiiRaw, radiiRaw.byteOffset || 0,
+                               radiiRaw.byteLength / 4)
+            : null;
         // The current time window, when this layer is animated. Features outside it are
         // simply not pushed; indexMapping carries originalIndex, so popups and properties
         // on the survivors keep pointing at the right rows.
@@ -532,8 +547,15 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
             indexMapping.push({
                 layer: layer,
                 originalIndex: i,
-                colorRGB: color ? parseColor(color, fallbackColor) : colorRGB,
-                size: radius != null ? Number(radius) : layerSize
+                colorRGB: color ? parseColor(color, fallbackColor)
+                    : bufColors ? { r: bufColors[i * 4] / 255,
+                                    g: bufColors[i * 4 + 1] / 255,
+                                    b: bufColors[i * 4 + 2] / 255,
+                                    a: bufColors[i * 4 + 3] / 255 }
+                    : colorRGB,
+                size: radius != null ? Number(radius)
+                    : bufRadii ? bufRadii[i]
+                    : layerSize
             });
         }
     }

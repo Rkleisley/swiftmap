@@ -2,7 +2,8 @@ import numpy as np
 from typing import Optional, Any
 from ..parsers import parse_points
 from ._display import extract_display_config
-from ._style import pop_style_options, resolve_styles
+from ._style import pop_style_options, pop_data_options, resolve_styles
+from .._colormaps import data_driven_colors, data_driven_radii
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, is_column, static_group_path
 from .._warnings import warn, EmptyLayerWarning
@@ -56,6 +57,15 @@ def add_circle_markers(
         - fill_opacity : float, default 0.2 - Circle fill opacity (0.0 to 1.0).
         - weight : int, default 3 - Stroke line width in pixels.
         - opacity : float, default 1.0 - Stroke opacity.
+        - color_col : str - Column whose values colour each point through a colormap.
+        - colormap : str - 'viridis' (default), 'plasma', 'inferno', 'magma', 'turbo',
+          'coolwarm', 'blues', 'reds', 'greens', 'greys', or the categorical 'swift10'.
+          A non-numeric column takes categorical colours automatically.
+        - vmin / vmax : float - Fix the colour ramp's extremes instead of the data's.
+        - color_bins : list of float - Bin edges: discrete classes instead of a ramp.
+        - radius_col : str - Column whose values size each point. Area-proportional
+          (radius grows with the square root), so a doubled value looks doubled.
+        - radius_range : (min, max) - Pixel radii the sizes span, default (3, 18).
         - popup : bool or dict, default True - Enables popups on click.
         - tooltip : bool or dict, default True - Enables tooltips on hover.
         - popup_fields / tooltip_fields : list of str - Property names to display.
@@ -85,6 +95,7 @@ def add_circle_markers(
 
     # 1. Parse all coordinates and properties first
     explicit_style, static_style = pop_style_options(kwargs, "add_circle_markers", "circle_markers")
+    data_opts = pop_data_options(kwargs, "add_circle_markers", "circle_markers")
     try:
         lats, lons, props = parse_points(data, lat_col, lon_col, coord_order=coord_order)
     except TypeError as exc:
@@ -115,6 +126,14 @@ def add_circle_markers(
         explicit_style, static_style, props, num_points,
         {"color": "#3388ff", "fill_color": "#3388ff", "fill_opacity": 0.2,
          "weight": 3, "opacity": 1.0})
+
+    # Data-driven styling rides binary buffers under "<id>::colors" / "<id>::radii",
+    # never per-feature style dicts -- at millions of points, style dicts in the
+    # layers JSON are exactly the payload that used to kill sessions.
+    colors_u8 = data_driven_colors(props, data_opts,
+                                   layer_style.get("color", "#3388ff"),
+                                   "add_circle_markers")
+    radii_f32 = data_driven_radii(props, data_opts, "add_circle_markers")
 
     # 3. Group the dataset by the unique combinations of these columns/strings
     group_map = {}
@@ -169,6 +188,13 @@ def add_circle_markers(
         # Compile coordinate buffer
         sub_coords = np.column_stack((sub_lats, sub_lons)).flatten().astype(np.float64)
         self._set_layer_buffer(sub_layer_id, sub_coords.tobytes())
+
+        if colors_u8 is not None:
+            sub_colors = colors_u8 if whole else colors_u8[indices]
+            self._set_layer_buffer(f"{sub_layer_id}::colors", sub_colors.tobytes())
+        if radii_f32 is not None:
+            sub_radii = radii_f32 if whole else radii_f32[indices]
+            self._set_layer_buffer(f"{sub_layer_id}::radii", sub_radii.tobytes())
 
         # Bounding box
         min_lat = float(np.min(sub_lats))

@@ -1,5 +1,8 @@
-// One-off: renders widget-vector.html and saves a screenshot of the donut polygon,
-// for eyeball verification that the hole actually renders. Not part of the suite.
+// One-off: renders a fixture and saves a screenshot for eyeball verification.
+// Usage: node scripts/shot-donut.mjs [out.png] [fixture.html]  (defaults: donut.png,
+// widget-vector.html). Lives in scripts/, NOT test/: node --test executes every file
+// under a test directory, and a browser-launching helper inside the suite run starves
+// the SwiftShader frame budget the screenshot differentials depend on.
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
@@ -26,7 +29,8 @@ const browser = await chromium.launch({
     args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--disable-gpu-sandbox"],
 });
 const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
-await page.goto(`http://127.0.0.1:${port}/test/fixtures/widget-vector.html`);
+const fixture = process.argv[3] || "widget-vector.html";
+await page.goto(`http://127.0.0.1:${port}/test/fixtures/${fixture}`);
 await page.waitForFunction("window.__ready === true", { timeout: 30000 });
 await page.waitForSelector(".leaflet-polygons-pane canvas", { timeout: 20000 });
 await page.waitForTimeout(1500);

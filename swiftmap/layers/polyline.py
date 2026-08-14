@@ -1,7 +1,8 @@
 from typing import Optional, List, Dict, Any
 from ..parsers import parse_lines
 from ._display import extract_display_config
-from ._style import pop_style_options, resolve_styles
+from ._style import pop_style_options, pop_data_options, resolve_styles
+from .._colormaps import data_driven_colors, rgb_hex
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
@@ -125,6 +126,7 @@ def add_line(
 
 
     explicit_style, static_style = pop_style_options(kwargs, "add_line", "polyline")
+    data_opts = pop_data_options(kwargs, "add_line", "polyline")
     try:
         lines_coords, props = parse_lines(
             data,
@@ -154,6 +156,11 @@ def add_line(
     layer_style, feature_styles = resolve_styles(
         explicit_style, static_style, props, len(lines_coords), {"color": "#3388ff", "weight": 3, "opacity": 1.0})
 
+    # color_col: each line is its own config entry, so a data-driven colour is just a
+    # per-feature `color` override -- no new transport, feature counts are small here.
+    colors_u8 = data_driven_colors(props, data_opts,
+                                   layer_style.get("color", "#3388ff"), "add_line")
+
     for i, coords in enumerate(lines_coords):
         line_props = {k: v[i] for k, v in props.items()} if props else {}
         line_name = resolve_layer_name(name, props, i, is_multi, "Line")
@@ -181,7 +188,8 @@ def add_line(
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
             **display_config,
-            **kwargs
+            **kwargs,
+            **({"color": rgb_hex(colors_u8[i])} if colors_u8 is not None else {})
         })
 
     return self

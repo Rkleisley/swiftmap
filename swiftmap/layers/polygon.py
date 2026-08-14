@@ -1,7 +1,8 @@
 from typing import Optional, List, Dict, Any
 from ..parsers import parse_polygons
 from ._display import extract_display_config
-from ._style import pop_style_options, resolve_styles
+from ._style import pop_style_options, pop_data_options, resolve_styles
+from .._colormaps import data_driven_colors, rgb_hex
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
@@ -116,6 +117,7 @@ def add_polygon(
 
     # Parse polygon coordinates
     explicit_style, static_style = pop_style_options(kwargs, "add_polygon", "polygon")
+    data_opts = pop_data_options(kwargs, "add_polygon", "polygon")
     try:
         polygons_coords, props = parse_polygons(
             data,
@@ -144,6 +146,11 @@ def add_polygon(
     group_specs = build_group_specs(layer_group, props)
     layer_style, feature_styles = resolve_styles(
         explicit_style, static_style, props, len(polygons_coords), {"color": "#3388ff", "fill_opacity": 0.2, "weight": 3, "opacity": 1.0})
+
+    # color_col drives the FILL, choropleth-style; the border keeps `color`. Each
+    # polygon is its own config entry, so this is a per-feature fillColor override.
+    colors_u8 = data_driven_colors(props, data_opts,
+                                   layer_style.get("color", "#3388ff"), "add_polygon")
 
     for i, coords in enumerate(polygons_coords):
         poly_props = {k: v[i] for k, v in props.items()} if props else {}
@@ -185,7 +192,8 @@ def add_polygon(
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
             **display_config,
-            **kwargs
+            **kwargs,
+            **({"fillColor": rgb_hex(colors_u8[i])} if colors_u8 is not None else {})
         })
 
     return self

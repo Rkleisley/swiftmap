@@ -99,8 +99,9 @@ suite("glify receives the layer data and creates a sized canvas per pass", async
             };
         });
         assert.ok(state.width > 0 && state.height > 0, "the canvas is sized to the map");
-        assert.equal(state.pointCount, 2,
-            "both points from the coordinate buffer reached the renderer");
+        assert.equal(state.pointCount, 4,
+            "every point from both coordinate buffers reached the renderer "
+            + "(2 sites + 2 buffer-styled bubbles)");
     });
 });
 
@@ -206,6 +207,30 @@ suite("a layer's radius reaches the renderer", async () => {
         assert.ok(out.declared, "the fixture declares a radius to test against");
         assert.equal(out.resolved, out.declared,
             "the radius the layer declares is the size glify draws");
+    });
+});
+
+suite("buffer-driven colours and sizes reach the renderer", async () => {
+    // color_col / radius_col compute in Python and arrive as binary buffers beside
+    // the coordinates. Probed against the live glify callbacks like the radius test
+    // above: shipped-then-discarded is this feature's native failure mode. The merged
+    // instance holds pts (indices 0-1) then bub (2-3), in layer-list order.
+    await withPage(async page => {
+        const out = await page.evaluate(() => {
+            const inst = (window.L.glify.pointsInstances || [])[0];
+            return {
+                colorA: inst.settings.color(2, null),
+                colorB: inst.settings.color(3, null),
+                sizeA: inst.settings.size(2, null),
+                sizeB: inst.settings.size(3, null),
+            };
+        });
+        assert.deepEqual(out.colorA, { r: 1, g: 0, b: 0, a: 1 },
+            "the first bubble draws the buffer's red");
+        assert.deepEqual(out.colorB, { r: 0, g: 0, b: 1, a: 1 },
+            "the second draws the buffer's blue");
+        assert.equal(out.sizeA, 4, "sizes come from the radii buffer");
+        assert.equal(out.sizeB, 16, "per point, not per layer");
     });
 });
 
