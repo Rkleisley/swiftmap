@@ -3,7 +3,7 @@ import { pinShader } from "./shaders.js";
 import { windowFor, featureInWindow, timesFor, layerInWindow, effectiveDuration,
          periodToMs } from "./timecontrol.js";
 import { buildTimeAttributes, attachTimeToInstance, timeVertexShader,
-         gpuTimeAvailable } from "./gputime.js";
+         gpuTimeAvailable, buildVectorTimeMeta, attachTimeToVectorInstance } from "./gputime.js";
 
 function setupGlifyProjection(glInstance) {
     if (glInstance && glInstance.layer) {
@@ -99,17 +99,28 @@ export async function renderLayer(map, layer, coordBuffer, model) {
     return null;
 }
 
-export async function renderMergedGlLayer(map, type, layersList, coordinateBuffers, model, timeState = null) {
-    // Lines, polygons and circles are one geometry per layer, so the time slider includes
-    // or excludes them whole. Points carry per-feature times and filter inside their loop.
-    if (timeState && type !== "circle_markers" && type !== "markers") {
+export async function renderMergedGlLayer(map, type, layersList, coordinateBuffers, model,
+                                           timeState = null, vectorGpu = false) {
+    // Lines, polygons and circles are one geometry per layer. On the GPU path (map.js
+    // passes vectorGpu when the bucket qualifies) every feature stays in the buffers and
+    // the shader decides visibility per tick and per layer toggle -- a line-shaped track
+    // has as many vertices as a point track has points, so its rebuilds cost the same
+    // and crashed the same way. Off the GPU path, the whole-feature CPU filter remains.
+    const vectorMeta = vectorGpu && type !== "circle_markers" && type !== "markers"
+        ? buildVectorTimeMeta(layersList, coordinateBuffers,
+            timeState && timeState.period ? periodToMs(timeState.period) : null)
+        : { hasTime: false };
+    const vectorTime = Boolean(vectorMeta.hasTime);
+    if (timeState && !vectorTime && type !== "circle_markers" && type !== "markers") {
         layersList = layersList.filter(l => layerInWindow(l, coordinateBuffers, timeState));
         if (layersList.length === 0) return null;
     }
     if (type === "polyline") {
         const features = [];
+        const vertexCounts = [];
         for (const layer of layersList) {
             const geojsonCoords = layer.locations.map(c => [c[1], c[0]]);
+            vertexCounts.push(Math.max(0, 2 * (geojsonCoords.length - 1)));
             const style = styleFor(layer, 0);
             const rgb = parseColor(style.color, "#3388ff");
             features.push({
@@ -152,7 +163,10 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 };
                 m.on("mousemove", this._mapMouseMoveHandler);
 
+                const lineOptions = vectorTime
+                    ? { vertexShaderSource: () => timeVertexShader() } : {};
                 this.glLines = L.glify.lines({
+                    ...lineOptions,
                     map: m,
                     data: geojson,
                     pane: "polylinesPane",
@@ -204,6 +218,9 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     }
                 });
                 setupGlifyProjection(this.glLines);
+                if (vectorTime) {
+                    this._swiftmapTime = attachTimeToVectorInstance(this.glLines, vectorMeta, vertexCounts);
+                }
             },
             onRemove: function(m) {
                 if (this._mapMouseMoveHandler) {
@@ -225,6 +242,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
 
     if (type === "polygon") {
         const features = [];
+        const vertexCounts = [];
         for (const layer of layersList) {
             let geojsonCoords = [];
             if (layer.type === "polygon") {
@@ -252,7 +270,15 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 }
             }
 
-            if (geojsonCoords.length === 0) continue;
+            if (geojsonCoords.length === 0) {
+                vertexCounts.push(0);   // no feature, but the slot must stay aligned
+                continue;
+            }
+            // Any triangulation of a simple ring has exactly n-2 triangles, n counting
+            // distinct vertices -- a property of geometry, not of glify's earcut. The
+            // ring is closed by now (first == last), so distinct = length - 1.
+            const distinct = geojsonCoords.length - 1;
+            vertexCounts.push(Math.max(0, 3 * (distinct - 2)));
 
             const style = styleFor(layer, 0);
             const rgb = parseColor(style.color, "#3388ff");
@@ -295,7 +321,10 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 };
                 m.on("mousemove", this._mapMouseMoveHandler);
 
+                const shapeOptions = vectorTime
+                    ? { vertexShaderSource: () => timeVertexShader() } : {};
                 this.glShapes = L.glify.shapes({
+                    ...shapeOptions,
                     map: m,
                     data: geojson,
                     pane: "polygonsPane",
@@ -331,6 +360,9 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     }
                 });
                 setupGlifyProjection(this.glShapes);
+                if (vectorTime) {
+                    this._swiftmapTime = attachTimeToVectorInstance(this.glShapes, vectorMeta, vertexCounts);
+                }
             },
             onRemove: function(m) {
                 if (this._mapMouseMoveHandler) {

@@ -28,14 +28,23 @@ const ALWAYS = 6.3e8;   // ~20 years, in seconds: the "duration" of cumulative l
 // (Packing four layers per vec4 would quadruple this if anyone ever needs it.)
 export const LAYER_SLOTS = 64;
 
-// Cheap global kill switch: if wiring the GL state ever fails (a future glify version
-// moving its internals), everything falls back to the CPU rebuild path.
+// Cheap kill switches: if wiring the GL state ever fails (a future glify version moving
+// its internals), the affected family falls back to the CPU rebuild path. Points and
+// vectors are separate flags -- a vector introspection failure must not cost points
+// their GPU path.
 let gpuOk = true;
 export function gpuTimeAvailable() { return gpuOk; }
 export function disableGpuTime(reason) {
     if (gpuOk) console.warn(`[SwiftMap] GPU time filtering disabled: ${reason}. ` +
         `Falling back to rebuild-per-tick.`);
     gpuOk = false;
+}
+let vectorGpuOk = true;
+export function vectorGpuAvailable() { return vectorGpuOk; }
+export function disableVectorGpu(reason) {
+    if (vectorGpuOk) console.warn(`[SwiftMap] GPU time for lines/polygons disabled: ` +
+        `${reason}. Falling back to rebuild-per-tick for those buckets.`);
+    vectorGpuOk = false;
 }
 
 // The default points vertex shader (read out of leaflet.glify 3.3.0) with the window
@@ -140,12 +149,107 @@ export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
     return { hasTime: true, base, spans, durs, layerIdx, layerIds, count: total };
 }
 
+// Per-feature time metadata for a vector bucket (lines/polygons): one entry per layer,
+// since those layers hold exactly one geometry. Same encodings as the point path --
+// rebased float32 seconds, sign-packed fade, always-visible spans for timeless or
+// non-time layers.
+export function buildVectorTimeMeta(layersList, coordinateBuffers, periodMs) {
+    if (!layersList.some(l => l.time)) return { hasTime: false };
+    let base = Infinity;
+    for (const layer of layersList) {
+        const times = layer.time ? timesFor(layer, coordinateBuffers) : null;
+        if (times && !Number.isNaN(times[0]) && times[0] < base) base = times[0];
+    }
+    if (base === Infinity) base = 0;
+
+    const perFeature = layersList.map((layer, idx) => {
+        const times = layer.time ? timesFor(layer, coordinateBuffers) : null;
+        const dur = layer.time ? durationSeconds(layer.time.duration, periodMs) : ALWAYS;
+        const signedDur = layer.time && layer.time.fade ? -dur : dur;
+        if (!times || Number.isNaN(times[0])) {
+            return { start: -ALWAYS, end: ALWAYS, dur: ALWAYS, idx };
+        }
+        return { start: (times[0] - base) / 1000, end: (times[1] - base) / 1000,
+                 dur: signedDur, idx };
+    });
+    return { hasTime: true, base, perFeature, layerIds: layersList.map(l => l.id) };
+}
+
+// Expands per-feature values to per-GL-vertex arrays given each feature's vertex count.
+// Pure, so the alignment logic is tier-1 testable away from any GL context.
+export function expandPerFeature(perFeature, counts) {
+    let total = 0;
+    for (const c of counts) total += c;
+    const spans = new Float32Array(total * 2);
+    const durs = new Float32Array(total);
+    const layerIdx = new Float32Array(total);
+    let out = 0;
+    perFeature.forEach((f, i) => {
+        for (let v = 0; v < counts[i]; v++) {
+            spans[out * 2] = f.start;
+            spans[out * 2 + 1] = f.end;
+            durs[out] = f.dur;
+            layerIdx[out] = f.idx;
+            out++;
+        }
+    });
+    return { spans, durs, layerIdx };
+}
+
+// glify's vertex layout: 6 floats per GL vertex (x, y, r, g, b, a), confirmed for 3.3.0
+// both by reading the source and by the Valhalla-VRE report's debug dump -- two
+// one-segment lines produced allVerticesTyped of 24 floats: 2 features x 2 vertices x 6.
+const FLOATS_PER_VERTEX = 6;
+
+// Wires time + layer-visibility into a live glify LINES or SHAPES instance. The caller
+// supplies per-feature GL-vertex counts computed from the geometry it built itself:
+// lines draw 2*(points-1) vertices per feature, and any triangulation of a simple ring
+// has exactly n-2 triangles -- a property of geometry, not of glify's earcut. The counts
+// are validated against the instance's actual buffer length, and any mismatch disables
+// the vector GPU path rather than mis-aligning attributes.
+export function attachTimeToVectorInstance(instance, meta, counts) {
+    try {
+        if (!Array.isArray(counts) || counts.length !== meta.perFeature.length) {
+            throw new Error(`expected ${meta.perFeature.length} vertex counts, ` +
+                `got ${counts && counts.length}`);
+        }
+        const expected = counts.reduce((a, b) => a + b, 0) * FLOATS_PER_VERTEX;
+        // Lines keep a typed flat buffer; shapes keep a plain flat array. Either is the
+        // ground truth for how many GL vertices glify actually built.
+        const actual = instance.allVerticesTyped ? instance.allVerticesTyped.length
+            : (Array.isArray(instance.vertices) ? instance.vertices.length : -1);
+        if (actual !== expected) {
+            throw new Error(`vertex count mismatch: geometry says ${expected} floats, ` +
+                `the instance holds ${actual}`);
+        }
+        const attrs = expandPerFeature(meta.perFeature, counts);
+        attrs.base = meta.base;
+        attrs.layerIds = meta.layerIds;
+        return wireTimeAttributes(instance, attrs);
+    } catch (err) {
+        disableVectorGpu(err.message);
+        return null;
+    }
+}
+
 // Wires the attribute buffers and uniforms into a live glify points instance. Returns a
 // handle whose setWindow costs two uniforms and a redraw, or null if anything about the
 // instance is not where glify 3.3.0 keeps it -- in which case GPU time is disabled and
 // the caller's rebuild path takes over.
 export function attachTimeToInstance(instance, attrs) {
     try {
+        return wireTimeAttributes(instance, attrs);
+    } catch (err) {
+        disableGpuTime(err.message);
+        return null;
+    }
+}
+
+// The common GL wiring: buffers for span/duration/layer attributes, uniforms for the
+// tick, the shared override and the per-layer visibility slots. Throws on anything
+// unexpected; the callers decide which fallback flag that flips.
+function wireTimeAttributes(instance, attrs) {
+    {
         const gl = instance.gl;
         const program = instance.program;
         const layer = instance.layer;
@@ -207,8 +311,5 @@ export function attachTimeToInstance(instance, attrs) {
                 layer.redraw();
             },
         };
-    } catch (err) {
-        disableGpuTime(err.message);
-        return null;
     }
 }

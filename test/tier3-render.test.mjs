@@ -376,6 +376,59 @@ suite("lines and polygons each earn their own pixels", async () => {
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });
 
+suite("vector time layers tick and toggle without rebuilding", async () => {
+    // Regression for the second deselection crash: a line-shaped track has as many
+    // vertices as a point track has points, and lines/polygons were left on the
+    // rebuild-per-tick path -- every tick and every toggle re-fed all of them through
+    // JS. Now their buckets ride the same GPU path as points: per-vertex time and layer
+    // slots (expanded to glify's own tessellated vertex counts), the tick and visibility
+    // as uniforms. The timed line and polygon in the fixture sit on different days, so
+    // ticks swap them on screen while both instances keep their identity.
+    await withPage(async (page, errors) => {
+        const mapArea = { x: 40, y: 60, width: 560, height: 480 };
+        const shot = () => page.screenshot({ clip: mapArea });
+        const probe = () => page.evaluate(() => {
+            const li = window.L.glify.linesInstances;
+            const si = window.L.glify.shapesInstances;
+            window.__li = window.__li || li[li.length - 1];
+            window.__si = window.__si || si[si.length - 1];
+            return {
+                lineSame: li[li.length - 1] === window.__li,
+                shapeSame: si[si.length - 1] === window.__si,
+            };
+        });
+        const seek = (v) => page.evaluate((val) => {
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = String(val); s.dispatchEvent(new Event("input"));
+        }, v).then(() => page.waitForTimeout(700));
+
+        await probe();
+        await seek(0);
+        const early = await shot();              // timed zone's day
+        const max = await page.evaluate(() =>
+            parseInt(document.querySelector(".swiftmap-time-slider").max, 10));
+        await seek(max);
+        const late = await shot();               // timed route's day
+        assert.notEqual(Buffer.compare(early, late), 0,
+            "different days draw different timed vectors");
+
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === "ln2" ? { ...l, visible: false } : l));
+        });
+        await page.waitForTimeout(700);
+        const toggled = await shot();
+        assert.notEqual(Buffer.compare(late, toggled), 0,
+            "toggling the timed line changes the pixels");
+
+        const after = await probe();
+        assert.ok(after.lineSame, "the lines instance survived ticks and the toggle");
+        assert.ok(after.shapeSame, "the shapes instance survived them too");
+        assert.deepEqual(errors, [], "no errors along the way");
+    }, "widget-vector.html", ".leaflet-polylines-pane canvas");
+});
+
 suite("fading dims aged points", async () => {
     // With a 3-day window at the last tick, the fixture's three points are 0, 1 and 2
     // days old. Turning fade on must change the pixels -- the older points dim -- and

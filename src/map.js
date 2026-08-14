@@ -4,7 +4,7 @@ import { renderLayer, renderMergedGlLayer } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
          collectDurationsMs } from "./timecontrol.js";
-import { gpuTimeAvailable, LAYER_SLOTS } from "./gputime.js";
+import { gpuTimeAvailable, vectorGpuAvailable, LAYER_SLOTS } from "./gputime.js";
 
 // True if a layer is visible and no folder above it is switched off.
 //
@@ -82,17 +82,18 @@ function updateLayerById(layers, id, update) {
 // sub-layers inherit their parent's effective visibility, top-level layers answer for
 // their own flag and their folder chain.
 export function collectPointLayersAll(layers, groupConfigs) {
-    const out = { circle_markers: [], markers: [] };
+    const out = { circle_markers: [], markers: [], polyline: [], polygon: [] };
     function walk(layer, parentVisible, isSub) {
         if (layer.type === "group" && layer.layers) {
             const selfVis = parentVisible && isLayerEffectiveVisible(layer, groupConfigs);
             layer.layers.forEach(sub => walk(sub, selfVis, true));
             return;
         }
-        if (!out[layer.type]) return;
+        const bucket = layer.type === "circle" ? "polygon" : layer.type;
+        if (!out[bucket]) return;
         const vis = isSub ? parentVisible
             : parentVisible && isLayerEffectiveVisible(layer, groupConfigs);
-        out[layer.type].push({ layer, vis });
+        out[bucket].push({ layer, vis });
     }
     for (const layer of layers) walk(layer, true, false);
     return out;
@@ -573,7 +574,7 @@ export default {
             }
 
             // Helper to sync WebGL layer states and rebuild only if changed
-            async function syncGlLayer(type, visibleLayers) {
+            async function syncGlLayer(type, visibleLayers, vectorGpu = false) {
                 const idsString = visibleLayers.map(l => l.id).sort().join(",");
                 // Everything the built buffers depend on belongs in this key: a change that
                 // is not in it renders stale. highlight_style and style_overrides were
@@ -582,8 +583,8 @@ export default {
                 // those change per tick and are applied as uniforms, not by rebuilding.
                 // The period stays in, since it is baked into the duration attributes.
                 // Everything else -- and every non-point bucket -- rebuilds as before.
-                const gpuPoints = (type === "circle_markers" || type === "markers")
-                    && gpuTimeAvailable();
+                const gpuPoints = ((type === "circle_markers" || type === "markers")
+                    && gpuTimeAvailable()) || vectorGpu;
                 const metaString = JSON.stringify(visibleLayers.map(l => ({
                     id: l.id,
                     color: l.color,
@@ -612,7 +613,7 @@ export default {
                         state.layer.remove();
                     }
                     if (visibleLayers.length > 0) {
-                        state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, model, timeState);
+                        state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, model, timeState, vectorGpu);
                         if (state.layer) {
                             state.layer.addTo(map);
                         }
@@ -628,26 +629,32 @@ export default {
             // included -- so a sidebar toggle changes a visibility uniform instead of
             // the bucket's ids. Unchecking one of 25 tracks used to rebuild all 5M
             // points; clicking down the sidebar stacked those rebuilds into a crash.
-            const allPoints = collectPointLayersAll(layers, groupConfigs);
-            const pointBucket = { circle_markers: webglCircleMarkerLayers,
-                                  markers: webglMarkerLayers };
-            for (const type of ["circle_markers", "markers"]) {
-                const entries = allPoints[type];
-                const gpuVis = gpuTimeAvailable() && entries.length > 0
+            const allByType = collectPointLayersAll(layers, groupConfigs);
+            const bucket = { circle_markers: webglCircleMarkerLayers,
+                             markers: webglMarkerLayers,
+                             polyline: webglPolylineLayers,
+                             polygon: webglPolygonLayers };
+            const vectorGpuBucket = { polyline: false, polygon: false };
+            for (const type of ["circle_markers", "markers", "polyline", "polygon"]) {
+                const entries = allByType[type];
+                const isPoints = type === "circle_markers" || type === "markers";
+                const available = isPoints ? gpuTimeAvailable() : vectorGpuAvailable();
+                const gpuVis = available && entries.length > 0
                     && entries.length <= LAYER_SLOTS
                     && entries.some(e => e.layer.time);
                 glStates[type].visVector = gpuVis ? entries.map(e => (e.vis ? 1 : 0)) : null;
-                if (gpuVis) pointBucket[type] = entries.map(e => e.layer);
+                if (gpuVis) bucket[type] = entries.map(e => e.layer);
+                if (!isPoints) vectorGpuBucket[type] = gpuVis;
             }
 
-            await syncGlLayer("circle_markers", pointBucket.circle_markers);
-            await syncGlLayer("markers", pointBucket.markers);
-            await syncGlLayer("polyline", webglPolylineLayers);
-            await syncGlLayer("polygon", webglPolygonLayers);
+            await syncGlLayer("circle_markers", bucket.circle_markers);
+            await syncGlLayer("markers", bucket.markers);
+            await syncGlLayer("polyline", bucket.polyline, vectorGpuBucket.polyline);
+            await syncGlLayer("polygon", bucket.polygon, vectorGpuBucket.polygon);
 
             // Push the current window into the GPU-filtered point buckets: two uniforms
             // and a redraw, which is the entire per-tick cost of the time slider there.
-            for (const type of ["circle_markers", "markers"]) {
+            for (const type of ["circle_markers", "markers", "polyline", "polygon"]) {
                 const state = glStates[type];
                 const handle = state.layer && state.layer._swiftmapTime;
                 if (!handle) continue;

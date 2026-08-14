@@ -421,3 +421,45 @@ test("the shader gates visibility on the layer slot", () => {
     const src = timeVertexShader();
     assert.ok(src.includes("uLayerVis[int(aLayer)]"), "per-layer uniform lookup");
 });
+
+// --- vector expansion -------------------------------------------------------------------
+import { expandPerFeature, buildVectorTimeMeta } from "../src/gputime.js";
+
+test("per-feature values expand to glify's tessellated vertex counts", () => {
+    const per = [
+        { start: 0, end: 0, dur: 3600, idx: 0 },
+        { start: 10, end: 20, dur: -7200, idx: 1 },   // fading
+    ];
+    const out = expandPerFeature(per, [2, 3]);
+    assert.deepEqual([...out.layerIdx], [0, 0, 1, 1, 1]);
+    assert.deepEqual([...out.durs], [3600, 3600, -7200, -7200, -7200]);
+    assert.deepEqual([...out.spans], [0, 0, 0, 0, 10, 20, 10, 20, 10, 20]);
+});
+
+test("vector meta mirrors the point encodings", () => {
+    const layers = [
+        { id: "t", time: { duration: "PT2H" } },
+        { id: "plain" },
+    ];
+    const buffers = { "t::times": spanBuf([[T0, T0 + DAY]]) };
+    const meta = buildVectorTimeMeta(layers, buffers, DAY);
+    assert.equal(meta.base, T0);
+    assert.deepEqual(meta.perFeature[0], { start: 0, end: 86400, dur: 7200, idx: 0 });
+    assert.ok(meta.perFeature[1].end > 1e8,
+        "the timeless layer is visible at every tick");
+    assert.deepEqual(meta.layerIds, ["t", "plain"]);
+});
+
+test("a bucket with no timed vectors builds nothing", () => {
+    assert.deepEqual(buildVectorTimeMeta([{ id: "a" }], {}, DAY), { hasTime: false });
+});
+
+test("circles join the polygon bucket in the all-layers walk", () => {
+    const layers = [
+        { id: "c", type: "circle", visible: false, layer_group: "V" },
+        { id: "l", type: "polyline", visible: true, layer_group: "V" },
+    ];
+    const out = collectPointLayersAll(layers, {});
+    assert.deepEqual(out.polygon.map(e => [e.layer.id, e.vis]), [["c", false]]);
+    assert.deepEqual(out.polyline.map(e => [e.layer.id, e.vis]), [["l", true]]);
+});

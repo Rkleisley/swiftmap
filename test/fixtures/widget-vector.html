@@ -31,9 +31,26 @@ const model = makeModel({
     { id: "pg", type: "polygon", name: "Zone", layer_group: "Vectors", visible: true,
       color: "#00ff00", fillOpacity: 0.8, properties: { kind: "zone" },
       locations: [[35.98, -5.32], [35.98, -5.22], [36.04, -5.22], [35.98, -5.32]] },
+    // A timed pair alongside the timeless pair: the bucket engages the GPU time path
+    // (some layer has time), timeless features stay always-visible, and these two swap
+    // in and out per tick without the bucket ever rebuilding.
+    { id: "ln2", type: "polyline", name: "Timed Route", layer_group: "Vectors",
+      visible: true, color: "#0000ff", weight: 8, opacity: 1,
+      properties: { kind: "timed" },
+      time: { field: "kind", duration: "period" },
+      locations: [[36.06, -5.35], [36.09, -5.30]] },
+    { id: "pg2", type: "polygon", name: "Timed Zone", layer_group: "Vectors",
+      visible: true, color: "#ff00ff", fillOpacity: 0.8, properties: { kind: "timed" },
+      time: { field: "kind", duration: "period" },
+      locations: [[36.05, -5.24], [36.05, -5.18], [36.09, -5.18], [36.05, -5.24]] },
   ],
   group_configs: {},
-  coordinate_buffers: {},
+  coordinate_buffers: {
+    "ln2::times": new DataView(new Float64Array(
+        [Date.UTC(2026, 0, 2, 12), Date.UTC(2026, 0, 2, 12)]).buffer),
+    "pg2::times": new DataView(new Float64Array(
+        [Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 1)]).buffer),
+  },
   center: [36.03, -5.25], zoom: 11, crs: "EPSG:3857",
   auto_sync: true, sync_trigger: 0, show_logo: false,
 });
