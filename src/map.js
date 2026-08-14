@@ -4,7 +4,7 @@ import { renderLayer, renderMergedGlLayer } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
          collectDurationsMs } from "./timecontrol.js";
-import { gpuTimeAvailable } from "./gputime.js";
+import { gpuTimeAvailable, LAYER_SLOTS } from "./gputime.js";
 
 // True if a layer is visible and no folder above it is switched off.
 //
@@ -74,6 +74,28 @@ function updateLayerById(layers, id, update) {
         return l;
     });
     return hit ? next : layers;
+}
+
+// Every point layer, visible or not, with its effective visibility recorded -- the
+// GPU-visibility path keeps hidden layers in the bucket (stable ids, no rebuild on a
+// toggle) and hides them with a uniform instead. Mirrors collectWebglLayers' rules:
+// sub-layers inherit their parent's effective visibility, top-level layers answer for
+// their own flag and their folder chain.
+export function collectPointLayersAll(layers, groupConfigs) {
+    const out = { circle_markers: [], markers: [] };
+    function walk(layer, parentVisible, isSub) {
+        if (layer.type === "group" && layer.layers) {
+            const selfVis = parentVisible && isLayerEffectiveVisible(layer, groupConfigs);
+            layer.layers.forEach(sub => walk(sub, selfVis, true));
+            return;
+        }
+        if (!out[layer.type]) return;
+        const vis = isSub ? parentVisible
+            : parentVisible && isLayerEffectiveVisible(layer, groupConfigs);
+        out[layer.type].push({ layer, vis });
+    }
+    for (const layer of layers) walk(layer, true, false);
+    return out;
 }
 
 export function applySwiftmapPatch(state, ops, buffers) {
@@ -602,16 +624,43 @@ export default {
                 }
             }
 
-            await syncGlLayer("circle_markers", webglCircleMarkerLayers);
-            await syncGlLayer("markers", webglMarkerLayers);
+            // Point buckets holding time layers keep EVERY point layer -- hidden ones
+            // included -- so a sidebar toggle changes a visibility uniform instead of
+            // the bucket's ids. Unchecking one of 25 tracks used to rebuild all 5M
+            // points; clicking down the sidebar stacked those rebuilds into a crash.
+            const allPoints = collectPointLayersAll(layers, groupConfigs);
+            const pointBucket = { circle_markers: webglCircleMarkerLayers,
+                                  markers: webglMarkerLayers };
+            for (const type of ["circle_markers", "markers"]) {
+                const entries = allPoints[type];
+                const gpuVis = gpuTimeAvailable() && entries.length > 0
+                    && entries.length <= LAYER_SLOTS
+                    && entries.some(e => e.layer.time);
+                glStates[type].visVector = gpuVis ? entries.map(e => (e.vis ? 1 : 0)) : null;
+                if (gpuVis) pointBucket[type] = entries.map(e => e.layer);
+            }
+
+            await syncGlLayer("circle_markers", pointBucket.circle_markers);
+            await syncGlLayer("markers", pointBucket.markers);
             await syncGlLayer("polyline", webglPolylineLayers);
             await syncGlLayer("polygon", webglPolygonLayers);
 
             // Push the current window into the GPU-filtered point buckets: two uniforms
             // and a redraw, which is the entire per-tick cost of the time slider there.
             for (const type of ["circle_markers", "markers"]) {
-                const handle = glStates[type].layer && glStates[type].layer._swiftmapTime;
+                const state = glStates[type];
+                const handle = state.layer && state.layer._swiftmapTime;
                 if (!handle) continue;
+                // Layer visibility first, and only when it changed: a toggle costs one
+                // uniform array write and a redraw, never a rebuild.
+                const vis = state.visVector;
+                if (vis) {
+                    const key = vis.join("");
+                    if (state.visKey !== key) {
+                        state.visKey = key;
+                        handle.setLayerVisibility(vis);
+                    }
+                }
                 if (timeState) {
                     const overrideMs = timeState.window
                         ? periodToMs(parsePeriod(timeState.window)) : null;

@@ -369,3 +369,55 @@ test("the fade terms are in the shader", () => {
     assert.ok(src.includes("aDuration < 0.0"), "the sign is the flag");
     assert.ok(src.includes("clamp(1.0 - (uTick - aTimeSpan.y)"), "the age ramp");
 });
+
+// --- layer visibility on the GPU --------------------------------------------------------
+import { collectPointLayersAll } from "../src/index.js";
+
+test("hidden point layers stay in the bucket, marked invisible", () => {
+    const layers = [
+        { id: "a", type: "circle_markers", visible: true, layer_group: "Tracks" },
+        { id: "b", type: "circle_markers", visible: false, layer_group: "Tracks" },
+        { id: "ln", type: "polyline", visible: true, layer_group: "Tracks" },
+    ];
+    const out = collectPointLayersAll(layers, {});
+    assert.deepEqual(out.circle_markers.map(e => [e.layer.id, e.vis]),
+        [["a", true], ["b", false]], "b is present but marked hidden");
+    assert.equal(out.markers.length, 0, "lines are not the point bucket's business");
+});
+
+test("a hidden folder hides its point layers without removing them", () => {
+    const layers = [
+        { id: "a", type: "circle_markers", visible: true, layer_group: "Feeds/Active" },
+    ];
+    const out = collectPointLayersAll(layers, { Feeds: { visible: false } });
+    assert.deepEqual(out.circle_markers.map(e => e.vis), [false]);
+});
+
+test("group sub-layers inherit the group's effective visibility", () => {
+    // Mirrors collectWebglLayers: a sub-layer's own flag defers to its parent.
+    const layers = [{
+        id: "g", type: "group", name: "Survey", layer_group: "Field", visible: false,
+        layers: [{ id: "s", type: "circle_markers", visible: true }],
+    }];
+    const out = collectPointLayersAll(layers, {});
+    assert.deepEqual(out.circle_markers.map(e => e.vis), [false]);
+});
+
+test("attributes carry each point's layer slot", () => {
+    const layers = [
+        { id: "a", time: { duration: "period" } },
+        { id: "b", time: { duration: "period" } },
+    ];
+    const buffers = {
+        a: coordBuf(2), "a::times": spanBuf([[T0, T0], [T0, T0]]),
+        b: coordBuf(1), "b::times": spanBuf([[T0, T0]]),
+    };
+    const attrs = buildTimeAttributes(layers, buffers, DAY);
+    assert.deepEqual([...attrs.layerIdx], [0, 0, 1]);
+    assert.deepEqual(attrs.layerIds, ["a", "b"]);
+});
+
+test("the shader gates visibility on the layer slot", () => {
+    const src = timeVertexShader();
+    assert.ok(src.includes("uLayerVis[int(aLayer)]"), "per-layer uniform lookup");
+});

@@ -4,7 +4,8 @@
 // objects, with no dependency on Python, anywidget, or any UI framework. The anywidget
 // widget (src/anywidget.js) is one consumer of this; a React or vanilla app is another.
 
-export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers } from "./map.js";
+export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers,
+         collectPointLayersAll } from "./map.js";
 export { renderLayer, renderMergedGlLayer, styleFor, getIndexedProperties } from "./layers.js";
 export { renderSidebarControls, normalizeRadioLayers, getLayerBounds } from "./sidebar.js";
 export { pinShader } from "./shaders.js";

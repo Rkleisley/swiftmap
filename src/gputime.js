@@ -21,6 +21,13 @@ import { parsePeriod, periodToMs, timesFor } from "./timecontrol.js";
 const ALWAYS = 6.3e8;   // ~20 years, in seconds: the "duration" of cumulative layers,
                         // and the span half-width of points with no readable time.
 
+// Per-bucket layer-visibility slots in the vertex shader. Each float array element
+// occupies a full uniform vector in ES GLSL packing, and the spec guarantees only 128
+// vertex uniform vectors -- 64 slots leaves comfortable room for the matrix and the time
+// uniforms. A bucket with more layers than slots falls back to rebuild-per-toggle.
+// (Packing four layers per vec4 would quadruple this if anyone ever needs it.)
+export const LAYER_SLOTS = 64;
+
 // Cheap global kill switch: if wiring the GL state ever fails (a future glify version
 // moving its internals), everything falls back to the CPU rebuild path.
 let gpuOk = true;
@@ -41,8 +48,10 @@ attribute vec4 color;
 attribute float pointSize;
 attribute vec2 aTimeSpan;
 attribute float aDuration;
+attribute float aLayer;
 uniform float uTick;
 uniform float uOverride;
+uniform float uLayerVis[${LAYER_SLOTS}];
 varying vec4 _color;
 
 void main() {
@@ -50,8 +59,11 @@ void main() {
   // point dims with age. A shared override keeps the point's own fade preference.
   bool fades = aDuration < 0.0;
   float dur = uOverride >= 0.0 ? uOverride : abs(aDuration);
-  // Half-open (tick - dur, tick], matching featureInWindow on the CPU side.
-  bool visible = aTimeSpan.y > (uTick - dur) && aTimeSpan.x <= uTick;
+  // Half-open (tick - dur, tick], matching featureInWindow on the CPU side -- ANDed with
+  // the point's layer being visible. Layer toggles are one uniform element, not a
+  // rebuild: unchecking one of 25 tracks used to re-feed all 5M points through JS.
+  bool visible = aTimeSpan.y > (uTick - dur) && aTimeSpan.x <= uTick
+      && uLayerVis[int(aLayer)] > 0.5;
   gl_PointSize = visible ? pointSize : 0.0;
   gl_Position = visible ? matrix * vertex : vec4(2.0, 2.0, 2.0, 1.0);
   // Age runs from the feature's end; newest is opaque, the trailing edge reaches zero.
@@ -99,8 +111,12 @@ export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
 
     const spans = new Float32Array(total * 2);
     const durs = new Float32Array(total);
+    const layerIdx = new Float32Array(total);
+    const layerIds = [];
     let out = 0;
     for (const { layer, count, times } of perLayer) {
+        const idx = layerIds.length;
+        layerIds.push(layer.id);
         const dur = layer.time ? durationSeconds(layer.time.duration, periodMs) : ALWAYS;
         // The fade flag rides the duration's sign, so it costs no extra attribute.
         // Timeless (NaN) points keep a positive duration: with no age, nothing to fade.
@@ -117,10 +133,11 @@ export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
                 spans[out * 2 + 1] = (end - base) / 1000;
                 durs[out] = signedDur;
             }
+            layerIdx[out] = idx;
             out++;
         }
     }
-    return { hasTime: true, base, spans, durs, count: total };
+    return { hasTime: true, base, spans, durs, layerIdx, layerIds, count: total };
 }
 
 // Wires the attribute buffers and uniforms into a live glify points instance. Returns a
@@ -138,9 +155,13 @@ export function attachTimeToInstance(instance, attrs) {
 
         const spanLoc = gl.getAttribLocation(program, "aTimeSpan");
         const durLoc = gl.getAttribLocation(program, "aDuration");
+        const layerLoc = gl.getAttribLocation(program, "aLayer");
         const tickLoc = gl.getUniformLocation(program, "uTick");
         const overrideLoc = gl.getUniformLocation(program, "uOverride");
-        if (spanLoc < 0 || durLoc < 0 || !tickLoc || !overrideLoc) {
+        // Some drivers name the array head "uLayerVis[0]"; accept either.
+        const visLoc = gl.getUniformLocation(program, "uLayerVis")
+            || gl.getUniformLocation(program, "uLayerVis[0]");
+        if (spanLoc < 0 || durLoc < 0 || layerLoc < 0 || !tickLoc || !overrideLoc || !visLoc) {
             throw new Error("time attributes/uniforms missing from the linked program");
         }
 
@@ -156,16 +177,33 @@ export function attachTimeToInstance(instance, attrs) {
         gl.vertexAttribPointer(durLoc, 1, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(durLoc);
 
-        // Until the slider says otherwise, everything is visible.
+        const layerBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, layerBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, attrs.layerIdx, gl.STATIC_DRAW);
+        gl.vertexAttribPointer(layerLoc, 1, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(layerLoc);
+
+        // Until the slider says otherwise, everything is visible -- in time AND layer.
         gl.uniform1f(tickLoc, ALWAYS);
         gl.uniform1f(overrideLoc, -1);
+        gl.uniform1fv(visLoc, new Float32Array(LAYER_SLOTS).fill(1));
 
         return {
+            layerIds: attrs.layerIds,
             // tickMs in epoch ms; overrideMs a shared-window width or null.
             setWindow(tickMs, overrideMs) {
                 gl.useProgram(program);
                 gl.uniform1f(tickLoc, tickMs === null ? ALWAYS : (tickMs - attrs.base) / 1000);
                 gl.uniform1f(overrideLoc, overrideMs === null ? -1 : overrideMs / 1000);
+                layer.redraw();
+            },
+            // One float per layer slot, in attrs.layerIds order. A sidebar toggle lands
+            // here instead of rebuilding the bucket.
+            setLayerVisibility(visArray) {
+                const vis = new Float32Array(LAYER_SLOTS).fill(1);
+                vis.set(visArray.slice(0, LAYER_SLOTS));
+                gl.useProgram(program);
+                gl.uniform1fv(visLoc, vis);
                 layer.redraw();
             },
         };

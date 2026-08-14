@@ -238,7 +238,7 @@ suite("the time slider filters what glify draws", async () => {
             const inst = window.L.glify.pointsInstances;
             return inst[inst.length - 1].settings.data.length;
         });
-        assert.equal(fed, 3, "every point is on the GPU; the shader does the filtering");
+        assert.equal(fed, 4, "every point is on the GPU; the shader does the filtering");
 
         const first = await shotAt(0);
         const empty = await shotAt(1);
@@ -403,5 +403,53 @@ suite("fading dims aged points", async () => {
         assert.notEqual(Buffer.compare(flat, faded), 0,
             "aged points must dim once fade is on");
         assert.deepEqual(errors, [], "no errors while fading");
+    }, "widget-time.html");
+});
+
+suite("a layer toggle is a uniform, not a rebuild", async () => {
+    // Regression for the deselection crash: unchecking one of N point layers changed the
+    // merged bucket's membership and rebuilt every point -- at 5M points, seconds per
+    // click, and consecutive clicks stacked into a tab crash. With visibility on the
+    // GPU, the bucket keeps ALL point layers (glify's fed count stays constant and the
+    // instance identity survives the toggle) while the pixels still change.
+    await withPage(async (page, errors) => {
+        const mapArea = { x: 40, y: 60, width: 560, height: 480 };
+        await page.evaluate(() => {
+            // widen the window so both layers' points draw at the last tick
+            const m = window.__model;
+            m.set("time_config", { ...(m.get("time_config") || {}), window: "PT96H" });
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = s.max; s.dispatchEvent(new Event("input"));
+        });
+        await page.waitForTimeout(800);
+
+        const probe = () => page.evaluate(() => {
+            const a = window.L.glify.pointsInstances;
+            const inst = a[a.length - 1];
+            window.__lastInst = window.__lastInst || inst;
+            return { fed: inst.settings.data.length, same: inst === window.__lastInst };
+        });
+
+        const before = await probe();
+        const withBeacon = await page.screenshot({ clip: mapArea });
+
+        await page.evaluate(() => {
+            const box = [...document.querySelectorAll(".swiftmap-sidebar input")]
+                .find(i => i.parentElement.textContent.includes("Beacon"));
+            box.checked = false;
+            box.dispatchEvent(new Event("change"));
+        });
+        await page.waitForTimeout(900);
+
+        const after = await probe();
+        const withoutBeacon = await page.screenshot({ clip: mapArea });
+
+        assert.notEqual(Buffer.compare(withBeacon, withoutBeacon), 0,
+            "the toggled layer's point disappears from the screen");
+        assert.equal(after.fed, before.fed,
+            "the bucket keeps every point -- membership did not change");
+        assert.ok(after.same,
+            "the glify instance survives the toggle: no rebuild happened");
+        assert.deepEqual(errors, [], "no errors while toggling");
     }, "widget-time.html");
 });
