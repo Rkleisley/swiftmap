@@ -33,6 +33,27 @@ POLYGON_COORD_COL_CANDIDATES = ['coords', 'coordinates', 'locations', 'wkt', 'ge
 WKT_COL_CANDIDATES = ['wkt', 'geometry', 'geom', 'shape', 'coords', 'coordinates', 'locations']
 
 
+def explicit_wkt_column(data: Any, id_col: Optional[str], kind: str) -> Optional[str]:
+    """
+    Returns id_col when the column it names actually holds WKT of `kind`, else None.
+
+    `line_id_col` / `shape_id_col` normally name a grouping id, but they are also how a
+    caller points at a WKT column the name-guess would miss ("boundary", "zone_wkt"):
+    a WKT value is unambiguous -- no real id column holds "POLYGON ((..." -- so when the
+    named column's values are WKT it is the geometry source, one shape per row, and
+    grouping does not apply.
+    """
+    if not id_col:
+        return None
+    for checked, row in enumerate(iter_row_dicts(data)):
+        if checked >= 10:
+            break
+        found = wkt_kind(row.get(id_col))
+        if found is not None:
+            return id_col if found == kind else None
+    return None
+
+
 def find_wkt_column(data: Any) -> Optional[str]:
     """
     Returns the name of a column holding WKT strings, or None.
@@ -270,10 +291,14 @@ def _parse_wkt_points(data: Any, cols: List[str], wkt_column: str) -> Tuple:
     return lats_arr, lons_arr, props
 
 
-def parse_tabular_lines_by_coord_column(data: Any, cols: List[str], lat_col: Optional[str], lon_col: Optional[str], coord_order: str) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:
-    """Tier 1: a single column holding WKT/coordinate-string or list-of-coordinate values. None if not applicable."""
-    actual_coord_col = find_column_or_key(cols, LINE_COORD_COL_CANDIDATES)
-    if not actual_coord_col or (lat_col or lon_col):
+def parse_tabular_lines_by_coord_column(data: Any, cols: List[str], lat_col: Optional[str], lon_col: Optional[str], coord_order: str, coord_col: Optional[str] = None) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:
+    """Tier 1: a single column holding WKT/coordinate-string or list-of-coordinate values. None if not applicable.
+
+    An explicit coord_col (a verified WKT id column) wins over the name-guess and over
+    lat/lon columns; the guessed path still yields to explicit lat/lon.
+    """
+    actual_coord_col = coord_col or find_column_or_key(cols, LINE_COORD_COL_CANDIDATES)
+    if not actual_coord_col or (coord_col is None and (lat_col or lon_col)):
         return None
 
     non_coord_cols = [c for c in cols if c != actual_coord_col]
@@ -336,10 +361,14 @@ def parse_tabular_lines_by_wide_columns(data: Any, cols: List[str], lat_col: Opt
     return lines, props
 
 
-def parse_tabular_polygons_by_coord_column(data: Any, cols: List[str], lat_col: Optional[str], lon_col: Optional[str], coord_order: str) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:
-    """Tier 1: a single column holding a WKT polygon string or list-of-coordinate ring. None if not applicable."""
-    actual_coord_col = find_column_or_key(cols, POLYGON_COORD_COL_CANDIDATES)
-    if not actual_coord_col or (lat_col or lon_col):
+def parse_tabular_polygons_by_coord_column(data: Any, cols: List[str], lat_col: Optional[str], lon_col: Optional[str], coord_order: str, coord_col: Optional[str] = None) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:
+    """Tier 1: a single column holding a WKT polygon string or list-of-coordinate ring. None if not applicable.
+
+    An explicit coord_col (a verified WKT id column) wins over the name-guess and over
+    lat/lon columns; the guessed path still yields to explicit lat/lon.
+    """
+    actual_coord_col = coord_col or find_column_or_key(cols, POLYGON_COORD_COL_CANDIDATES)
+    if not actual_coord_col or (coord_col is None and (lat_col or lon_col)):
         return None
 
     non_coord_cols = [c for c in cols if c != actual_coord_col]

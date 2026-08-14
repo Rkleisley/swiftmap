@@ -47,9 +47,13 @@ def add_line(
     lon_col : str, optional
         Name of the longitude column (for DataFrames with multi-row points).
     line_id_col : str, optional
-        Column name used to break/group multi-row DataFrames into separate line features 
+        Column name used to break/group multi-row DataFrames into separate line features
         (e.g., 'track_id', 'flight_number', 'segment_id'). When this value changes or differs,
-        a distinct line feature is created.
+        a distinct line feature is created. May instead name a column holding WKT
+        LINESTRING strings -- recognised by the values themselves -- in which case it is
+        the geometry source, one line per row, and no grouping applies. This is how to
+        point at a WKT column whose name the automatic guess ('wkt', 'geometry', ...)
+        would miss.
     order_col : str, optional
         Column name used to sequence vertices within each line feature (e.g., 'timestamp', 'step').
     coord_order : {'auto', 'lat_lon', 'lon_lat'}, default 'auto'

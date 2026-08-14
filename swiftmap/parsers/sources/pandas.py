@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from ._utils import find_column_or_key, _ensure_closed_ring
 from ._tabular import (
     find_wkt_column,
+    explicit_wkt_column,
     LAT_CANDIDATES,
     LON_CANDIDATES,
     LINE_ID_CANDIDATES,
@@ -51,7 +52,9 @@ def parse_pandas_lines(
 ) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
     cols = list(data.columns)
 
-    result = parse_tabular_lines_by_coord_column(data, cols, lat_col, lon_col, coord_order)
+    result = parse_tabular_lines_by_coord_column(
+        data, cols, lat_col, lon_col, coord_order,
+        coord_col=explicit_wkt_column(data, line_id_col, "line"))
     if result is not None:
         return result
 
@@ -120,7 +123,9 @@ def parse_pandas_polygons(
 ) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
     cols = list(data.columns)
 
-    result = parse_tabular_polygons_by_coord_column(data, cols, lat_col, lon_col, coord_order)
+    result = parse_tabular_polygons_by_coord_column(
+        data, cols, lat_col, lon_col, coord_order,
+        coord_col=explicit_wkt_column(data, shape_id_col, "polygon"))
     if result is not None:
         return result
 

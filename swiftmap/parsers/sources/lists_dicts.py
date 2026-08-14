@@ -7,6 +7,7 @@ from ._tabular import (
     LON_CANDIDATES,
     RowsView,
     group_rows_into_paths,
+    explicit_wkt_column,
     parse_tabular_lines_by_coord_column,
     parse_tabular_lines_by_wide_columns,
     parse_tabular_polygons_by_coord_column,
@@ -179,7 +180,10 @@ def _parse_rows(
     by_wide = (parse_tabular_polygons_by_wide_columns if close_rings
                else parse_tabular_lines_by_wide_columns)
 
-    result = by_coord(view, cols, lat_col, lon_col, coord_order)
+    id_col = shape_id_col if close_rings else line_id_col
+    result = by_coord(view, cols, lat_col, lon_col, coord_order,
+                      coord_col=explicit_wkt_column(
+                          view, id_col, "polygon" if close_rings else "line"))
     if result is not None:
         return result
 

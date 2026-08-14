@@ -44,8 +44,12 @@ def add_polygon(
     lon_col : str, optional
         Name of the longitude column (for DataFrames with multi-row points).
     shape_id_col : str, optional
-        Column name used to group multi-row DataFrames into separate polygon features 
-        (e.g., 'polygon_id', 'zone_id', 'shape_id').
+        Column name used to group multi-row DataFrames into separate polygon features
+        (e.g., 'polygon_id', 'zone_id', 'shape_id'). May instead name a column holding
+        WKT polygon strings -- recognised by the values themselves -- in which case it
+        is the geometry source, one shape per row, and no grouping applies. This is how
+        to point at a WKT column whose name the automatic guess ('wkt', 'geometry',
+        'shape', ...) would miss.
     order_col : str, optional
         Column name used to sequence boundary vertices along each polygon ring.
     coord_order : {'auto', 'lat_lon', 'lon_lat'}, default 'auto'

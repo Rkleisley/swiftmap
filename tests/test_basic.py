@@ -170,6 +170,48 @@ def test_add_line_patterns():
     layer3 = m3.layers[-1]
     assert vector_coords(m3, layer3) == [[34.05, -118.24], [37.77, -122.41]]
 
+def test_wkt_in_an_arbitrarily_named_column_via_the_id_col():
+    # The name-guess only knows columns like 'wkt' and 'geometry'. Pointing shape_id_col
+    # or line_id_col at the column is how a caller names one the guess would miss: WKT
+    # values are unambiguous -- no real id column holds "POLYGON ((..." -- so the id
+    # param doubles as the geometry pointer, one shape per row, no grouping.
+    df = pd.DataFrame({
+        "zone": ["A"],
+        "boundary": ["POLYGON ((-118.24 34.05, -118.20 34.05, -118.20 34.10, -118.24 34.05))"],
+    })
+    m = Map()
+    m.add_polygon(df, shape_id_col="boundary", name="Zones")
+    layer = m.layers[-1]
+    assert layer.type == "polygon"
+    assert len(vector_coords(m, layer)) >= 4
+    assert layer.properties["zone"] == "A"
+
+    df_line = pd.DataFrame({
+        "route": ["R1"],
+        "path_wkt": ["LINESTRING (-118.24 34.05, -122.41 37.77)"],
+    })
+    m2 = Map()
+    m2.add_line(df_line, line_id_col="path_wkt", name="Routes")
+    layer2 = m2.layers[-1]
+    assert layer2.type == "polyline"
+    assert vector_coords(m2, layer2) == [[34.05, -118.24], [37.77, -122.41]]
+
+def test_an_ordinary_id_column_still_groups():
+    df = pd.DataFrame({
+        "lat": [10.0, 11.0, 12.0, 20.0, 21.0, 22.0],
+        "lon": [30.0, 31.0, 32.0, 40.0, 41.0, 42.0],
+        "zone": ["Z1"] * 3 + ["Z2"] * 3,
+    })
+    m = Map()
+    m.add_polygon(df, shape_id_col="zone", name="Zones")
+    assert len([l for l in m.layers if l.type == "polygon"]) == 2
+
+def test_wkt_of_the_wrong_kind_via_the_id_col_adds_nothing():
+    df = pd.DataFrame({"g": ["LINESTRING (-118.24 34.05, -122.41 37.77)"]})
+    m = Map()
+    with pytest.warns(EmptyLayerWarning):
+        m.add_polygon(df, shape_id_col="g", name="Zones")
+
 def test_polygon_and_shapes_patterns():
     # 1. WKT Polygon test
     df_wkt = pd.DataFrame({
