@@ -377,6 +377,25 @@ suite("lines and polygons each earn their own pixels", async () => {
             "the polygon draws pixels of its own");
         assert.notEqual(Buffer.compare(both, noDonut), 0,
             "the holed polygon draws pixels of its own");
+
+        // Polygon styling is more than one knob now: the border is real pixels
+        // (zeroing weight removes them) and the fill reads fillColor, not color.
+        const setStyle = (id, patch) => page.evaluate(([i, p]) => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === i ? { ...l, ...p } : l));
+        }, [id, patch]).then(() => page.waitForTimeout(900));
+
+        await setVis("pg3", true);
+        const restored = await shot();
+        await setStyle("pg", { weight: 0 });
+        const noBorder = await shot();
+        assert.notEqual(Buffer.compare(restored, noBorder), 0,
+            "the polygon border draws pixels of its own");
+        await setStyle("pg", { weight: 6, fillColor: "#0000ff" });
+        const refilled = await shot();
+        assert.notEqual(Buffer.compare(restored, refilled), 0,
+            "the fill colour is fillColor, not the stroke color");
         assert.deepEqual(errors, [], "no errors while toggling");
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });
@@ -402,10 +421,13 @@ suite("vector time layers tick and toggle without rebuilding", async () => {
                 shapeSame: si[si.length - 1] === window.__si,
             };
         });
+        // 1200ms, not 700: area borders draw as glify's offset multi-pass, which is
+        // real work under SwiftShader -- a tight budget here races the redraw and
+        // compares two screenshots of the same frame.
         const seek = (v) => page.evaluate((val) => {
             const s = document.querySelector(".swiftmap-time-slider");
             s.value = String(val); s.dispatchEvent(new Event("input"));
-        }, v).then(() => page.waitForTimeout(700));
+        }, v).then(() => page.waitForTimeout(1200));
 
         await probe();
         await seek(0);
@@ -422,7 +444,7 @@ suite("vector time layers tick and toggle without rebuilding", async () => {
             m.set("layers", m.get("layers").map(l =>
                 l.id === "ln2" ? { ...l, visible: false } : l));
         });
-        await page.waitForTimeout(700);
+        await page.waitForTimeout(1200);
         const toggled = await shot();
         assert.notEqual(Buffer.compare(late, toggled), 0,
             "toggling the timed line changes the pixels");

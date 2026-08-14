@@ -31,8 +31,11 @@ const model = makeModel({
     { id: "ln", type: "polyline", name: "Route", layer_group: "Vectors", visible: true,
       color: "#ff6600", weight: 8, opacity: 1, properties: { kind: "route" },
       bounds: [[36.00, -5.35], [36.10, -5.15]] },
+    // Distinct stroke and fill: the classic "red outline, green fill" that was
+    // impossible while areas filled with `color` and drew no real border.
     { id: "pg", type: "polygon", name: "Zone", layer_group: "Vectors", visible: true,
-      color: "#00ff00", fillOpacity: 0.8, properties: { kind: "zone" },
+      color: "#ff0000", fillColor: "#00ff00", weight: 6, fillOpacity: 0.8,
+      properties: { kind: "zone" },
       bounds: [[35.98, -5.32], [36.04, -5.22]] },
     // A timed pair alongside the timeless pair: the bucket engages the GPU time path
     // (some layer has time), timeless features stay always-visible, and these two swap

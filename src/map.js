@@ -632,9 +632,15 @@ export default {
             // the bucket's ids. Unchecking one of 25 tracks used to rebuild all 5M
             // points; clicking down the sidebar stacked those rebuilds into a crash.
             const allByType = collectPointLayersAll(layers, groupConfigs);
+            // Area outlines ride the lines bucket: every polygon and circle joins it as
+            // an extra entry whose rings render as weighted LineStrings (the polygon
+            // bucket draws only the fill). Joining unconditionally -- strokeless areas
+            // contribute an empty slot -- keeps the bucket's membership independent of
+            // style changes, so restyling a border stays a rebuild, never a re-bucket.
+            allByType.polyline = [...allByType.polyline, ...allByType.polygon];
             const bucket = { circle_markers: webglCircleMarkerLayers,
                              markers: webglMarkerLayers,
-                             polyline: webglPolylineLayers,
+                             polyline: [...webglPolylineLayers, ...webglPolygonLayers],
                              polygon: webglPolygonLayers };
             const vectorGpuBucket = { polyline: false, polygon: false };
             for (const type of ["circle_markers", "markers", "polyline", "polygon"]) {

@@ -116,6 +116,54 @@ function vectorCoords(layer, coordinateBuffers) {
     return out;
 }
 
+function closeRing(ring) {
+    if (ring.length > 0) {
+        const first = ring[0];
+        const last = ring[ring.length - 1];
+        if (first[0] !== last[0] || first[1] !== last[1]) {
+            ring.push([first[0], first[1]]);
+        }
+    }
+    return ring;
+}
+
+// An area layer's geometry as parts -> closed [lon, lat] rings: a polygon's flat
+// coordinate run sliced by its `rings` table (one hole-free ring without it), or a
+// circle's generated ring. Feeds both the fill (earcut, in the polygon bucket) and
+// the outline (LineStrings in the lines bucket).
+function areaParts(layer, coordinateBuffers) {
+    if (layer.type === "circle") {
+        const lat = layer.location[0];
+        const lon = layer.location[1];
+        const radiusMeters = layer.radius || 10;
+        const earthRadius = 6378137;
+        const ring = [];
+        for (let i = 0; i <= 32; i++) {
+            const angle = (i * 360) / 32;
+            const angleRad = (angle * Math.PI) / 180;
+            const dLat = (radiusMeters * Math.cos(angleRad)) / earthRadius;
+            const dLon = (radiusMeters * Math.sin(angleRad)) / (earthRadius * Math.cos((lat * Math.PI) / 180));
+            ring.push([lon + (dLon * 180) / Math.PI, lat + (dLat * 180) / Math.PI]);
+        }
+        return [[ring]];
+    }
+    const locs = vectorCoords(layer, coordinateBuffers) || [];
+    const lonlat = locs.map(c => [c[1], c[0]]);
+    const ringTable = layer.rings || (lonlat.length > 0 ? [[lonlat.length]] : []);
+    const parts = [];
+    let at = 0;
+    for (const partLens of ringTable) {
+        const rings = [];
+        for (const len of partLens) {
+            const ring = closeRing(lonlat.slice(at, at + len));
+            at += len;
+            if (ring.length >= 4) rings.push(ring);
+        }
+        if (rings.length > 0) parts.push(rings);
+    }
+    return parts;
+}
+
 export async function renderMergedGlLayer(map, type, layersList, coordinateBuffers, model,
                                            timeState = null, vectorGpu = false) {
     // Lines, polygons and circles are one geometry per layer. On the GPU path (map.js
@@ -136,11 +184,39 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         const features = [];
         const vertexCounts = [];
         for (const layer of layersList) {
+            const style = styleFor(layer, 0);
+            const rgb = parseColor(style.color, "#3388ff");
+
+            // Area outlines: a polygon or circle in this bucket contributes each of its
+            // rings as one LineString, drawn with the area's stroke options -- color,
+            // weight, opacity, Leaflet's own semantics. Outline weight and opacity never
+            // rendered before this; the fill machinery cannot draw them (glify's border
+            // is 1px and fill-coloured), the lines machinery already does.
+            if (layer.type === "polygon" || layer.type === "circle") {
+                let count = 0;
+                if ((style.weight ?? 3) > 0 && (style.opacity ?? 1.0) > 0) {
+                    for (const rings of areaParts(layer, coordinateBuffers)) {
+                        for (const ring of rings) {
+                            count += Math.max(0, 2 * (ring.length - 1));
+                            features.push({
+                                type: "Feature",
+                                geometry: { type: "LineString", coordinates: ring },
+                                properties: {
+                                    layer: layer,
+                                    colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: style.opacity || 1.0 },
+                                    weight: style.weight || 3
+                                }
+                            });
+                        }
+                    }
+                }
+                vertexCounts.push(count);   // 0 keeps the slot aligned when strokeless
+                continue;
+            }
+
             const locs = vectorCoords(layer, coordinateBuffers) || [];
             const geojsonCoords = locs.map(c => [c[1], c[0]]);
             vertexCounts.push(Math.max(0, 2 * (geojsonCoords.length - 1)));
-            const style = styleFor(layer, 0);
-            const rgb = parseColor(style.color, "#3388ff");
             features.push({
                 type: "Feature",
                 geometry: {
@@ -259,57 +335,10 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
     }
 
     if (type === "polygon") {
-        const closeRing = ring => {
-            if (ring.length > 0) {
-                const first = ring[0];
-                const last = ring[ring.length - 1];
-                if (first[0] !== last[0] || first[1] !== last[1]) {
-                    ring.push([first[0], first[1]]);
-                }
-            }
-            return ring;
-        };
-
         const features = [];
         const vertexCounts = [];
         for (const layer of layersList) {
-            // parts -> rings -> closed [lon, lat] pairs. `layer.rings` slices the flat
-            // coordinate run into parts and holes ([[outer, hole, ...], ...]); without
-            // it the run is the classic single hole-free ring.
-            let parts = [];
-            if (layer.type === "polygon") {
-                const locs = vectorCoords(layer, coordinateBuffers) || [];
-                const lonlat = locs.map(c => [c[1], c[0]]);
-                const ringTable = layer.rings ||
-                    (lonlat.length > 0 ? [[lonlat.length]] : []);
-                let at = 0;
-                for (const partLens of ringTable) {
-                    const rings = [];
-                    for (const len of partLens) {
-                        const ring = closeRing(lonlat.slice(at, at + len));
-                        at += len;
-                        if (ring.length >= 4) rings.push(ring);
-                    }
-                    if (rings.length > 0) parts.push(rings);
-                }
-            } else if (layer.type === "circle") {
-                const lat = layer.location[0];
-                const lon = layer.location[1];
-                const radiusMeters = layer.radius || 10;
-                const earthRadius = 6378137;
-                const ring = [];
-                for (let i = 0; i <= 32; i++) {
-                    const angle = (i * 360) / 32;
-                    const angleRad = (angle * Math.PI) / 180;
-                    const dLat = (radiusMeters * Math.cos(angleRad)) / earthRadius;
-                    const dLon = (radiusMeters * Math.sin(angleRad)) / (earthRadius * Math.cos((lat * Math.PI) / 180));
-                    const newLat = lat + (dLat * 180) / Math.PI;
-                    const newLon = lon + (dLon * 180) / Math.PI;
-                    ring.push([newLon, newLat]);
-                }
-                parts = [[ring]];
-            }
-
+            const parts = areaParts(layer, coordinateBuffers);
             if (parts.length === 0) {
                 vertexCounts.push(0);   // no feature, but the slot must stay aligned
                 continue;
@@ -327,7 +356,11 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
             vertexCounts.push(3 * triangles);
 
             const style = styleFor(layer, 0);
-            const rgb = parseColor(style.color, "#3388ff");
+            // Leaflet's own semantics: the fill is fillColor, defaulting to the stroke
+            // color when unset. It used to always fill with `color`, which made
+            // "red outline, pale blue fill" -- the most basic polygon styling ask --
+            // impossible; the outline itself is drawn by the lines bucket.
+            const rgb = parseColor(style.fillColor || style.fill_color || style.color, "#3388ff");
             features.push({
                 type: "Feature",
                 geometry: parts.length === 1

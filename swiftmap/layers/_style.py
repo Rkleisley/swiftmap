@@ -42,12 +42,12 @@ class StyleKey(NamedTuple):
 # actually consumes so this table cannot quietly drift from the code it describes.
 STYLE_REGISTRY = {
     "color": StyleKey("color", GEOMETRY, GEOMETRY),
-    "fill_color": StyleKey(
-        "fillColor", AREAS, NOTHING,
-        note="areas are filled with `color`; a separate fill colour is not drawn yet"),
+    "fill_color": StyleKey("fillColor", AREAS, AREAS),
     "fill_opacity": StyleKey("fillOpacity", AREAS, AREAS),
-    "opacity": StyleKey("opacity", GEOMETRY, LINES),
-    "weight": StyleKey("weight", LINES | AREAS, LINES),
+    "opacity": StyleKey(
+        "opacity", GEOMETRY, LINES | AREAS,
+        note="point layers take their alpha from the colour itself, e.g. rgba() or #rrggbbaa"),
+    "weight": StyleKey("weight", LINES | AREAS, LINES | AREAS),
     "radius": StyleKey(
         "radius", POINTS | {"circle"}, POINTS | {"circle"},
         note="pixels for point layers, metres for `circle`"),

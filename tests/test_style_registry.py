@@ -47,15 +47,18 @@ def test_an_option_for_the_wrong_shape_says_so():
 def test_an_option_that_fits_but_is_undrawn_says_something_different():
     """
     The caller has nothing to fix here, so it must not read like a mistake they made.
-    fill_color is right for a polygon; swiftmap simply fills with `color` today.
+    opacity is meaningful for a point; the point shaders simply do not read it.
     """
-    with pytest.warns(SwiftMapWarning, match="is not drawn for polygon layers yet"):
-        warn_on_undrawn_options(["fill_color"], "add_polygon", "polygon")
+    with pytest.warns(SwiftMapWarning, match="is not drawn for markers layers yet"):
+        warn_on_undrawn_options(["opacity"], "add_markers", "markers")
 
 
 def test_a_drawn_option_is_silent(recwarn):
     warn_on_undrawn_options(["color", "radius"], "add_circle_markers", "circle_markers")
     warn_on_undrawn_options(["weight"], "add_line", "polyline")
+    # The polygon styling gap is closed: fill colour, border weight and border
+    # opacity all render now, so none of them may warn.
+    warn_on_undrawn_options(["fill_color", "weight", "opacity"], "add_polygon", "polygon")
     assert [w for w in recwarn if issubclass(w.category, SwiftMapWarning)] == []
 
 
@@ -66,8 +69,8 @@ def test_no_layer_type_means_no_capability_warnings(recwarn):
 
 
 def test_the_note_reaches_the_caller():
-    with pytest.warns(SwiftMapWarning, match="filled with `color`"):
-        warn_on_undrawn_options(["fill_color"], "add_polygon", "polygon")
+    with pytest.warns(SwiftMapWarning, match="alpha from the colour itself"):
+        warn_on_undrawn_options(["opacity"], "add_markers", "markers")
 
 
 # --- through the real entry point ---------------------------------------------------
