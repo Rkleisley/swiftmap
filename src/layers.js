@@ -156,6 +156,19 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     map: m,
                     data: geojson,
                     pane: "polylinesPane",
+                    // The data above is GeoJSON, whose coordinates are [lon, lat]; glify
+                    // defaults to latitude-first and its LINE vertex builder reads
+                    // coordinates through these keys -- unset, it took longitude as
+                    // latitude and projected every line off-viewport. Silently: no GL
+                    // error, a healthy canvas, zero fragments. Set per instance rather
+                    // than on the L.glify global, which another library could also
+                    // mutate. The polygon path is deliberately NOT given these keys:
+                    // it triangulates via earcut on the GeoJSON directly, native
+                    // [lon, lat], and keys there would transpose it the same way.
+                    // Found by the Valhalla-VRE bug report, driving the plain-JS
+                    // bundle where no points masked the blank lines.
+                    latitudeKey: 1,
+                    longitudeKey: 0,
                     color: (index, feature) => {
                         return feature.properties.colorRGB;
                     },

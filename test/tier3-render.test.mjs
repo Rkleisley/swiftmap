@@ -45,7 +45,8 @@ function serve() {
         () => resolve({ server, port: server.address().port })));
 }
 
-async function withPage(fn, fixture = "widget.html") {
+async function withPage(fn, fixture = "widget.html",
+                        readySelector = ".leaflet-points-pane canvas") {
     const { server, port } = await serve();
     // SwiftShader gives software WebGL, so this runs on machines and CI images with no GPU.
     const browser = await chromium.launch({
@@ -60,7 +61,7 @@ async function withPage(fn, fixture = "widget.html") {
         // Wait for glify's canvas rather than sleeping: the first WebGL draw happens on a
         // later frame than render() resolving, and a fixed delay is a flaky test waiting
         // to happen on a slower machine.
-        await page.waitForSelector(".leaflet-points-pane canvas", { timeout: 20000 });
+        await page.waitForSelector(readySelector, { timeout: 20000 });
         await fn(page, errors);
     } finally {
         await browser.close();
@@ -338,4 +339,39 @@ suite("dragging the trail handle widens the window for every layer", async () =>
             "the widened window draws points the narrow one did not");
         assert.deepEqual(errors, [], "no errors while dragging");
     }, "widget-time.html");
+});
+
+suite("lines and polygons each earn their own pixels", async () => {
+    // Regression for the Valhalla-VRE report: swiftmap polylines had NEVER rendered.
+    // The lines branch feeds glify GeoJSON ([lon, lat]) while glify's line vertex
+    // builder defaults to latitude-first, so every line projected off-viewport --
+    // silently, and invisibly to a suite whose only pixel test hid a whole group at
+    // once, points included. This fixture has no points: each geometry is isolated by
+    // its own visibility toggle, sampled away from the sidebar so the checkbox's own
+    // pixels cannot fake a difference. The polygon assertion pins the OTHER half of
+    // that report: the shapes path consumes GeoJSON natively, so it must keep working
+    // WITHOUT coordinate keys -- adding them there would transpose polygons the same
+    // way lines were.
+    await withPage(async (page, errors) => {
+        const mapArea = { x: 40, y: 40, width: 560, height: 520 };
+        const shot = () => page.screenshot({ clip: mapArea });
+        const setVis = (id, v) => page.evaluate(([i, vis]) => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === i ? { ...l, visible: vis } : l));
+        }, [id, v]).then(() => page.waitForTimeout(900));
+
+        const both = await shot();
+        await setVis("ln", false);
+        const noLine = await shot();
+        await setVis("ln", true);
+        await setVis("pg", false);
+        const noPoly = await shot();
+
+        assert.notEqual(Buffer.compare(both, noLine), 0,
+            "the polyline draws pixels of its own");
+        assert.notEqual(Buffer.compare(both, noPoly), 0,
+            "the polygon draws pixels of its own");
+        assert.deepEqual(errors, [], "no errors while toggling");
+    }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });
