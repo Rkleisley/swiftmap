@@ -93,18 +93,33 @@ test("checked state mirrors the layer's visibility", () => {
 });
 
 // --- interaction writes back ------------------------------------------------------
-test("unticking a layer writes the new visibility back to the model", () => {
-    const { el, model } = mount([layer({ id: "L1", name: "Alpha", layer_group: "Feeds" })]);
+// A toggle reaches Python as a swiftmap_write custom message naming only the flipped
+// ids, and mutates the rendered list in place. It must NEVER set the layers trait:
+// serialising the whole list made one checkbox click a 36 MB websocket frame at
+// 25 tracks x 200k vertices -- past uvicorn's 16 MB cap, which closes the connection
+// and ends the Shiny session. A model.set without save is just as fatal, because the
+// dirty trait rides out with the next save_changes (any pan).
+
+const visibilityOps = model => model.sent
+    .filter(m => m.content && m.content.kind === "swiftmap_write")
+    .flatMap(m => m.content.ops);
+
+test("unticking a layer sends a targeted write, not the layers trait", () => {
+    const rendered = [layer({ id: "L1", name: "Alpha", layer_group: "Feeds" })];
+    const { el, model } = mount(rendered);
     const box = inputs(el).find(i => i.type === "checkbox" && i.name.includes("L1"));
     assert.ok(box, "the layer has its own checkbox");
 
     box.checked = false;
     box.dispatchEvent(new globalThis.Event("change"));
 
-    const written = model.sets.filter(([k]) => k === "layers").pop();
-    assert.ok(written, "a toggle writes the layers back");
-    assert.equal(written[1].find(l => l.id === "L1").visible, false);
-    assert.ok(model.saves > 0, "and commits the change");
+    assert.deepEqual(visibilityOps(model),
+        [{ op: "set", id: "L1", fields: { visible: false } }],
+        "exactly one field-level op crosses the wire");
+    assert.equal(rendered[0].visible, false, "the rendered list is flipped in place");
+    assert.ok(!model.sets.some(([k]) => k === "layers"),
+        "the layers trait is never written -- that write scales with the map");
+    assert.ok(model.saves > 0, "group_configs still commits through the trait");
 });
 
 test("toggling a layer runs the re-render callback", () => {
@@ -127,10 +142,12 @@ test("selecting one radio turns its siblings off", () => {
     target.checked = true;
     target.dispatchEvent(new globalThis.Event("change"));
 
-    const written = model.sets.filter(([k]) => k === "layers").pop();
-    assert.ok(written, "a radio selection writes back");
-    const visible = written[1].filter(l => l.visible);
-    assert.equal(visible.length, 1, "exactly one member of a single-select group stays on");
+    assert.equal(layers.filter(l => l.visible).length, 1,
+        "exactly one member of a single-select group stays on");
+    assert.deepEqual(visibilityOps(model), [
+        { op: "set", id: "B1", fields: { visible: false } },
+        { op: "set", id: "B2", fields: { visible: true } },
+    ], "the write names both flips and nothing else");
 });
 
 test("ticking a folder writes its visibility into group_configs", () => {
@@ -181,13 +198,13 @@ test("re-rendering replaces the tree rather than appending to it", () => {
     assert.equal(el.querySelectorAll("input").length, before, "no duplicated controls");
 });
 
-// --- write-back targets the rendered list, not the trait ----------------------------
+// --- toggles target the rendered list, not the trait --------------------------------
 // The sidebar renders from the list map.js keeps locally, which patches update in place.
 // Python's _set_trait_quietly deliberately skips the notification, so the frontend's copy
-// of the `layers` trait never advances past the initial state message. Any handler that
-// rebuilds the update from the trait silently drops every layer added after display: the
-// toggle matches no id, the stale list is written back, and map.js resets local state to
-// it -- so the checkbox re-checks itself and the layer never hides.
+// of the `layers` trait never advances past the initial state message. A handler that
+// worked from the trait would silently drop every layer added after display: the toggle
+// matches no id and the layer never hides. The rendered list is flipped in place and the
+// flip crosses the wire as a swiftmap_write op naming just that id.
 
 /** Mounts with the rendered list deliberately ahead of the model, as a patch leaves it. */
 function mountDiverged(rendered, inModel, groupConfigs = {}) {
@@ -197,44 +214,48 @@ function mountDiverged(rendered, inModel, groupConfigs = {}) {
     const model = makeModel({ layers: inModel, group_configs: groupConfigs });
     const el = dom.window.document.getElementById("sidebar");
     renderSidebarControls(el, rendered, model, makeMap(), () => {});
-    return { el, model };
+    return { el, model, rendered };
 }
 
 const boxFor = (el, name) => inputs(el).find(
     i => i.parentElement.textContent.includes(name));
 
-test("toggling a patch-added layer writes that layer, not the stale trait", () => {
+test("toggling a patch-added layer targets that layer, not the stale trait", () => {
     const base = layer({ id: "a", name: "Base", layer_group: "Layers" });
     const added = layer({ id: "s1", name: "Search Result", layer_group: "Layers" });
-    const { el, model } = mountDiverged([base, added], [base]);
+    const { el, model, rendered } = mountDiverged([base, added], [base]);
 
     boxFor(el, "Search Result").click();
 
-    const written = model.get("layers");
-    const target = written.find(l => l.id === "s1");
-    assert.ok(target, "the toggled layer survives the write-back");
-    assert.equal(target.visible, false, "and is actually hidden");
+    assert.deepEqual(visibilityOps(model),
+        [{ op: "set", id: "s1", fields: { visible: false } }],
+        "the write names the patch-added id the trait has never heard of");
+    assert.equal(rendered.find(l => l.id === "s1").visible, false, "and it actually hides");
 });
 
-test("a toggle never shrinks the layer list back to the trait's copy", () => {
+test("a toggle never writes the layers trait at all", () => {
+    // The old failure was subtler -- writing the trait's stale copy dropped every
+    // patch-added layer. Now any layers write is wrong twice over: it can carry the
+    // stale list, and at scale the frame alone ends the session.
     const base = layer({ id: "a", name: "Base", layer_group: "Layers" });
     const added = layer({ id: "s1", name: "Search Result", layer_group: "Layers" });
     const { el, model } = mountDiverged([base, added], [base]);
 
     boxFor(el, "Search Result").click();
 
-    assert.deepEqual(model.get("layers").map(l => l.id), ["a", "s1"],
-        "map.js resets local state from this write, so dropping a layer here unrenders it");
+    assert.ok(!model.sets.some(([k]) => k === "layers"),
+        "nothing may write the layers trait on a toggle");
 });
 
 test("untoggling a patch-added layer leaves its siblings alone", () => {
     const base = layer({ id: "a", name: "Base", layer_group: "Layers" });
     const added = layer({ id: "s1", name: "Search Result", layer_group: "Layers" });
-    const { el, model } = mountDiverged([base, added], [base]);
+    const { el, model, rendered } = mountDiverged([base, added], [base]);
 
     boxFor(el, "Search Result").click();
 
-    assert.equal(model.get("layers").find(l => l.id === "a").visible, true);
+    assert.equal(rendered.find(l => l.id === "a").visible, true);
+    assert.equal(visibilityOps(model).length, 1, "and no op touches the sibling");
 });
 
 test("a radio layer added by patch can still be selected", () => {
@@ -242,24 +263,27 @@ test("a radio layer added by patch can still be selected", () => {
     // just looked like radio semantics rather than a stale read.
     const first = layer({ id: "a", name: "Alpha", layer_group: "Modes" });
     const added = layer({ id: "b", name: "Bravo", layer_group: "Modes", visible: false });
-    const { el, model } = mountDiverged([first, added], [first],
+    const { el, model, rendered } = mountDiverged([first, added], [first],
         { Modes: { visible: true, multi_select: false } });
 
     boxFor(el, "Bravo").click();
 
-    const written = model.get("layers");
-    assert.equal(written.find(l => l.id === "b").visible, true, "the selected radio turns on");
-    assert.equal(written.find(l => l.id === "a").visible, false, "and its sibling turns off");
+    assert.equal(rendered.find(l => l.id === "b").visible, true, "the selected radio turns on");
+    assert.equal(rendered.find(l => l.id === "a").visible, false, "and its sibling turns off");
+    assert.deepEqual(visibilityOps(model).map(o => o.id).sort(), ["a", "b"],
+        "both flips cross the wire");
 });
 
 test("toggling still works when the trait and the rendered list agree", () => {
     // The undiverged path, so the fix is not just moving the failure somewhere else.
     const layers = [layer({ id: "a", name: "Alpha", layer_group: "Layers" })];
-    const { el, model } = mountDiverged(layers, layers);
+    const { el, model, rendered } = mountDiverged(layers, layers);
 
     boxFor(el, "Alpha").click();
 
-    assert.equal(model.get("layers").find(l => l.id === "a").visible, false);
+    assert.equal(rendered.find(l => l.id === "a").visible, false);
+    assert.deepEqual(visibilityOps(model),
+        [{ op: "set", id: "a", fields: { visible: false } }]);
 });
 
 // --- the time control -------------------------------------------------------------

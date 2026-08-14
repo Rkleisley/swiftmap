@@ -534,3 +534,41 @@ def test_numpy_ints_do_not_slip_through_the_gate():
     assert out is not col, "the gate rejected the column"
     json.dumps(out)
     assert out[1] == 2 and type(out[1]) is int
+
+
+# --- the frontend's toggle write-back ------------------------------------------------
+# A sidebar toggle arrives as a swiftmap_write custom message naming just the flipped
+# ids. It exists because the frontend used to write the whole layers trait to flip one
+# boolean: 36 MB a click at 25 tracks x 200k vertices, past uvicorn's 16 MB default
+# websocket frame cap, which closes the connection and ends the Shiny session.
+def test_a_client_visibility_write_lands_on_the_named_layer(m):
+    ports = m.find_layers("Ports")[0]
+    m._handle_client_msg(m, {"kind": "swiftmap_write", "ops": [
+        {"op": "set", "id": ports.get("id"), "fields": {"visible": False}}]}, None)
+    assert m.find_layers("Ports")[0].get("visible") is False
+
+
+def test_a_client_write_re_emits_the_flip_for_other_views(m):
+    """Notebooks show one map in several outputs; the tiny `set` patch keeps them in step."""
+    ports = m.find_layers("Ports")[0]
+    emitted = []
+    m._emit = lambda op, buffer=None: emitted.append(op)
+    m._handle_client_msg(m, {"kind": "swiftmap_write", "ops": [
+        {"op": "set", "id": ports.get("id"), "fields": {"visible": False}}]}, None)
+    assert emitted == [
+        {"op": "set", "id": ports.get("id"), "fields": {"visible": False}}]
+
+
+def test_a_client_write_to_an_unknown_id_is_ignored(m):
+    before = [l.get("visible") for l in m.layers]
+    m._handle_client_msg(m, {"kind": "swiftmap_write", "ops": [
+        {"op": "set", "id": "no-such-layer", "fields": {"visible": False}}]}, None)
+    assert [l.get("visible") for l in m.layers] == before
+
+
+def test_malformed_client_writes_are_safe(m):
+    m._handle_client_msg(m, "not a dict", None)
+    m._handle_client_msg(m, {"kind": "swiftmap_write"}, None)
+    m._handle_client_msg(m, {"kind": "swiftmap_write", "ops": [
+        None, {}, {"op": "set"}, {"op": "set", "id": None},
+        {"op": "set", "id": "x", "fields": "not a dict"}]}, None)

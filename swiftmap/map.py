@@ -174,8 +174,28 @@ class Map(anywidget.AnyWidget):
     # ------------------------------------------------------------------
 
     def _handle_client_msg(self, widget: Any, content: Any, buffers: Any) -> None:
-        if isinstance(content, dict) and content.get("kind") == "swiftmap_ready":
+        if not isinstance(content, dict):
+            return
+        kind = content.get("kind")
+        if kind == "swiftmap_ready":
             self.resync()
+        elif kind == "swiftmap_write":
+            # The sidebar's toggle write-back, field-level by construction. The frontend
+            # used to write the whole layers trait to flip one boolean, so the frame
+            # scaled with the map instead of the click -- 36 MB at 25 tracks x 200k
+            # vertices, past uvicorn's 16 MB default websocket cap, which closes the
+            # connection and takes the Shiny session with it. _set_layer_fields re-emits
+            # each applied write as a tiny `set` patch, which is what keeps other views
+            # of this map (notebook outputs) in step now that the trait carries nothing.
+            by_id = {l.get("id"): l for l in self.layers}
+            with self.batch():
+                for op in content.get("ops") or []:
+                    if not isinstance(op, dict) or op.get("op") != "set":
+                        continue
+                    target = by_id.get(op.get("id"))
+                    fields = op.get("fields")
+                    if target is not None and isinstance(fields, dict):
+                        self._set_layer_fields([target], fields)
 
     def _set_trait_quietly(self, name: str, value: Any) -> None:
         """Updates trait storage without firing a notification (and so without a full send)."""
@@ -722,10 +742,11 @@ class Map(anywidget.AnyWidget):
             own period -- absence reads as absence. None accumulates history instead, and
             an ISO8601 duration gives a fixed trailing window ('PT6H').
         fade : bool, default False
-            Dim point features with age: newest at full opacity, reaching zero at the
-            window's trailing edge. Applies to point layers rendered on the GPU time
-            path (the normal case); with a cumulative duration the fade spans decades
-            and is imperceptible, and features without readable times never fade.
+            Dim features with age: newest at full opacity, reaching zero at the
+            window's trailing edge. Applies to any layer rendered on the GPU time
+            path -- points, lines and polygons alike (the normal case); with a
+            cumulative duration the fade spans decades and is imperceptible, and
+            features without readable times never fade.
         **criteria
             Further narrowing -- `types`, `exclude_types`, `group`; see `hide`.
 

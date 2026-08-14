@@ -106,8 +106,11 @@ test("a single-select group keeps only its first visible layer", () => {
         layer({ id: "2", layer_group: "Base", visible: true }),
         layer({ id: "3", layer_group: "Base", visible: true }),
     ];
-    const changed = normalizeRadioLayers(layers, { "Base": { multi_select: false } });
-    assert.equal(changed, true, "the model needs writing back after a correction");
+    const { changes } = normalizeRadioLayers(layers, { "Base": { multi_select: false } });
+    assert.deepEqual(changes, [
+        { id: "2", visible: false },
+        { id: "3", visible: false },
+    ], "the correction reports exactly the flips to write back");
     assert.deepEqual(layers.map(l => l.visible), [true, false, false]);
 });
 
@@ -116,7 +119,8 @@ test("a multi-select group is left alone", () => {
         layer({ id: "1", layer_group: "Overlays", visible: true }),
         layer({ id: "2", layer_group: "Overlays", visible: true }),
     ];
-    assert.equal(normalizeRadioLayers(layers, { "Overlays": { multi_select: true } }), false);
+    assert.deepEqual(normalizeRadioLayers(layers, { "Overlays": { multi_select: true } }),
+        { changes: [], groupsChanged: false });
     assert.deepEqual(layers.map(l => l.visible), [true, true]);
 });
 

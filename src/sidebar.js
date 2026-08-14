@@ -93,6 +93,20 @@ export function getLayerBounds(l, coordinateBuffers) {
     return null;
 }
 
+// The write half of a visibility toggle: one custom message naming the flipped ids,
+// instead of the whole layers trait. Python applies the fields and re-emits them as
+// `set` patch ops, which is how other views of the same map (notebook outputs) stay
+// in step now that the trait no longer carries toggles.
+export function sendLayerWrite(model, changes) {
+    if (!changes.length) return;
+    try {
+        model.send({
+            kind: "swiftmap_write",
+            ops: changes.map(c => ({ op: "set", id: c.id, fields: { visible: c.visible } })),
+        });
+    } catch (err) { /* no live backend; the rendered list already holds the change */ }
+}
+
 export function normalizeRadioLayers(layers, groupConfigs) {
     const tree = { name: "Root", path: "", children: {}, layers: [], isGroup: true };
     if (!groupConfigs[""]) {
@@ -119,7 +133,10 @@ export function normalizeRadioLayers(layers, groupConfigs) {
         curr.layers.push(l);
     });
 
-    let modelNeedsUpdate = false;
+    // Reports what it changed -- {changes: [{id, visible}], groupsChanged} -- so the
+    // caller can write back exactly those flips rather than the whole layers list.
+    const changes = [];
+    let groupsChanged = false;
     function enforceRadioToggles(node) {
         const conf = groupConfigs[node.path] || { multi_select: true };
         const isRadioGroup = conf.multi_select === false;
@@ -135,7 +152,7 @@ export function normalizeRadioLayers(layers, groupConfigs) {
                     if (foundActive) {
                         groupConfigs[childGroup.path].visible = false;
                         collapsedPaths[childGroup.path] = true;
-                        modelNeedsUpdate = true;
+                        groupsChanged = true;
                     } else {
                         foundActive = true;
                         collapsedPaths[childGroup.path] = false;
@@ -149,7 +166,7 @@ export function normalizeRadioLayers(layers, groupConfigs) {
                 if (isVisible) {
                     if (foundActive) {
                         lyr.visible = false;
-                        modelNeedsUpdate = true;
+                        changes.push({ id: lyr.id, visible: false });
                     } else {
                         foundActive = true;
                     }
@@ -161,7 +178,7 @@ export function normalizeRadioLayers(layers, groupConfigs) {
         });
     }
     enforceRadioToggles(tree);
-    return modelNeedsUpdate;
+    return { changes, groupsChanged };
 }
 
 export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle) {
@@ -360,55 +377,58 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
                     return;
                 }
 
-                // Written against the list this sidebar rendered from, never model.get("layers").
+                // Flipped on the list this sidebar rendered from, never model.get("layers").
                 // Layers added after the widget is displayed arrive as patches that update the
                 // frontend's local state without touching the trait, so the model's copy is
                 // frozen at whatever the initial state message carried. Building the update from
                 // it drops every later layer: the toggle matches no id, writes the stale list
                 // back, and the change handler then resets local state to it -- so the box
                 // re-checks itself and the layer never hides.
-                let updatedLayers = [...layers];
+                //
+                // The flips mutate the rendered list in place and reach Python as a targeted
+                // write (sendLayerWrite), never by setting the layers trait: the full
+                // write-back scaled with the map instead of the click. At 25 tracks x 200k
+                // vertices it was a 36 MB frame -- past uvicorn's 16 MB default websocket
+                // cap, so the server closed the connection and the Shiny session died on
+                // the first checkbox. Setting the trait without saving is just as fatal:
+                // it stays dirty and the next save_changes (any pan) flushes it.
+                const changes = [];
+                const flip = (lyr, visible) => {
+                    if ((lyr.visible !== false) === visible) return;
+                    lyr.visible = visible;
+                    changes.push({ id: lyr.id, visible });
+                };
 
                 if (!isMultiSelect) {
                     // Radio button logic: set all siblings to visible=false, and this to visible=true
                     Object.keys(parentNode.children).forEach(key => {
                         const sibGroup = parentNode.children[key];
                         const active = sibGroup.path === path;
-                        groupConfigs[sibGroup.path] = { 
-                            ...groupConfigs[sibGroup.path], 
-                            visible: active 
+                        groupConfigs[sibGroup.path] = {
+                            ...groupConfigs[sibGroup.path],
+                            visible: active
                         };
                         collapsedPaths[sibGroup.path] = !active;
                     });
-                    parentNode.layers.forEach(sibLyr => {
-                        const active = sibLyr.id === id;
-                        updatedLayers = updatedLayers.map(origLayer => {
-                            if (origLayer.id === sibLyr.id) {
-                               return { ...origLayer, visible: active };
-                            }
-                            return origLayer;
-                        });
-                    });
+                    parentNode.layers.forEach(sibLyr => flip(sibLyr, sibLyr.id === id));
                 } else {
                     // Checkbox logic
                     if (isGroup) {
-                        groupConfigs[path] = { 
-                            ...groupConfigs[path], 
-                            visible: isChecked 
+                        groupConfigs[path] = {
+                            ...groupConfigs[path],
+                            visible: isChecked
                         };
                         collapsedPaths[path] = !isChecked;
                     } else {
-                        updatedLayers = updatedLayers.map(origLayer => {
-                            if (origLayer.id === id) {
-                                return { ...origLayer, visible: isChecked };
-                            }
-                            return origLayer;
-                        });
+                        const lyr = layers.find(l => l.id === id);
+                        if (lyr) flip(lyr, isChecked);
                     }
                 }
 
-                model.set("layers", updatedLayers);
-                model.set("group_configs", groupConfigs);
+                sendLayerWrite(model, changes);
+                // group_configs stays on the trait: it is a handful of folder flags, and the
+                // spread gives Backbone a fresh reference so the in-place edits register.
+                model.set("group_configs", { ...groupConfigs });
                 model.save_changes();
 
                 if (isChecked && map) {

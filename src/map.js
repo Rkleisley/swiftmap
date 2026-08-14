@@ -1,5 +1,5 @@
 import { loadCSS, loadJS } from "./utils.js";
-import { renderSidebarControls, normalizeRadioLayers } from "./sidebar.js";
+import { renderSidebarControls, normalizeRadioLayers, sendLayerWrite } from "./sidebar.js";
 import { renderLayer, renderMergedGlLayer } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
@@ -491,11 +491,13 @@ export default {
             const groupConfigs = model.get("group_configs") || {};
             const coordinateBuffers = bufferState;
 
-            // Enforce mutually exclusive radio group visibility before collecting or rendering WebGL layers
-            const radioChanged = normalizeRadioLayers(layers, groupConfigs);
-            if (radioChanged && document.body.contains(el)) {
-                model.set("layers", [...layers]);
-                model.set("group_configs", groupConfigs);
+            // Enforce mutually exclusive radio group visibility before collecting or rendering WebGL layers.
+            // Written back as targeted flips, never the layers trait -- the full write was
+            // the frame that killed large sessions (see the sidebar's change handler).
+            const radio = normalizeRadioLayers(layers, groupConfigs);
+            if ((radio.changes.length > 0 || radio.groupsChanged) && document.body.contains(el)) {
+                sendLayerWrite(model, radio.changes);
+                model.set("group_configs", { ...groupConfigs });
                 model.save_changes();
             }
 
