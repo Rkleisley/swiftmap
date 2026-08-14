@@ -375,3 +375,33 @@ suite("lines and polygons each earn their own pixels", async () => {
         assert.deepEqual(errors, [], "no errors while toggling");
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });
+
+suite("fading dims aged points", async () => {
+    // With a 3-day window at the last tick, the fixture's three points are 0, 1 and 2
+    // days old. Turning fade on must change the pixels -- the older points dim -- and
+    // turning it on is a rebuild (fade lives inside layer.time, which is in the rebuild
+    // key), so the same differential also proves the toggle reaches the GPU.
+    await withPage(async (page, errors) => {
+        const mapArea = { x: 40, y: 60, width: 560, height: 480 };
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("time_config", { ...(m.get("time_config") || {}), window: "PT72H" });
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = s.max; s.dispatchEvent(new Event("input"));
+        });
+        await page.waitForTimeout(800);
+        const flat = await page.screenshot({ clip: mapArea });
+
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.time ? { ...l, time: { ...l.time, fade: true } } : l));
+        });
+        await page.waitForTimeout(900);
+        const faded = await page.screenshot({ clip: mapArea });
+
+        assert.notEqual(Buffer.compare(flat, faded), 0,
+            "aged points must dim once fade is on");
+        assert.deepEqual(errors, [], "no errors while fading");
+    }, "widget-time.html");
+});

@@ -46,12 +46,17 @@ uniform float uOverride;
 varying vec4 _color;
 
 void main() {
-  float dur = uOverride >= 0.0 ? uOverride : aDuration;
+  // A negative duration is the fade flag: |aDuration| is the window, the sign says this
+  // point dims with age. A shared override keeps the point's own fade preference.
+  bool fades = aDuration < 0.0;
+  float dur = uOverride >= 0.0 ? uOverride : abs(aDuration);
   // Half-open (tick - dur, tick], matching featureInWindow on the CPU side.
   bool visible = aTimeSpan.y > (uTick - dur) && aTimeSpan.x <= uTick;
   gl_PointSize = visible ? pointSize : 0.0;
   gl_Position = visible ? matrix * vertex : vec4(2.0, 2.0, 2.0, 1.0);
-  _color = color;
+  // Age runs from the feature's end; newest is opaque, the trailing edge reaches zero.
+  float alpha = fades ? clamp(1.0 - (uTick - aTimeSpan.y) / dur, 0.0, 1.0) : 1.0;
+  _color = vec4(color.rgb, color.a * alpha);
 }
 `;
 }
@@ -97,6 +102,9 @@ export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
     let out = 0;
     for (const { layer, count, times } of perLayer) {
         const dur = layer.time ? durationSeconds(layer.time.duration, periodMs) : ALWAYS;
+        // The fade flag rides the duration's sign, so it costs no extra attribute.
+        // Timeless (NaN) points keep a positive duration: with no age, nothing to fade.
+        const signedDur = layer.time && layer.time.fade ? -dur : dur;
         for (let i = 0; i < count; i++) {
             const start = times ? times[i * 2] : NaN;
             const end = times ? times[i * 2 + 1] : NaN;
@@ -107,7 +115,7 @@ export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
             } else {
                 spans[out * 2] = (start - base) / 1000;
                 spans[out * 2 + 1] = (end - base) / 1000;
-                durs[out] = dur;
+                durs[out] = signedDur;
             }
             out++;
         }

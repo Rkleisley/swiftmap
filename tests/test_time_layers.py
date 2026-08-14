@@ -341,3 +341,13 @@ def test_a_bad_window_warns_and_keeps_the_old(m):
     with pytest.warns(SwiftMapWarning, match="not an ISO8601 duration"):
         m.configure_time(window="2 hours")
     assert m.time_config["window"] == "PT1H"
+
+
+def test_fade_is_off_unless_asked(m):
+    m.make_time_layer("Vessel")
+    assert "fade" not in m.find_layers("Vessel")[0]["time"]
+
+
+def test_fade_lands_in_the_time_metadata(m):
+    m.make_time_layer("Vessel", fade=True)
+    assert m.find_layers("Vessel")[0]["time"]["fade"] is True

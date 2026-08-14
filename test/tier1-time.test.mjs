@@ -338,3 +338,34 @@ test("the vertex shader carries glify's own contract plus the window", () => {
         assert.ok(src.includes(needed), `shader must declare ${needed}`);
     }
 });
+
+// --- fading ---------------------------------------------------------------------------
+test("fade rides the duration's sign, and timeless points never fade", () => {
+    const layers = [
+        { id: "f", time: { duration: "PT2H", fade: true } },
+        { id: "p", time: { duration: "PT2H" } },
+    ];
+    const buffers = {
+        f: coordBuf(2), "f::times": spanBuf([[T0, T0], [NaN, NaN]]),
+        p: coordBuf(1), "p::times": spanBuf([[T0, T0]]),
+    };
+    const attrs = buildTimeAttributes(layers, buffers, DAY);
+    assert.equal(attrs.durs[0], -7200, "fading layer: negative duration flags it");
+    assert.ok(attrs.durs[1] > 0, "a timeless point has no age, so nothing to fade");
+    assert.equal(attrs.durs[2], 7200, "non-fading layer keeps a positive duration");
+});
+
+test("the shader's alpha ramp: newest opaque, trailing edge zero", () => {
+    // Mirror of `clamp(1.0 - (uTick - aTimeSpan.y) / dur, 0.0, 1.0)`.
+    const alpha = (tick, end, dur) => Math.min(1, Math.max(0, 1 - (tick - end) / dur));
+    assert.equal(alpha(100, 100, 50), 1, "a feature at the tick is fully opaque");
+    assert.equal(alpha(125, 100, 50), 0.5, "halfway through the window, half faded");
+    assert.equal(alpha(150, 100, 50), 0, "at the trailing edge, gone");
+    assert.equal(alpha(90, 100, 50), 1, "an interval spanning the tick does not brighten past 1");
+});
+
+test("the fade terms are in the shader", () => {
+    const src = timeVertexShader();
+    assert.ok(src.includes("aDuration < 0.0"), "the sign is the flag");
+    assert.ok(src.includes("clamp(1.0 - (uTick - aTimeSpan.y)"), "the age ramp");
+});

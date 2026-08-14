@@ -688,7 +688,8 @@ class Map(anywidget.AnyWidget):
 
     def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = None,
                         time_end_field: Optional[str] = None, period: Optional[str] = None,
-                        duration: Optional[str] = "period", **criteria) -> "Map":
+                        duration: Optional[str] = "period", fade: bool = False,
+                        **criteria) -> "Map":
         """
         Animates the matching layers along the time their features already carry.
 
@@ -720,6 +721,11 @@ class Map(anywidget.AnyWidget):
             How long a feature stays visible after its time. "period" shows each tick's
             own period -- absence reads as absence. None accumulates history instead, and
             an ISO8601 duration gives a fixed trailing window ('PT6H').
+        fade : bool, default False
+            Dim point features with age: newest at full opacity, reaching zero at the
+            window's trailing edge. Applies to point layers rendered on the GPU time
+            path (the normal case); with a cumulative duration the fade spans decades
+            and is imperceptible, and features without readable times never fade.
         **criteria
             Further narrowing -- `types`, `exclude_types`, `group`; see `hide`.
 
@@ -772,8 +778,10 @@ class Map(anywidget.AnyWidget):
                 key = f"{layer.get('id')}::times"
                 if self.coordinate_buffers.get(key) != payload:
                     self._set_layer_buffer(key, payload)
-                self._set_layer_fields([layer], {"time": {"field": field,
-                                                          "duration": duration}})
+                time_meta = {"field": field, "duration": duration}
+                if fade:
+                    time_meta["fade"] = True
+                self._set_layer_fields([layer], {"time": time_meta})
             if period is not None:
                 self.configure_time(period=period)
         return self

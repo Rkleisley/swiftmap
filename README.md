@@ -169,7 +169,9 @@ period in which nothing happened still gets its tick -- an empty map at 03:00 is
 finding, not a gap in the slider.
 
 By default each tick shows its own period. Pass `duration=None` to accumulate history
-instead, or an ISO8601 duration (`'PT6H'`) for a fixed trailing window. Playback options
+instead, or an ISO8601 duration (`'PT6H'`) for a fixed trailing window. Add `fade=True`
+to dim point features with age -- newest at full opacity, reaching zero at the window's
+trailing edge. Playback options
 are shared: `m.configure_time(period="PT1H", auto_play=True, loop=True, speed=2,
 position="bottom-center")`.
 
