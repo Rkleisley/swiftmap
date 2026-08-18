@@ -88,6 +88,51 @@ test("bins label their classes as ranges with open ends", () => {
     assert.ok(el.textContent.includes("≥ 50"));
 });
 
+test("a group header collapses its rows and survives the re-render every sync does", () => {
+    const dom = new JSDOM("<!doctype html><div id='legend'></div>");
+    globalThis.document = dom.window.document;
+    const el = dom.window.document.getElementById("legend");
+    const spec = { title: "Legend", groups: [
+        { name: "Feeds", entries: [swatch("Sites")] } ] };
+
+    renderLegend(el, spec);
+    assert.ok(el.textContent.includes("▾ Feeds") && el.textContent.includes("Sites"));
+
+    const header = [...el.querySelectorAll("div")]
+        .find(d => d.textContent.includes("Feeds"));
+    header.dispatchEvent(new dom.window.Event("click"));
+    assert.ok(el.textContent.includes("▸ Feeds"), "the arrow folds");
+    assert.ok(!el.textContent.includes("Sites"), "the rows fold with it");
+
+    // The sync loop re-renders the whole legend from fresh state; the fold must hold.
+    renderLegend(el, spec);
+    assert.ok(!el.textContent.includes("Sites"), "collapse survives a re-render");
+
+    const folded = [...el.querySelectorAll("div")]
+        .find(d => d.textContent.includes("Feeds"));
+    folded.dispatchEvent(new dom.window.Event("click"));
+    assert.ok(el.textContent.includes("Sites"), "clicking again expands");
+});
+
+test("two legends never share collapse state", () => {
+    // The sidebar keys its collapse state at module scope and two maps on one page
+    // share it -- a filed bug the legend must not inherit.
+    const dom = new JSDOM("<!doctype html><div id='a'></div><div id='b'></div>");
+    globalThis.document = dom.window.document;
+    const a = dom.window.document.getElementById("a");
+    const b = dom.window.document.getElementById("b");
+    const spec = { title: "Legend", groups: [
+        { name: "Feeds", entries: [swatch("Sites")] } ] };
+
+    renderLegend(a, spec);
+    renderLegend(b, spec);
+    [...a.querySelectorAll("div")].find(d => d.textContent.includes("Feeds"))
+        .dispatchEvent(new dom.window.Event("click"));
+
+    assert.ok(!a.textContent.includes("Sites"), "the clicked legend folds");
+    assert.ok(b.textContent.includes("Sites"), "the other map's legend does not");
+});
+
 test("re-rendering replaces the content rather than appending", () => {
     const dom = new JSDOM("<!doctype html><div id='legend'></div>");
     globalThis.document = dom.window.document;

@@ -257,18 +257,40 @@ function swatchRow(entry) {
     return row;
 }
 
+// Collapse state, per container rather than module scope: the sidebar keys its
+// collapsedPaths at module level and two maps on one page share it -- a filed bug
+// this deliberately does not inherit. Keyed by group name, surviving the full
+// re-render every sync performs.
+const collapsedByContainer = new WeakMap();
+
 export function renderLegend(container, spec, options = {}) {
     container.innerHTML = "";
     const dimHidden = options.dimHidden !== false;
+    let collapsed = collapsedByContainer.get(container);
+    if (!collapsed) {
+        collapsed = new Set();
+        collapsedByContainer.set(container, collapsed);
+    }
     container.appendChild(div({
         fontSize: "13px", fontWeight: "bold", borderBottom: "2px solid #eee",
         paddingBottom: "4px", marginBottom: "4px",
     }, spec.title));
 
     for (const group of spec.groups) {
+        const isCollapsed = group.name && collapsed.has(group.name);
         if (group.name) {
-            container.appendChild(div({ fontWeight: "bold", marginTop: "6px" }, group.name));
+            // The sidebar's affordance exactly: an arrow that folds the section.
+            const header = div({ fontWeight: "bold", marginTop: "6px",
+                                 cursor: "pointer", userSelect: "none" });
+            header.textContent = `${isCollapsed ? "▸" : "▾"} ${group.name}`;
+            header.addEventListener("click", () => {
+                if (collapsed.has(group.name)) collapsed.delete(group.name);
+                else collapsed.add(group.name);
+                renderLegend(container, spec, options);
+            });
+            container.appendChild(header);
         }
+        if (isCollapsed) continue;
         for (const entry of group.entries) {
             const row = entry.kind === "ramp" ? rampRow(entry)
                 : entry.kind === "categories" ? categoriesRow(entry)
