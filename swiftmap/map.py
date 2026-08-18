@@ -116,6 +116,11 @@ class Map(anywidget.AnyWidget):
     )
     coordinate_buffers = traitlets.Dict({}).tag(sync=True)
     show_logo = traitlets.Bool(False).tag(sync=True)
+    # Undeclared, this was a plain Python attribute: __init__ assigned it happily,
+    # export read it happily, and the frontend's model.get("show_legend") was
+    # undefined forever -- the legend could never switch on under a real widget.
+    # The fixtures' model stub hid it, because a stub accepts any key.
+    show_legend = traitlets.Bool(False).tag(sync=True)
     group_configs = traitlets.Dict(default_value={}).tag(sync=True)
     
     # Selection and click interaction tracking

@@ -28,6 +28,23 @@ def test_height_reaches_both_the_trait_and_the_widget_layout():
     assert plain.height == "" and plain.layout.height is None
 
 
+def test_every_constructor_flag_round_trips_through_get_state():
+    # show_legend was assigned in __init__ and read by export like every other flag,
+    # but never DECLARED as a synced trait -- so the frontend saw undefined and the
+    # legend could never switch on, while every Python-side read worked. The only
+    # difference from show_logo was the declaration line, so this pins the round
+    # trip for each constructor flag.
+    m = Map(center=[10.0, 20.0], zoom=7, show_legend=True, show_logo=False,
+            height="500px", crs="EPSG:4326", auto_sync=False)
+    state = m.get_state()
+    for name, value in [("center", [10.0, 20.0]), ("zoom", 7),
+                        ("show_legend", True), ("show_logo", False),
+                        ("height", "500px"), ("crs", "EPSG:4326"),
+                        ("auto_sync", False)]:
+        assert name in state, f"{name} is not a synced trait -- the frontend never sees it"
+        assert state[name] == value, f"{name} did not round-trip"
+
+
 def test_click_seq_starts_at_zero():
     # The frontend bumps it on every click; observing this one trait catches
     # repeat clicks that change neither clicked_layer_id nor selected_index.
