@@ -201,12 +201,18 @@ def group_rows_into_paths(
 
 
 def iter_row_dicts(data: Any):
-    """Yields each row as something supporting row[col], for either a pandas or polars DataFrame."""
+    """
+    Yields each row as a dict, for either a pandas or polars DataFrame.
+
+    pandas goes through itertuples, not iterrows: iterrows constructs a Series per
+    row and was a measurable slice of a 6k-row WKT ingest.
+    """
     if hasattr(data, "iter_rows"):
         yield from data.iter_rows(named=True)
     else:
-        for _, row in data.iterrows():
-            yield row
+        columns = list(data.columns)
+        for row in data.itertuples(index=False, name=None):
+            yield dict(zip(columns, row))
 
 
 def match_wide_vertex_columns(cols: List[str]) -> Tuple[Dict[int, str], Dict[int, str]]:

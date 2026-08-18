@@ -134,13 +134,12 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
     if isinstance(child, dict) and attr in child:
         del child[attr]
 
-    # Check if an overlay layer with the same name and layer_group already exists to auto-merge them
+    # Check if an overlay layer with the same name and layer_group already exists to
+    # auto-merge them. Through the map's index, never a scan: per-add scans made bulk
+    # adds quadratic (35M attribute reads for a 6k-polygon ingest).
     existing = None
     if child_config.layer_group != "Basemaps":
-        for l in self.layers:
-            if l.get("layer_group") == child_config.layer_group and l.get("name") == child_config.name:
-                existing = l
-                break
+        existing = self._merge_lookup(child_config.layer_group, child_config.name)
 
     if existing is not None:
         # Create a new LayerConfig instance to force traitlets serialization change detection

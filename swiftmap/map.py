@@ -244,14 +244,46 @@ class Map(anywidget.AnyWidget):
             return
         self.send({"kind": "swiftmap_patch", "ops": ops}, buffers=buffers)
 
+    def _merge_lookup(self, layer_group: Any, name: Any) -> Optional[Any]:
+        """
+        The existing layer a new (layer_group, name) would merge into, if any.
+
+        add_child used to scan every layer per add, which made bulk adds quadratic:
+        35 million attribute reads to ingest 6k polygons. The index is keyed to the
+        layers LIST OBJECT -- every mutation path builds a new list, so an identity
+        mismatch means some other path changed the layers and the index rebuilds once;
+        the append/replace paths below refresh it in step, keeping a batch of adds
+        O(1) per add.
+        """
+        layers = self.layers
+        cache = getattr(self, "_merge_cache", None)
+        if cache is None or cache[0] is not layers:
+            index = {}
+            for l in layers:
+                index[(l.get("layer_group"), l.get("name"))] = l
+            cache = (layers, index)
+            self._merge_cache = cache
+        return cache[1].get((layer_group, name))
+
     def _layers_append(self, config: Any) -> None:
-        self._set_trait_quietly("layers", self.layers + [config])
+        new_layers = self.layers + [config]
+        self._set_trait_quietly("layers", new_layers)
+        cache = getattr(self, "_merge_cache", None)
+        if cache is not None:
+            cache[1][(config.get("layer_group"), config.get("name"))] = config
+            self._merge_cache = (new_layers, cache[1])
         self._emit({"op": "add", "layer": _layer_to_dict(config)})
 
     def _layers_replace(self, existing: Any, config: Any) -> None:
-        self._set_trait_quietly(
-            "layers", [config if l is existing else l for l in self.layers]
-        )
+        new_layers = [config if l is existing else l for l in self.layers]
+        self._set_trait_quietly("layers", new_layers)
+        cache = getattr(self, "_merge_cache", None)
+        if cache is not None:
+            old_key = (existing.get("layer_group"), existing.get("name"))
+            if cache[1].get(old_key) is existing:
+                del cache[1][old_key]
+            cache[1][(config.get("layer_group"), config.get("name"))] = config
+            self._merge_cache = (new_layers, cache[1])
         self._emit({"op": "replace", "id": config.get("id"), "layer": _layer_to_dict(config)})
 
     def _layers_set(self, new_layers: List[Any], removed_ids: List[Any]) -> None:
@@ -266,10 +298,14 @@ class Map(anywidget.AnyWidget):
             self._emit({"op": "replace", "id": config.get("id"), "layer": _layer_to_dict(config)})
 
     def _set_layer_buffer(self, layer_id: str, payload: bytes) -> None:
-        """Stores one layer's coordinate buffer and sends only that buffer to the client."""
-        self._set_trait_quietly(
-            "coordinate_buffers", {**self.coordinate_buffers, layer_id: payload}
-        )
+        """
+        Stores one layer's coordinate buffer and sends only that buffer to the client.
+
+        In place, not a copy: rebuilding the dict per layer made bulk adds quadratic
+        in buffer count. The trait's value never changes identity here, which is fine
+        -- it is set quietly everywhere and synced by the buffer op below.
+        """
+        self.coordinate_buffers[layer_id] = payload
         self._emit({"op": "buffer", "id": layer_id}, buffer=payload)
 
     def _remove_layer_buffers(self, layer_ids: Any) -> None:

@@ -54,45 +54,40 @@ class PolygonGeom:
         return [[len(ring) for ring in part] for part in self.parts]
 
 
+# Innermost paren groups are ring bodies (coordinates never contain parens), and a
+# MULTIPOLYGON's parts are separated by a comma between DOUBLED parens -- rings within
+# one part only ever meet at single parens -- so both structures fall to C-speed regex.
+# The part split is pure lookaround: consuming the parens would orphan the ring bodies
+# on either side of the cut. This used to be a character-by-character Python walk,
+# which read every byte of WKT through the interpreter: 2.4s of a 6k-polygon ingest.
+_RING_RE = re.compile(r"\(([^()]+)\)")
+_PART_SPLIT_RE = re.compile(r"(?<=\)\))\s*,\s*(?=\(\()")
+
+
 def _wkt_polygon_structure(val: str) -> List[List[List[List[float]]]]:
     """
     Parts -> rings -> [lat, lon] pairs for a POLYGON or MULTIPOLYGON body.
 
-    A paren-depth walk rather than a number sweep: the flat sweep merged every ring
-    and every part into one garbled boundary, which is exactly the holes/multipolygon
-    oversight. Rings live at depth 2 of a POLYGON and depth 3 of a MULTIPOLYGON, with
-    depth 2 delimiting the parts. Malformed parens yield [], and the caller falls back
-    to the permissive flat sweep.
+    Ring-aware rather than a flat number sweep: the sweep merged every ring and part
+    into one garbled boundary, which was exactly the holes/multipolygon oversight.
+    Malformed parens yield [], and the caller falls back to the permissive sweep.
     """
     match = _WKT_PREFIX.match(val)
     is_multi = match is not None and match.group(1) is not None
-    ring_depth = 3 if is_multi else 2
-    parts: List[List[List[List[float]]]] = []
-    rings: List[List[List[float]]] = []
-    buf: Optional[List[str]] = None
-    depth = 0
-    for ch in val:
-        if ch == "(":
-            depth += 1
-            if is_multi and depth == 2:
-                rings = []
-            if depth == ring_depth:
-                buf = []
-        elif ch == ")":
-            if depth == ring_depth and buf is not None:
-                nums = [float(n) for n in FLOAT_REGEX.findall("".join(buf))]
-                ring = [[nums[i + 1], nums[i]] for i in range(0, len(nums) - 1, 2)]
-                if len(ring) >= 3:
-                    rings.append(_ensure_closed_ring(ring))
-                buf = None
-            if is_multi and depth == 2 and rings:
-                parts.append(rings)
-                rings = []
-            depth -= 1
-        elif buf is not None:
-            buf.append(ch)
-    if not is_multi and rings:
-        parts.append(rings)
+
+    def rings_of(text: str) -> List[List[List[float]]]:
+        rings = []
+        for body in _RING_RE.findall(text):
+            nums = [float(n) for n in FLOAT_REGEX.findall(body)]
+            ring = [[nums[i + 1], nums[i]] for i in range(0, len(nums) - 1, 2)]
+            if len(ring) >= 3:
+                rings.append(_ensure_closed_ring(ring))
+        return rings
+
+    if not is_multi:
+        rings = rings_of(val)
+        return [rings] if rings else []
+    parts = [rings_of(chunk) for chunk in _PART_SPLIT_RE.split(val)]
     return [p for p in parts if p]
 
 
