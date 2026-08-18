@@ -831,6 +831,25 @@ export default {
         // already state by now, so the change event will never fire for it. It used
         // to be silently dropped; apply it once the map is ready instead.
         map.whenReady(() => applyFitRequest());
+        // A map constructed inside a hidden container -- a Shiny nav_panel that is
+        // not the selected tab -- initialises at 0x0, and Leaflet caches that size:
+        // its own trackResize watches the WINDOW, not the container, so nothing ever
+        // corrects it. The fit above then computes its zoom from a zero-size lie and
+        // the view lands wrong permanently. Watch the container itself: every resize
+        // re-measures, and the first transition from zero to real size re-applies
+        // the pending fit with a size that can actually hold it.
+        if (typeof ResizeObserver !== "undefined") {
+            let hadSize = container.clientWidth > 0 && container.clientHeight > 0;
+            const containerResize = new ResizeObserver(() => {
+                const hasSize = container.clientWidth > 0 && container.clientHeight > 0;
+                if (hasSize) {
+                    map.invalidateSize();
+                    if (!hadSize) applyFitRequest();
+                }
+                hadSize = hasSize;
+            });
+            containerResize.observe(container);
+        }
 
         let syncTimeout = null;
         let isSyncing = false;

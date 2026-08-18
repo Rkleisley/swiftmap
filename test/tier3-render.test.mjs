@@ -60,8 +60,9 @@ async function withPage(fn, fixture = "widget.html",
         await page.waitForFunction("window.__ready === true", { timeout: 30000 });
         // Wait for glify's canvas rather than sleeping: the first WebGL draw happens on a
         // later frame than render() resolving, and a fixed delay is a flaky test waiting
-        // to happen on a slower machine.
-        await page.waitForSelector(readySelector, { timeout: 20000 });
+        // to happen on a slower machine. null skips it, for fixtures whose widget is
+        // deliberately hidden at load -- Playwright's wait wants a VISIBLE element.
+        if (readySelector) await page.waitForSelector(readySelector, { timeout: 20000 });
         await fn(page, errors);
     } finally {
         await browser.close();
@@ -179,6 +180,27 @@ suite("an explicit height sizes the container and drops the 400px floor", async 
         assert.equal(after.height, 252,
             "an explicit height wins -- including against the 400px minimum");
     });
+});
+
+suite("a fit requested while hidden lands when the container gains size", async () => {
+    // The Shiny nav_panel case: the widget builds on an unselected tab, Leaflet
+    // initialises at 0x0 and caches it, and a fit computed then is garbage. The
+    // container's own ResizeObserver must re-measure on reveal and re-apply the
+    // pending request -- Leaflet's trackResize only watches the window.
+    await withPage(async (page, errors) => {
+        await page.waitForTimeout(500);
+        await page.evaluate(() => window.__reveal());
+        await page.waitForTimeout(800);
+
+        const center = await page.evaluate(() => window.__model.get("center"));
+        // The request's union centres near [36.01, -5.43]; the fixture's own view
+        // sits at [20, 10], so landing here proves the reveal re-applied the fit.
+        assert.ok(Math.abs(center[0] - 36.01) < 0.3 && Math.abs(center[1] + 5.43) < 0.4,
+            `the revealed map frames the requested bounds -- got ${JSON.stringify(center)}`);
+        const zoom = await page.evaluate(() => window.__model.get("zoom"));
+        assert.ok(zoom > 3 && zoom <= 15, `and chose a real zoom for them -- got ${zoom}`);
+        assert.deepEqual(errors, [], "no errors through hide, reveal, and refit");
+    }, "widget-hidden.html", null);
 });
 
 suite("the legend derives, dims, and obeys overrides", async () => {
