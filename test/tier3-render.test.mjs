@@ -235,6 +235,34 @@ suite("permanent labels render, follow visibility, and stay text", async () => {
     });
 });
 
+suite("labels follow the time window", async () => {
+    // The fixture's three points sit on separate days; labelling them and seeking
+    // the slider must swap the chips with the points, since every tick re-enters
+    // the sync that re-derives labels.
+    await withPage(async (page, errors) => {
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === "pts" ? { ...l, labels: ["D1", "D2", "D3"] } : l));
+        });
+        const seek = v => page.evaluate(val => {
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = String(val); s.dispatchEvent(new Event("input"));
+        }, v).then(() => page.waitForTimeout(700));
+        const texts = () => page.evaluate(() =>
+            [...document.querySelectorAll(".swiftmap-feature-label")]
+                .map(e => e.textContent).sort());
+
+        await seek(0);
+        assert.deepEqual(await texts(), ["D1"], "day one labels day one's point");
+        const max = await page.evaluate(() =>
+            parseInt(document.querySelector(".swiftmap-time-slider").max, 10));
+        await seek(max);
+        assert.deepEqual(await texts(), ["D3"], "the chip moved with the window");
+        assert.deepEqual(errors, [], "no errors while seeking");
+    }, "widget-time.html");
+});
+
 suite("the legend derives, dims, and obeys overrides", async () => {
     // Enabled dynamically so the other suites' screenshot clips never contain it.
     await withPage(async (page, errors) => {

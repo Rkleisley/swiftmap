@@ -58,3 +58,39 @@ test("collections descend", () => {
     })], {}, {});
     assert.deepEqual(out.map(l => l.text), ["Site"]);
 });
+
+// --- time awareness --------------------------------------------------------------------
+const T0 = Date.UTC(2026, 0, 1);
+const HOUR = 3600 * 1000;
+
+test("with a timeState, point labels follow the window", () => {
+    const layers = [layer({ id: "p", labels: ["Early", "Late", "Timeless"],
+                            time: { duration: "PT1H" } })];
+    const buffers = {
+        p: buf([[36.0, -5.3], [36.1, -5.2], [36.2, -5.1]]),
+        "p::times": buf([[T0, T0], [T0 + 2 * HOUR, T0 + 2 * HOUR], [NaN, NaN]]),
+    };
+    const at = tick => collectLabels(layers, buffers, {}, { tick, period: null })
+        .map(l => l.text);
+    assert.deepEqual(at(T0), ["Early", "Timeless"],
+        "the future's label is absent; an unreadable time never hides one");
+    assert.deepEqual(at(T0 + 2 * HOUR), ["Late", "Timeless"]);
+});
+
+test("a vector label shows while ANY of its segments is in window", () => {
+    const layers = [layer({ id: "l", type: "polyline", label: "Track",
+                            time: { duration: "PT1H" },
+                            locations: [[36.0, -5.3], [36.1, -5.2], [36.2, -5.1]] })];
+    const buffers = { "l::times": buf([[T0, T0], [T0 + HOUR, T0 + HOUR],
+                                       [T0 + 2 * HOUR, T0 + 2 * HOUR]]) };
+    const at = tick => collectLabels(layers, buffers, {}, { tick, period: null }).length;
+    assert.equal(at(T0), 1, "the label follows the layer, not one leg");
+    assert.equal(at(T0 + 2 * HOUR), 1);
+    assert.equal(at(T0 + 5 * HOUR), 0, "long after the track ends, no chip");
+});
+
+test("no timeState shows every label, exactly as before", () => {
+    const layers = [layer({ id: "p", labels: ["A"], time: { duration: "PT1H" } })];
+    const buffers = { p: buf([[36.0, -5.3]]), "p::times": buf([[T0, T0]]) };
+    assert.equal(collectLabels(layers, buffers, {}).length, 1);
+});

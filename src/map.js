@@ -726,9 +726,12 @@ export default {
             });
 
             // Permanent labels follow the same derive-per-sync pattern as the legend,
-            // so they track visibility with no bucket or meta-key involvement.
+            // so they track visibility with no bucket or meta-key involvement -- and
+            // since every playback tick re-enters this sync, passing timeState makes
+            // them follow the window too: chips appear and vanish with their features.
             if (labelsGroup) {
-                renderLabels(L, labelsGroup, layers, coordinateBuffers, groupConfigs);
+                renderLabels(L, labelsGroup, layers, coordinateBuffers, groupConfigs,
+                             timeState);
             }
 
             const legendCfg = model.get("legend_config") || {};
