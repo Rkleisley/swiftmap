@@ -160,3 +160,26 @@ test("the title defaults and overrides", () => {
     assert.equal(deriveLegendSpec([], {}, {}).title, "Legend");
     assert.equal(deriveLegendSpec([], {}, { title: "Key" }).title, "Key");
 });
+
+test("a size key rides beside the colour entry, one row each", () => {
+    const spec = deriveLegendSpec([layer({
+        id: "1", name: "Ships", type: "circle_markers",
+        legend: { kind: "ramp", field: "speed", anchors: ["#000", "#fff"],
+                  vmin: 0, vmax: 30 },
+        legend_size: { kind: "sizes", field: "tonnage", vmin: 2, vmax: 30 },
+    })], {}, {});
+    const entries = flat(spec);
+    assert.deepEqual(entries.map(e => e.kind), ["ramp", "sizes"],
+        "both encodings on the map, both explained in the legend");
+    assert.equal(entries[1].label, "tonnage");
+});
+
+test("identical size keys collapse like identical ramps", () => {
+    const block = { kind: "sizes", field: "tonnage", vmin: 2, vmax: 30 };
+    const spec = deriveLegendSpec([
+        layer({ id: "1", name: "Cargo", layer_group: "Fleet/cargo", legend_size: block }),
+        layer({ id: "2", name: "Tanker", layer_group: "Fleet/tanker", legend_size: block }),
+    ], {}, {});
+    assert.equal(flat(spec).filter(e => e.kind === "sizes").length, 1,
+        "one shared mapping, one row");
+});

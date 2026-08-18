@@ -136,3 +136,31 @@ def test_the_export_carries_the_legend_config():
     m.add_circle_markers([[36.0, -5.3]], name="Sites")
     m.configure_legend(show=True, title="Patrol Key")
     assert '"Patrol Key"' in m.to_html()
+
+
+# --- the size key --------------------------------------------------------------------
+# Stated, never drawn: legend CSS pixels are not map pixels at any zoom, so the block
+# carries the field and its domain -- no radii, nothing derived from radius_range.
+def test_radius_col_records_a_size_key():
+    m = Map()
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                          "tonnage": [2.0, 30.0]},
+                         name="Ships", radius_col="tonnage")
+    assert m.layers[-1].legend_size == {"kind": "sizes", "field": "tonnage",
+                                        "vmin": 2, "vmax": 30}
+
+
+def test_no_radius_col_records_no_size_key():
+    m = Map()
+    m.add_circle_markers([[36.0, -5.3]], name="Plain")
+    assert m.layers[-1].legend_size is None
+
+
+def test_a_non_numeric_radius_column_records_nothing():
+    import warnings as w
+    m = Map()
+    with w.catch_warnings():
+        w.simplefilter("ignore")
+        m.add_circle_markers({"lat": [36.0], "lon": [-5.3], "kind": ["cargo"]},
+                             name="Ships", radius_col="kind")
+    assert m.layers[-1].legend_size is None

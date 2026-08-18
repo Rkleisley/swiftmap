@@ -144,3 +144,15 @@ test("re-rendering replaces the content rather than appending", () => {
     renderLegend(el, spec);
     assert.equal(el.querySelectorAll("div").length, count);
 });
+
+test("a size key is a statement, not a drawing", () => {
+    const el = mount({ title: "Legend", groups: [
+        { name: "", entries: [{ kind: "sizes", label: "tonnage", field: "tonnage",
+                                vmin: 2, vmax: 30, hidden: false }] },
+    ] });
+    assert.ok(el.textContent.includes("size ∝ tonnage (2 – 30)"),
+        "the encoding and its domain, in words");
+    assert.equal([...el.querySelectorAll("div")]
+        .filter(d => d.style.borderRadius === "50%").length, 0,
+        "no sample circles -- legend pixels are not map pixels at any zoom");
+});

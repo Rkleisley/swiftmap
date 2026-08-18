@@ -51,7 +51,14 @@ function entriesForLayer(layer, groupConfigs) {
                 : swatchEntry({ ...sub, name: layer.name }, hidden));
     }
     if (!GLYPHS[layer.type]) return [];
-    return [layer.legend ? blockEntry(layer, hidden) : swatchEntry(layer, hidden)];
+    const entries = [layer.legend ? blockEntry(layer, hidden) : swatchEntry(layer, hidden)];
+    // radius_col records a size key beside the colour story: both encodings on the
+    // map deserve both explanations in the legend.
+    if (layer.legend_size) {
+        entries.push({ ...layer.legend_size,
+                       label: layer.legend_size.field || layer.name || "Size", hidden });
+    }
+    return entries;
 }
 
 // Identical data-driven payloads collapse into one row. Grouping points by a column
@@ -250,6 +257,19 @@ function binsRow(entry) {
     return row;
 }
 
+// A size key is a statement, not a drawing: "● size ∝ field (min – max)". The glyph
+// is fixed and nothing in the row derives from radius_range or the data's spread --
+// legend CSS pixels are not map pixels at any zoom, so drawn sample circles would
+// assert a precision that does not exist. The row names the encoding and its domain.
+function sizesRow(entry) {
+    const row = div({ display: "flex", alignItems: "center", marginTop: "5px" });
+    row.appendChild(div({ marginRight: "6px", flex: "none", color: "#666" }, "●"));
+    const range = entry.vmin != null && entry.vmax != null
+        ? ` (${entry.vmin} – ${entry.vmax})` : "";
+    row.appendChild(div({}, `size ∝ ${entry.field || entry.label}${range}`));
+    return row;
+}
+
 function swatchRow(entry) {
     const row = div({ display: "flex", alignItems: "center", marginTop: "5px" });
     row.appendChild(glyph(entry));
@@ -295,6 +315,7 @@ export function renderLegend(container, spec, options = {}) {
             const row = entry.kind === "ramp" ? rampRow(entry)
                 : entry.kind === "categories" ? categoriesRow(entry)
                 : entry.kind === "bins" ? binsRow(entry)
+                : entry.kind === "sizes" ? sizesRow(entry)
                 : swatchRow(entry);
             // Dimmed, not dropped: under scope "all" the legend is the map's whole
             // vocabulary, and the dim is what still tells the current screen state.

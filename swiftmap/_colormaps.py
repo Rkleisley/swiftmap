@@ -179,6 +179,12 @@ def data_driven_radii(props: Optional[dict], opts: dict,
         warn(f"{method}: radius_col {col!r} is not a column of the parsed data; sizes "
              f"unchanged. Columns: {sorted(props) if props else '(none)'}.")
         return None
+    if not _is_numeric(np.asarray(values)):
+        # Checked here, not left to np.asarray inside map_radii: the ValueError it
+        # raised would escape the add_* chain and discard every layer already added.
+        warn(f"{method}: radius_col {col!r} is not numeric; sizes size by value and "
+             f"{col!r} holds none. Sizes unchanged.")
+        return None
     return map_radii(values, opts.get("radius_range") or (3.0, 18.0))
 
 
@@ -244,6 +250,39 @@ def data_driven_legend(props: Optional[dict], opts: dict) -> Optional[dict]:
     if len(cats) > len(kept):
         block["truncated"] = int(len(cats) - len(kept))
     return block
+
+
+def size_block(values_lo: float, values_hi: float, field: Optional[str] = None) -> dict:
+    """
+    A size-key block: the encoding stated, never drawn. Nothing in it derives from
+    radius_range or the data's spread, deliberately -- legend CSS pixels are not map
+    pixels at any zoom, so sample circles would assert a precision that does not
+    exist. The row reads "size <proportional to> field (min - max)": the field and
+    its domain, resolved at add time like every other legend block.
+    """
+    block = {"kind": "sizes",
+             "vmin": _label_num(float(values_lo)),
+             "vmax": _label_num(float(values_hi))}
+    if field:
+        block["field"] = field
+    return block
+
+
+def data_driven_size_legend(props: Optional[dict], opts: dict) -> Optional[dict]:
+    """The resolved size-key block for a radius_col mapping, or None. Quiet, like
+    data_driven_legend: the radius mapping itself already warned about problems."""
+    col = opts.get("radius_col")
+    values = (props or {}).get(col) if col else None
+    if values is None:
+        return None
+    arr = np.asarray(values)
+    if not _is_numeric(arr):
+        return None
+    v = arr.astype(np.float64)
+    finite = np.isfinite(v)
+    if not finite.any():
+        return None
+    return size_block(float(np.min(v[finite])), float(np.max(v[finite])), field=col)
 
 
 def map_radii(
