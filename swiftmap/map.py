@@ -25,6 +25,7 @@ from .layers.polyline import add_line, add_polyline
 from .layers.polygon import add_polygon, add_polygons, add_shape, add_shapes
 from .layers.collection import add_collection, add_geojson, add_geostructures
 from .layers.circle import add_circle
+from .export import to_html, save
 
 def _layers_from_json(value, widget):
     if not value:
@@ -92,6 +93,8 @@ class Map(anywidget.AnyWidget):
     add_geojson = add_geojson
     add_geostructures = add_geostructures
     add_circle = add_circle
+    to_html = to_html
+    save = save
 
     # Synchronized traits
     center = traitlets.List([36.0, -5.35]).tag(sync=True)
