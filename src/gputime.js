@@ -149,16 +149,25 @@ export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
     return { hasTime: true, base, spans, durs, layerIdx, layerIds, count: total };
 }
 
-// Per-feature time metadata for a vector bucket (lines/polygons): one entry per layer,
-// since those layers hold exactly one geometry. Same encodings as the point path --
-// rebased float32 seconds, sign-packed fade, always-visible spans for timeless or
-// non-time layers.
+// Per-feature time metadata for a vector bucket (lines/polygons). Same encodings as
+// the point path -- rebased float32 seconds, sign-packed fade, always-visible spans
+// for timeless or non-time layers.
+//
+// A polyline whose ::times buffer holds one [start, end] pair PER VERTEX animates
+// per segment within one layer: segment k spans vertex k's start to vertex k+1's
+// end, and because glify builds 2 dedicated GL vertices per segment -- segments
+// never share vertices -- both endpoints carry the same span and segments appear
+// atomically. That is what lets a whole segmented track ride ONE layer slot the way
+// a 200k-point layer does, instead of one slot per chunk against the 64 ceiling.
 export function buildVectorTimeMeta(layersList, coordinateBuffers, periodMs) {
     if (!layersList.some(l => l.time)) return { hasTime: false };
     let base = Infinity;
     for (const layer of layersList) {
         const times = layer.time ? timesFor(layer, coordinateBuffers) : null;
-        if (times && !Number.isNaN(times[0]) && times[0] < base) base = times[0];
+        if (!times) continue;
+        for (let i = 0; i < times.length; i += 2) {
+            if (!Number.isNaN(times[i]) && times[i] < base) base = times[i];
+        }
     }
     if (base === Infinity) base = 0;
 
@@ -166,13 +175,41 @@ export function buildVectorTimeMeta(layersList, coordinateBuffers, periodMs) {
         const times = layer.time ? timesFor(layer, coordinateBuffers) : null;
         const dur = layer.time ? durationSeconds(layer.time.duration, periodMs) : ALWAYS;
         const signedDur = layer.time && layer.time.fade ? -dur : dur;
-        if (!times || Number.isNaN(times[0])) {
+        if (!times || (times.length === 2 && Number.isNaN(times[0]))) {
             return { start: -ALWAYS, end: ALWAYS, dur: ALWAYS, idx };
+        }
+        const nVerts = vertexCountOf(layer, coordinateBuffers);
+        if (layer.type === "polyline" && times.length > 2
+                && times.length === nVerts * 2) {
+            const segs = nVerts - 1;
+            const seg = new Float64Array(segs * 2);
+            for (let k = 0; k < segs; k++) {
+                const s = times[k * 2];
+                const e = times[(k + 1) * 2 + 1];
+                if (Number.isNaN(s) || Number.isNaN(e)) {
+                    seg[k * 2] = -ALWAYS;      // an unreadable time never hides data
+                    seg[k * 2 + 1] = ALWAYS;
+                } else {
+                    seg[k * 2] = (s - base) / 1000;
+                    seg[k * 2 + 1] = (e - base) / 1000;
+                }
+            }
+            // Overall span rides along as the fallback if counts ever misalign.
+            return { seg, start: seg[0], end: seg[seg.length - 1],
+                     dur: signedDur, idx };
         }
         return { start: (times[0] - base) / 1000, end: (times[1] - base) / 1000,
                  dur: signedDur, idx };
     });
     return { hasTime: true, base, perFeature, layerIds: layersList.map(l => l.id) };
+}
+
+// A vector layer's vertex count from whichever transport carries its coordinates:
+// the binary buffer (2 float64 per vertex) or inline `locations`.
+function vertexCountOf(layer, coordinateBuffers) {
+    const raw = coordinateBuffers[layer.id];
+    if (raw) return (raw.byteLength || raw.length || 0) / 16;
+    return (layer.locations || []).length;
 }
 
 // Expands per-feature values to per-GL-vertex arrays given each feature's vertex count.
@@ -185,9 +222,17 @@ export function expandPerFeature(perFeature, counts) {
     const layerIdx = new Float32Array(total);
     let out = 0;
     perFeature.forEach((f, i) => {
+        // Per-segment spans: GL vertex v belongs to segment v >> 1 (glify draws
+        // 2 dedicated vertices per segment), so both endpoints take the segment's
+        // span and a segment appears or disappears atomically. seg holds segs*2
+        // floats and the feature draws segs*2 GL vertices, so the lengths agreeing
+        // is the alignment check; a mismatch falls back to the whole-feature span
+        // rather than shearing every attribute after it.
+        const perSegment = f.seg && f.seg.length === counts[i] ? f.seg : null;
         for (let v = 0; v < counts[i]; v++) {
-            spans[out * 2] = f.start;
-            spans[out * 2 + 1] = f.end;
+            const k = perSegment ? (v >> 1) * 2 : -1;
+            spans[out * 2] = perSegment ? perSegment[k] : f.start;
+            spans[out * 2 + 1] = perSegment ? perSegment[k + 1] : f.end;
             durs[out] = f.dur;
             layerIdx[out] = f.idx;
             out++;

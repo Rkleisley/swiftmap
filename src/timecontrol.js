@@ -106,7 +106,12 @@ export function layerInWindow(layer, buffers, timeState) {
     const times = timesFor(layer, buffers);
     if (!times || times.length < 2) return true;
     const win = windowFor(timeState.tick, effectiveDuration(layer, timeState), timeState.period);
-    return featureInWindow(times[0], times[1], win);
+    // A per-vertex-timed line holds many pairs; on this whole-layer path it shows
+    // while ANY of them is in the window -- the GPU path is what trims per segment.
+    for (let i = 0; i < times.length; i += 2) {
+        if (featureInWindow(times[i], times[i + 1], win)) return true;
+    }
+    return false;
 }
 
 // The extent of every time layer's observations, NaN-blind. Feeds tick generation.

@@ -37,6 +37,16 @@ def pandas_has_mixed_geometry(data: Any) -> bool:
     return is_pandas_dataframe(data) and find_wkt_column(data) is not None
 
 
+def _order_values(series: Any) -> list:
+    """A line's per-vertex order values, datetimes down-converted to epoch ms ints
+    so the vectorised numeric time path applies instead of a per-value parse.
+    Via datetime64[ms], not a division: pandas keeps whatever unit the data arrived
+    in (ns, us, ms...), so the int64 view's scale is not knowable up front."""
+    if np.issubdtype(series.dtype, np.datetime64):
+        series = series.astype("datetime64[ms]").astype("int64")
+    return series.to_list()
+
+
 def parse_pandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
     return parse_tabular_points(data, lat_col, lon_col, label="DataFrame")
 
@@ -94,6 +104,13 @@ def parse_pandas_lines(
                         if col not in props:
                             props[col] = []
                         props[col].append(group_df[col].iloc[0])
+                    # The order column survives PER VERTEX, not as a first-row scalar:
+                    # for a track ordered by its timestamps, these are the times, and
+                    # dropping them is why a whole track could only ever carry one time
+                    # span -- forcing per-segment layers and the 64-slot ceiling.
+                    if actual_order and actual_order in group_df.columns:
+                        props.setdefault(actual_order, []).append(
+                            _order_values(group_df[actual_order]))
 
             props[actual_group] = group_keys
             return lines, props
@@ -105,7 +122,10 @@ def parse_pandas_lines(
                 coords = np.column_stack((lons, lats)).tolist()
             else:
                 coords = np.column_stack((lats, lons)).tolist()
-            return [coords], {}
+            props_single = {}
+            if actual_order and actual_order in df_sorted.columns:
+                props_single[actual_order] = [_order_values(df_sorted[actual_order])]
+            return [coords], props_single
 
     # No line geometry here. Typed sources return empty for this, so tabular
     # sources do too; the calling add_* warns if it was asked for lines specifically.

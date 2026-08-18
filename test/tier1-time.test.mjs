@@ -463,3 +463,45 @@ test("circles join the polygon bucket in the all-layers walk", () => {
     assert.deepEqual(out.polygon.map(e => [e.layer.id, e.vis]), [["c", false]]);
     assert.deepEqual(out.polyline.map(e => [e.layer.id, e.vis]), [["l", true]]);
 });
+
+// --- per-segment spans within one line -------------------------------------------------
+// One [start, end] pair per vertex animates a track per segment on ONE layer slot,
+// the way a 200k-point layer animates on one -- instead of one chunk-layer per
+// segment marching into the 64-slot uLayerVis ceiling.
+test("a per-vertex-timed line builds per-segment spans", () => {
+    const layer = { id: "t", type: "polyline", time: { duration: "PT1H" },
+                    locations: [[36.0, -5.3], [36.1, -5.2], [36.2, -5.1]] };
+    const buffers = { "t::times": spanBuf([[T0, T0], [T0 + DAY, T0 + DAY],
+                                           [T0 + 2 * DAY, T0 + 2 * DAY]]) };
+    const meta = buildVectorTimeMeta([layer], buffers, DAY);
+    const f = meta.perFeature[0];
+    assert.deepEqual([...f.seg], [0, 86400, 86400, 172800],
+        "segment k spans vertex k's start to vertex k+1's end, rebased seconds");
+    assert.equal(f.dur, 3600);
+});
+
+test("segment spans expand pairwise onto glify's two vertices per segment", () => {
+    const per = [{ seg: new Float64Array([0, 10, 10, 20]), start: 0, end: 20,
+                   dur: 60, idx: 0 }];
+    const out = expandPerFeature(per, [4]);
+    assert.deepEqual([...out.spans], [0, 10, 0, 10, 10, 20, 10, 20],
+        "both endpoints of a segment carry its span, so it toggles atomically");
+});
+
+test("a count mismatch falls back to the whole-feature span, never shears", () => {
+    const per = [{ seg: new Float64Array([0, 10, 10, 20]), start: 0, end: 20,
+                   dur: 60, idx: 0 }];
+    const out = expandPerFeature(per, [6]);
+    assert.deepEqual([...out.spans], [0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20]);
+});
+
+test("a pair count that matches nothing stays a whole-layer span", () => {
+    // Two pairs but three vertices: not per-vertex data, so the first pair rules
+    // the layer as before rather than guessing an alignment.
+    const layer = { id: "t", type: "polyline", time: { duration: "PT1H" },
+                    locations: [[36.0, -5.3], [36.1, -5.2], [36.2, -5.1]] };
+    const buffers = { "t::times": spanBuf([[T0, T0], [T0 + DAY, T0 + DAY]]) };
+    const meta = buildVectorTimeMeta([layer], buffers, DAY);
+    assert.equal(meta.perFeature[0].seg, undefined);
+    assert.equal(meta.perFeature[0].start, 0);
+});

@@ -1033,7 +1033,11 @@ class Map(anywidget.AnyWidget):
         time_field : str, optional
             Property holding each feature's time -- a single stamp or a [start, end] pair.
             When omitted, the known names are probed: "times", "datetime_start"(/"_end"),
-            "timestamp", "datetime", "time", "date".
+            "timestamp", "datetime", "time", "date". A polyline whose property holds one
+            time PER VERTEX -- which `add_line` keeps automatically when `order_col` is
+            the timestamp column -- animates per segment within the one layer: the track
+            reveals itself leg by leg (and fades leg by leg with `fade=True`) while
+            costing a single layer and a single visibility slot.
         time_end_field : str, optional
             Property holding the interval end, for data with separate start/end columns.
         period : str, optional

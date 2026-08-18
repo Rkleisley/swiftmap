@@ -351,3 +351,75 @@ def test_fade_is_off_unless_asked(m):
 def test_fade_lands_in_the_time_metadata(m):
     m.make_time_layer("Vessel", fade=True)
     assert m.find_layers("Vessel")[0]["time"]["fade"] is True
+
+
+# --- per-vertex times: a whole track on one layer, one slot -----------------------------
+# The order column used to be dropped at parse (only iloc[0] of every column survived
+# grouping), so a track ordered by its timestamps LOST them -- the reason consuming apps
+# chunked tracks into per-segment layers and marched into the 64-slot ceiling. Lines now
+# keep the order column per vertex; make_time_layer already handles list-valued
+# properties, so one layer's ::times buffer carries a pair per vertex and the GPU path
+# animates per segment.
+def track_frame():
+    import pandas as pd
+    return pd.DataFrame({
+        "lat": [36.0, 36.1, 36.2, 40.0, 40.1],
+        "lon": [-5.3, -5.2, -5.1, -3.7, -3.6],
+        "track_id": ["A", "A", "A", "B", "B"],
+        "ts": [T0, T0 + HOUR, T0 + 2 * HOUR, T0, T0 + HOUR],
+    })
+
+
+def test_grouped_lines_keep_the_order_column_per_vertex():
+    m = swiftmap.Map()
+    m.add_polyline(track_frame(), line_id_col="track_id", order_col="ts", name="track_id")
+    lines = [l for l in m.layers if l.get("type") == "polyline"]
+    assert len(lines) == 2
+    assert lines[0].properties["ts"] == [T0, T0 + HOUR, T0 + 2 * HOUR]
+    assert lines[1].properties["ts"] == [T0, T0 + HOUR]
+
+
+def test_datetime_order_columns_arrive_as_epoch_ms():
+    import pandas as pd
+    df = track_frame()
+    df["ts"] = pd.to_datetime(df["ts"], unit="ms")
+    m = swiftmap.Map()
+    m.add_polyline(df, line_id_col="track_id", order_col="ts", name="track_id")
+    lines = [l for l in m.layers if l.get("type") == "polyline"]
+    assert lines[0].properties["ts"] == [int(T0), int(T0 + HOUR), int(T0 + 2 * HOUR)], \
+        "epoch ms ints, so the vectorised numeric time path applies"
+
+
+def test_make_time_layer_writes_one_pair_per_vertex():
+    m = swiftmap.Map()
+    m.add_polyline(track_frame(), line_id_col="track_id", order_col="ts", name="track_id")
+    m.make_time_layer(types="polyline", time_field="ts")
+    line = [l for l in m.layers if l.get("type") == "polyline"][0]
+    times = np.frombuffer(m.coordinate_buffers[f"{line.id}::times"], dtype=np.float64)
+    assert len(times) == 6, "three vertices, one [start, end] pair each"
+    assert times[0] == T0 and times[5] == T0 + 2 * HOUR
+
+
+def test_dict_rows_keep_the_order_column_too():
+    rows = [
+        {"lat": 36.0, "lon": -5.3, "track_id": "A", "seq": 3},
+        {"lat": 36.1, "lon": -5.2, "track_id": "A", "seq": 1},
+        {"lat": 36.2, "lon": -5.1, "track_id": "A", "seq": 2},
+    ]
+    m = swiftmap.Map()
+    m.add_polyline(rows, line_id_col="track_id", order_col="seq", name="Track")
+    line = [l for l in m.layers if l.get("type") == "polyline"][0]
+    assert line.properties["seq"] == [1, 2, 3], "sorted by the order column, then kept"
+
+
+def test_polygon_rings_do_not_grow_a_vertex_series():
+    import pandas as pd
+    df = pd.DataFrame({
+        "lat": [10.0, 11.0, 12.0], "lon": [30.0, 31.0, 32.0],
+        "zone": ["Z"] * 3, "vertex": [1, 2, 3],
+    })
+    m = swiftmap.Map()
+    m.add_polygon(df, shape_id_col="zone", order_col="vertex", name="Zones")
+    poly = [l for l in m.layers if l.get("type") == "polygon"][0]
+    assert not isinstance(poly.properties.get("vertex"), list), \
+        "vertex order around a ring is not a time series"

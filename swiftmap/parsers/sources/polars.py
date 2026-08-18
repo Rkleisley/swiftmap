@@ -73,15 +73,26 @@ def parse_polars_lines(
         sorted_df = data.sort(actual_order) if (actual_order and actual_order in data.columns) else data
         if actual_group and actual_group in data.columns:
             non_group_cols = [c for c in cols if c not in (actual_lat, actual_lon, actual_group, actual_order)]
+            # The order column survives per vertex (see the pandas parser for why):
+            # temporals down-convert to epoch ms so the vectorised time path applies.
+            order_exprs = []
+            if actual_order and actual_order in data.columns:
+                col_expr = pl.col(actual_order)
+                if sorted_df.schema[actual_order].is_temporal():
+                    col_expr = col_expr.dt.epoch("ms")
+                order_exprs = [col_expr.alias(actual_order)]
             grouped = sorted_df.group_by(actual_group, maintain_order=True).agg([
                 pl.col(actual_lat),
                 pl.col(actual_lon),
-                *[pl.col(c).first() for c in non_group_cols]
+                *[pl.col(c).first() for c in non_group_cols],
+                *order_exprs,
             ])
             lines = []
             props = {}
             for col in non_group_cols:
                 props[col] = grouped[col].to_list()
+            if order_exprs:
+                props[actual_order] = grouped[actual_order].to_list()
             props[actual_group] = grouped[actual_group].to_list()
 
             lats_list = grouped[actual_lat].to_list()

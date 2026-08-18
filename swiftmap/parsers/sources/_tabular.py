@@ -180,21 +180,31 @@ def group_rows_into_paths(
     paths, props_list, keys = [], [], []
     for key, group in grouped.items():
         coords = []
+        order_values = []
         for row in group:
             lat, lon = row.get(actual_lat), row.get(actual_lon)
             if lat is None or lon is None:
                 continue
             lat, lon = float(lat), float(lon)
             coords.append([lon, lat] if coord_order == "lon_lat" else [lat, lon])
+            if actual_order and not close_rings:
+                order_values.append(row.get(actual_order))
         if len(coords) < min_vertices:
             continue
         if close_rings:
             coords = _ensure_closed_ring(coords)
         paths.append(coords)
-        props_list.append({c: group[0].get(c) for c in other_cols})
+        entry = {c: group[0].get(c) for c in other_cols}
+        # Lines keep the order column per vertex (a track ordered by time carries its
+        # times there); rings do not -- vertex order around a polygon is not a series.
+        if actual_order and not close_rings:
+            entry[actual_order] = order_values
+        props_list.append(entry)
         keys.append(key)
 
     props = {c: [p.get(c) for p in props_list] for c in other_cols} if props_list else {}
+    if actual_order and not close_rings and props_list:
+        props[actual_order] = [p.get(actual_order) for p in props_list]
     if actual_group and paths:
         props[actual_group] = keys
     return paths, props
