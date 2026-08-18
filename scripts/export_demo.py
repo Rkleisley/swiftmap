@@ -22,4 +22,7 @@ m.add_polygon(
     [[40.00, -3.75], [40.00, -3.65], [40.10, -3.65]],
     name="Zone", color="#ff0000", fill_color="#00ff00", weight=5)
 
+m.configure_legend(show=True, title="Demo Key")
+m.legend_add("Patrol boundary", shape="line", color="#ff0000", group="Zone Group")
+
 m.save(sys.argv[1] if len(sys.argv) > 1 else "swiftmap-demo.html")

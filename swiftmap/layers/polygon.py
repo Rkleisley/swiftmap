@@ -2,7 +2,7 @@ from typing import Optional, List, Dict, Any
 from ..parsers import parse_polygons
 from ._display import extract_display_config
 from ._style import pop_style_options, pop_data_options, resolve_styles
-from .._colormaps import data_driven_colors, rgb_hex
+from .._colormaps import data_driven_colors, data_driven_legend, rgb_hex
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
 from .._warnings import warn, EmptyLayerWarning
@@ -151,6 +151,7 @@ def add_polygon(
     # polygon is its own config entry, so this is a per-feature fillColor override.
     colors_u8 = data_driven_colors(props, data_opts,
                                    layer_style.get("color", "#3388ff"), "add_polygon")
+    legend_block = data_driven_legend(props, data_opts)
 
     for i, coords in enumerate(polygons_coords):
         poly_props = {k: v[i] for k, v in props.items()} if props else {}
@@ -193,7 +194,8 @@ def add_polygon(
             "autobind_tooltip": bool(tooltip),
             **display_config,
             **kwargs,
-            **({"fillColor": rgb_hex(colors_u8[i])} if colors_u8 is not None else {})
+            **({"fillColor": rgb_hex(colors_u8[i])} if colors_u8 is not None else {}),
+            **({"legend": legend_block} if legend_block else {})
         })
 
     return self

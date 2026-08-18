@@ -7,7 +7,8 @@
 export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers,
          collectPointLayersAll } from "./map.js";
 export { renderLayer, renderMergedGlLayer, styleFor, getIndexedProperties } from "./layers.js";
-export { renderSidebarControls, normalizeRadioLayers, getLayerBounds } from "./sidebar.js";
+export { renderSidebarControls, normalizeRadioLayers, getLayerBounds, sendLayerWrite } from "./sidebar.js";
+export { deriveLegendSpec, renderLegend } from "./legend.js";
 export { pinShader } from "./shaders.js";
 export { parsePeriod, addPeriod, generateTicks, windowFor, featureInWindow,
          timesFor, layerInWindow, collectTimeExtent, hasTimeLayers,

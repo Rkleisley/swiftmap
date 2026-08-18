@@ -1,9 +1,10 @@
 import { loadCSS, loadJS } from "./utils.js";
 import { renderSidebarControls, normalizeRadioLayers, sendLayerWrite } from "./sidebar.js";
+import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLayer, renderMergedGlLayer } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
-         collectDurationsMs } from "./timecontrol.js";
+         collectDurationsMs, POSITIONS } from "./timecontrol.js";
 import { gpuTimeAvailable, vectorGpuAvailable, LAYER_SLOTS } from "./gputime.js";
 
 // True if a layer is visible and no folder above it is switched off.
@@ -455,6 +456,26 @@ export default {
         sidebar.style.color = "#333";
         container.appendChild(sidebar);
 
+        // Legend: derived fresh on every sync from the same layer state the sidebar
+        // renders from, so toggles dim or drop rows with no extra wiring. Hidden
+        // until show_legend asks for it.
+        const legendDiv = document.createElement("div");
+        legendDiv.className = "swiftmap-legend";
+        legendDiv.style.position = "absolute";
+        legendDiv.style.zIndex = "1000";
+        legendDiv.style.background = "white";
+        legendDiv.style.padding = "10px";
+        legendDiv.style.borderRadius = "5px";
+        legendDiv.style.boxShadow = "0 1px 5px rgba(0,0,0,0.4)";
+        legendDiv.style.maxWidth = "260px";
+        legendDiv.style.maxHeight = "45%";
+        legendDiv.style.overflowY = "auto";
+        legendDiv.style.fontFamily = sidebar.style.fontFamily;
+        legendDiv.style.fontSize = "12px";
+        legendDiv.style.color = "#333";
+        legendDiv.style.display = "none";
+        container.appendChild(legendDiv);
+
         // Logo
         const logoDiv = document.createElement("div");
         logoDiv.style.position = "absolute";
@@ -688,6 +709,20 @@ export default {
             renderSidebarControls(sidebar, layers, model, map, () => {
                 performSync();
             });
+
+            const legendCfg = model.get("legend_config") || {};
+            if (model.get("show_legend")) {
+                const spec = deriveLegendSpec(layers, groupConfigs, legendCfg);
+                renderLegend(legendDiv, spec,
+                    { dimHidden: legendCfg.dim_hidden !== false });
+                const pos = POSITIONS[legendCfg.position] || POSITIONS["bottom-left"];
+                for (const [prop, value] of Object.entries(pos)) {
+                    legendDiv.style[prop] = value;
+                }
+                legendDiv.style.display = spec.groups.length > 0 ? "block" : "none";
+            } else {
+                legendDiv.style.display = "none";
+            }
             console.timeEnd("[Performance] syncMapState Total");
         }
 
@@ -862,6 +897,8 @@ export default {
             seekTo(idx, { write: false });
         });
         model.on("change:show_logo", queueSync);
+        model.on("change:show_legend", queueSync);
+        model.on("change:legend_config", queueSync);
 
         // Announce this view so Python replies with a full snapshot. Layers added before
         // the view attached would otherwise be missing: their patches were emitted into a

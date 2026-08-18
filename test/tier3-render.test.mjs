@@ -163,6 +163,51 @@ suite("a static export renders without any backend", async () => {
     }
 });
 
+suite("the legend derives, dims, and obeys overrides", async () => {
+    // Enabled dynamically so the other suites' screenshot clips never contain it.
+    await withPage(async (page, errors) => {
+        const visible = () => page.evaluate(() => {
+            const el = document.querySelector(".swiftmap-legend");
+            return el && el.style.display !== "none" ? el.innerText : null;
+        });
+        assert.equal(await visible(), null, "off by default");
+
+        await page.evaluate(() => window.__model.set("show_legend", true));
+        await page.waitForTimeout(400);
+        let text = await visible();
+        assert.ok(text && text.includes("Sites") && text.includes("Zone")
+            && text.includes("Bubbles"), `derived rows render -- got: ${text}`);
+
+        await page.evaluate(() => window.__model.set("legend_config", {
+            title: "Key",
+            remove: [{ label: "Zone" }],
+            add: [{ kind: "swatch", label: "Custom entry", shape: "line",
+                    color: "#000000", fillColor: "#000000" }],
+        }));
+        await page.waitForTimeout(400);
+        text = await visible();
+        assert.ok(text.includes("Key"), "the title override lands");
+        assert.ok(!text.includes("Zone"), "a removed row stays removed");
+        assert.ok(text.includes("Custom entry"), "a manual row renders");
+
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === "pts" ? { ...l, visible: false } : l));
+        });
+        await page.waitForTimeout(600);
+        const dimmed = await page.evaluate(() => {
+            const rows = [...document.querySelectorAll(".swiftmap-legend div")];
+            const row = rows.find(d => d.textContent === "Sites"
+                && d.style.display === "flex");
+            return row && row.style.opacity;
+        });
+        assert.equal(dimmed, "0.5",
+            "a hidden layer's row dims under the default scope");
+        assert.deepEqual(errors, [], "no errors along the way");
+    });
+});
+
 suite("the sidebar renders the nested folder tree", async () => {
     await withPage(async page => {
         const text = await page.locator(".swiftmap-sidebar").innerText();

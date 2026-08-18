@@ -122,20 +122,30 @@ def map_colors(
 
     # Categorical: distinct value -> colour, in sorted order for determinism.
     cats, inverse = np.unique(arr.astype(str), return_inverse=True)
-    name = str(colormap).lower() if colormap else DEFAULT_PALETTE
-    if name in COLORMAPS and len(cats) > 1:
-        ramp = _ramp(name)
-        table = np.round(_sample(ramp, np.linspace(0.0, 1.0, len(cats)))).astype(np.uint8)
-    else:
-        palette = CATEGORICAL_PALETTES.get(name)
-        if palette is None and colormap is not None:
-            warn(f"Unknown colormap {colormap!r}; using {DEFAULT_PALETTE!r}. "
-                 f"Available: {', '.join(sorted(COLORMAPS) + sorted(CATEGORICAL_PALETTES))}.")
-        palette = palette or CATEGORICAL_PALETTES[DEFAULT_PALETTE]
-        table = np.array([_hex_to_rgb(c) for c in palette], dtype=np.uint8)
-        table = table[np.arange(len(cats)) % len(table)]
+    table = _category_table(len(cats), colormap, quiet=False)
     out[:, :3] = table[inverse]
     return out
+
+
+def _category_table(count: int, colormap: Optional[str], quiet: bool) -> np.ndarray:
+    """
+    (count, 3) uint8 colours for that many categories.
+
+    A named sequential map spreads evenly across the categories; otherwise a
+    categorical palette cycles. Shared by the buffer mapping and the legend block so
+    the swatches in the legend are byte-identical to the points on the map.
+    """
+    name = str(colormap).lower() if colormap else DEFAULT_PALETTE
+    if name in COLORMAPS and count > 1:
+        ramp = _ramp(name)
+        return np.round(_sample(ramp, np.linspace(0.0, 1.0, count))).astype(np.uint8)
+    palette = CATEGORICAL_PALETTES.get(name)
+    if palette is None and colormap is not None and not quiet:
+        warn(f"Unknown colormap {colormap!r}; using {DEFAULT_PALETTE!r}. "
+             f"Available: {', '.join(sorted(COLORMAPS) + sorted(CATEGORICAL_PALETTES))}.")
+    palette = palette or CATEGORICAL_PALETTES[DEFAULT_PALETTE]
+    table = np.array([_hex_to_rgb(c) for c in palette], dtype=np.uint8)
+    return table[np.arange(count) % len(table)]
 
 
 def rgb_hex(row: Sequence[int]) -> str:
@@ -170,6 +180,70 @@ def data_driven_radii(props: Optional[dict], opts: dict,
              f"unchanged. Columns: {sorted(props) if props else '(none)'}.")
         return None
     return map_radii(values, opts.get("radius_range") or (3.0, 18.0))
+
+
+def _label_num(value: float) -> Any:
+    """A ramp endpoint as it should read in a legend: 10, not 10.000000001."""
+    return int(value) if float(value) == int(value) else round(float(value), 6)
+
+# Category blocks cap what they store: a legend cannot usefully enumerate a
+# track-id column's thousands of values, and the config is JSON.
+MAX_LEGEND_CATEGORIES = 50
+
+
+def bins_block(colormap: Optional[str], edges: Sequence[float]) -> dict:
+    """Bin edges plus per-class colours sampled from the colormap, frontend-ready."""
+    edges = [float(e) for e in edges]
+    classes = len(edges) + 1
+    anchors = (COLORMAPS.get(str(colormap or DEFAULT_COLORMAP).lower())
+               or COLORMAPS[DEFAULT_COLORMAP])
+    ramp = np.array([_hex_to_rgb(a) for a in anchors], dtype=np.float64)
+    t = np.arange(classes) / max(classes - 1, 1)
+    table = np.round(_sample(ramp, t)).astype(np.uint8)
+    return {"kind": "bins", "edges": [_label_num(e) for e in edges],
+            "colors": [rgb_hex(row) for row in table]}
+
+
+def data_driven_legend(props: Optional[dict], opts: dict) -> Optional[dict]:
+    """
+    The resolved legend block for a color_col mapping, or None.
+
+    Recorded in the layer config at add time, because the buffers alone cannot say
+    "viridis over speed 0..30" after the fact. Everything is resolved here -- ramp
+    anchors, category colours, bin class colours -- so the frontend renders what it
+    is handed and owns no colormap knowledge to drift. Warnings are the colour
+    mapping's job, which already ran; this stays quiet.
+    """
+    col = opts.get("color_col")
+    values = (props or {}).get(col) if col else None
+    if values is None:
+        return None
+    arr = np.asarray(values)
+    name = str(opts.get("colormap") or DEFAULT_COLORMAP).lower()
+
+    if _is_numeric(arr) and not np.issubdtype(arr.dtype, np.bool_):
+        v = arr.astype(np.float64)
+        finite = np.isfinite(v)
+        anchors = COLORMAPS.get(name) or COLORMAPS[DEFAULT_COLORMAP]
+        bins = opts.get("color_bins")
+        if bins is not None:
+            return {**bins_block(name, bins), "field": col}
+        lo = float(opts["vmin"]) if opts.get("vmin") is not None else (
+            float(np.min(v[finite])) if finite.any() else 0.0)
+        hi = float(opts["vmax"]) if opts.get("vmax") is not None else (
+            float(np.max(v[finite])) if finite.any() else 1.0)
+        return {"kind": "ramp", "field": col, "anchors": list(anchors),
+                "vmin": _label_num(lo), "vmax": _label_num(hi)}
+
+    cats = np.unique(arr.astype(str))
+    table = _category_table(len(cats), opts.get("colormap"), quiet=True)
+    kept = cats[:MAX_LEGEND_CATEGORIES]
+    items = [{"value": str(value), "color": rgb_hex(table[i])}
+             for i, value in enumerate(kept)]
+    block = {"kind": "categories", "field": col, "items": items}
+    if len(cats) > len(kept):
+        block["truncated"] = int(len(cats) - len(kept))
+    return block
 
 
 def map_radii(

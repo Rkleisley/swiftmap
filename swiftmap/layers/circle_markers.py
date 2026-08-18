@@ -3,7 +3,7 @@ from typing import Optional, Any
 from ..parsers import parse_points
 from ._display import extract_display_config
 from ._style import pop_style_options, pop_data_options, resolve_styles
-from .._colormaps import data_driven_colors, data_driven_radii
+from .._colormaps import data_driven_colors, data_driven_radii, data_driven_legend
 from ._batching import batched
 from ._grouping import build_group_specs, resolve_group_path, is_column, static_group_path
 from .._warnings import warn, EmptyLayerWarning
@@ -134,6 +134,7 @@ def add_circle_markers(
                                    layer_style.get("color", "#3388ff"),
                                    "add_circle_markers")
     radii_f32 = data_driven_radii(props, data_opts, "add_circle_markers")
+    legend_block = data_driven_legend(props, data_opts)
 
     # 3. Group the dataset by the unique combinations of these columns/strings
     group_map = {}
@@ -216,6 +217,7 @@ def add_circle_markers(
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
             "bounds": sub_bounds,
+            **({"legend": legend_block} if legend_block else {}),
             **display_config,
             **kwargs
         }
