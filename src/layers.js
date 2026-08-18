@@ -295,6 +295,10 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                                 try {
                                     model.set("clicked_layer_id", layer.id);
                                     model.set("selected_index", 0);
+                                    // Bumped on EVERY click: clicking the same feature
+                                    // twice changes neither id nor index, so without
+                                    // this no trait fires and handlers miss the click.
+                                    model.set("click_seq", (model.get("click_seq") || 0) + 1);
                                     model.save_changes();
                                 } catch (err) { /* no live backend */ }
                             }
@@ -421,6 +425,10 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                                 try {
                                     model.set("clicked_layer_id", layer.id);
                                     model.set("selected_index", 0);
+                                    // Bumped on EVERY click: clicking the same feature
+                                    // twice changes neither id nor index, so without
+                                    // this no trait fires and handlers miss the click.
+                                    model.set("click_seq", (model.get("click_seq") || 0) + 1);
                                     model.save_changes();
                                 } catch (err) { /* no live backend */ }
                             }
@@ -624,6 +632,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             try {
                                 model.set("clicked_layer_id", layer.id);
                                 model.set("selected_index", originalIndex);
+                                // Bumped on EVERY click; see the vector click handlers.
+                                model.set("click_seq", (model.get("click_seq") || 0) + 1);
                                 model.save_changes();
                             } catch (err) { /* no live backend */ }
                         }

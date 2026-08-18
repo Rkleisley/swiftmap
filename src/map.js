@@ -219,9 +219,19 @@ export default {
         const container = document.createElement("div");
         container.className = "swiftmap-container";
         container.style.width = "100%";
-        container.style.height = "100%";
         container.style.position = "relative";
         el.appendChild(container);
+
+        // Map(height=...) sizing. An explicit height also drops the stylesheet's
+        // 400px floor -- an explicit 200px must not lose to a default minimum.
+        // Height was accepted and documented long before it reached the DOM; this
+        // is where it finally does.
+        function applyHeight() {
+            const h = model.get("height");
+            container.style.height = h || "100%";
+            container.style.minHeight = h ? "0" : "";
+        }
+        applyHeight();
 
         const crsName = model.get("crs");
         let mapCrs = L.CRS.EPSG3857;
@@ -899,6 +909,12 @@ export default {
         model.on("change:show_logo", queueSync);
         model.on("change:show_legend", queueSync);
         model.on("change:legend_config", queueSync);
+        // Live resizes (a Shiny layout, a notebook cell): Leaflet caches its box, so
+        // it must be told to re-measure or tiles render for the old size.
+        model.on("change:height", () => {
+            applyHeight();
+            map.invalidateSize();
+        });
 
         // Announce this view so Python replies with a full snapshot. Layers added before
         // the view attached would otherwise be missing: their patches were emitted into a

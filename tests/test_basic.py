@@ -17,6 +17,23 @@ def test_map_initialization():
     assert m.show_logo is True
     assert m.show_legend is False
 
+def test_height_reaches_both_the_trait_and_the_widget_layout():
+    # Map(height=...) was accepted and documented while wired to nothing -- the
+    # radius disease. It now sizes the synced trait (the frontend applies it and
+    # drops the 400px floor) and the outer ipywidgets element.
+    m = Map(height="600px")
+    assert m.height == "600px"
+    assert m.layout.height == "600px"
+    plain = Map()
+    assert plain.height == "" and plain.layout.height is None
+
+
+def test_click_seq_starts_at_zero():
+    # The frontend bumps it on every click; observing this one trait catches
+    # repeat clicks that change neither clicked_layer_id nor selected_index.
+    assert Map().click_seq == 0
+
+
 def test_chaining():
     m = Map()
     returned_m = m.add_basemap("OpenStreetMap")

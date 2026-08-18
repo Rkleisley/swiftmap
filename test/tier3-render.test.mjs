@@ -163,6 +163,24 @@ suite("a static export renders without any backend", async () => {
     }
 });
 
+suite("an explicit height sizes the container and drops the 400px floor", async () => {
+    await withPage(async page => {
+        const probe = () => page.evaluate(() => {
+            const c = document.querySelector(".swiftmap-container");
+            return { height: c.offsetHeight, min: c.style.minHeight };
+        });
+        const before = await probe();
+        assert.ok(before.height >= 400, "unset, the stylesheet floor holds");
+
+        await page.evaluate(() => window.__model.set("height", "250px"));
+        await page.waitForTimeout(300);
+        const after = await probe();
+        // offsetHeight includes the container's 1px top and bottom borders.
+        assert.equal(after.height, 252,
+            "an explicit height wins -- including against the 400px minimum");
+    });
+});
+
 suite("the legend derives, dims, and obeys overrides", async () => {
     // Enabled dynamically so the other suites' screenshot clips never contain it.
     await withPage(async (page, errors) => {

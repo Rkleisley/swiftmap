@@ -67,7 +67,10 @@ class Map(anywidget.AnyWidget):
     show_logo : bool, default True
         If True, displays branding logos on the map viewport.
     height : str, optional
-        Custom CSS height string for the map widget container (e.g. '600px', '100%').
+        CSS height for the map ('600px', '40vh'). Sizes both the widget element and
+        the map container, and an explicit value overrides the default 400px minimum.
+        Left unset, the map fills its parent -- what a Shiny layout wants. Assign
+        `m.height` later to resize a live map.
     crs : str, default 'EPSG:3857'
         Coordinate Reference System projection:
         - 'EPSG:3857': Web Mercator (standard web tiles).
@@ -118,6 +121,14 @@ class Map(anywidget.AnyWidget):
     # Selection and click interaction tracking
     selected_index = traitlets.Int(-1).tag(sync=True)
     clicked_layer_id = traitlets.Unicode("").tag(sync=True)
+    # Bumped by the frontend on EVERY feature click. Observe this one trait for
+    # clicks: id and index stay put when the same feature is clicked twice, so
+    # observers watching only them miss repeat clicks entirely.
+    click_seq = traitlets.Int(0).tag(sync=True)
+    # Explicit widget height ('600px', '40vh'); empty means fill the parent with the
+    # stylesheet's 400px floor. Applied by the frontend, which also drops the floor
+    # for an explicit value.
+    height = traitlets.Unicode("").tag(sync=True)
     fit_bounds_request = traitlets.Dict({}).tag(sync=True)
     # Declarative legend state: display options plus the manual overrides
     # (adds and persistent remove-matchers). Derivation and rendering live in
@@ -171,6 +182,11 @@ class Map(anywidget.AnyWidget):
         self.show_legend = show_legend
         self.show_logo = show_logo
         self.auto_sync = auto_sync
+        if height:
+            self.height = height
+            # The outer ipywidgets element must size too, or a notebook cell
+            # collapses around the absolutely-sized container inside it.
+            self.layout.height = height
         self.observe(self._disarm_auto_fit, names=["center", "zoom"])
 
         # Internal layer list counter
