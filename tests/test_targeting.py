@@ -78,6 +78,14 @@ def test_a_group_path_matches_its_nested_folders(m):
     assert m.find_layers(group="Feed") == [], "prefix matching is per path segment"
 
 
+def test_a_group_path_reaches_a_collections_parts(m):
+    # Parts carry no layer_group of their own -- the folder they live in is their
+    # wrapper's. Read off each part, group-scoped operations silently skipped every
+    # collection: hide(group="Field") and select(scope="Field") were no-ops here.
+    assert kinds(m.find_layers(group="Field")) == \
+        ["circle_markers", "polygon", "polyline"]
+
+
 def test_a_target_matches_either_id_or_name(m):
     by_name = m.find_layers("Ports")
     assert len(by_name) == 1
@@ -576,3 +584,37 @@ def test_malformed_client_writes_are_safe(m):
     m._handle_client_msg(m, {"kind": "swiftmap_write", "ops": [
         None, {}, {"op": "set"}, {"op": "set", "id": None},
         {"op": "set", "id": "x", "fields": "not a dict"}]}, None)
+
+
+# --- select with criteria only -------------------------------------------------------
+# `if target` sent criteria-only calls down the CLEAR branch: select(types="polyline")
+# restored everything instead of selecting the lines -- the one place criteria-only
+# behaved differently from hide/show/make_time_layer.
+def test_select_by_criteria_alone_selects(m):
+    m.select(types="polyline", scope="Field")
+    parts = subs(m)
+    assert parts["polyline"].get("visible") is not False
+    assert parts["circle_markers"].get("visible") is False
+    assert parts["polygon"].get("visible") is False
+
+
+def test_select_none_with_no_criteria_still_clears(m):
+    m.select(types="polyline", scope="Field")
+    m.select(None, scope="Field")
+    assert all(s.get("visible") is not False for s in subs(m).values())
+
+
+def test_an_empty_list_clears_without_a_warning(recwarn):
+    mp = swiftmap.Map()
+    mp.add_circle_markers([[36.0, -5.3]], name="Sites", layer_group="Feeds")
+    mp.select([], scope="Feeds")
+    assert [w for w in recwarn if issubclass(w.category, SwiftMapWarning)] == [], \
+        "the table's 'no rows selected' is deliberate, not a miss"
+
+
+def test_a_missed_selection_warns_and_restores(m):
+    m.select(types="polyline", scope="Field")            # something is hidden
+    with pytest.warns(SwiftMapWarning, match="select matched nothing"):
+        m.select("No Such Layer", scope="Field")
+    assert all(s.get("visible") is not False for s in subs(m).values()), \
+        "an unmatched selection lands like an empty one: a clean slate"

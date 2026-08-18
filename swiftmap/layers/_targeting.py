@@ -87,8 +87,22 @@ def find_layers(
     want_types = _as_set(types)
     skip_types = _as_set(exclude_types) or frozenset()
 
+    # The walk carries the enclosing folder down to collection parts: they hold no
+    # layer_group of their own, so reading it off each part made every group-scoped
+    # operation -- hide(group=...), select(scope=...) -- silently skip collections.
+    # The folder a part lives in is its wrapper's folder.
+    def walk(seq, inherited):
+        for layer in seq:
+            path = layer.get("layer_group") or inherited
+            if layer.get("type") == "group":
+                if include_groups:
+                    yield layer, path
+                yield from walk(layer.get("layers") or [], path)
+            else:
+                yield layer, path
+
     found = []
-    for layer in iter_layers(layers, include_groups):
+    for layer, path in walk(layers, ""):
         if wanted_ids and not (layer.get("id") in wanted_ids or layer.get("name") in wanted_ids):
             continue
         if name is not None and layer.get("name") != name:
@@ -99,7 +113,6 @@ def find_layers(
         if ltype in skip_types:
             continue
         if group is not None:
-            path = layer.get("layer_group") or ""
             if path != group and not path.startswith(group + "/"):
                 continue
         found.append(layer)

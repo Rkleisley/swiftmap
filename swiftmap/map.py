@@ -947,8 +947,10 @@ class Map(anywidget.AnyWidget):
         Parameters
         ----------
         target : str or layer or list, optional
-            What to select -- ids or names, as in `hide`. `None` or an empty list clears
-            the selection and shows everything in scope.
+            What to select -- ids or names, as in `hide`. An empty list clears the
+            selection and shows everything in scope; so does `None` with no criteria.
+            Criteria alone select, exactly as in `hide`: `select(types="polyline",
+            scope="Field")` shows the lines and hides the rest of the scope.
         scope : str, optional
             The folder this selection owns. Only layers under it are hidden or restored,
             so selecting a dwell leaves an unrelated layer the user hid alone. Inferred
@@ -983,7 +985,20 @@ class Map(anywidget.AnyWidget):
         ...          zoom=True, zoom_offset=-1)
         >>> m.select(None, scope="Dwells")          # clean slate
         """
-        chosen = self.find_layers(target, **criteria) if target else []
+        # Clearing is target=None with no criteria. It used to be `if target`, which
+        # sent a criteria-only call -- select(types="polyline") -- down the clear
+        # branch and restored everything: the exact opposite of what was asked, and
+        # the one place criteria-only worked differently from hide/show/make_time_layer.
+        clearing = target is None and not criteria
+        chosen = [] if clearing else self.find_layers(target, **criteria)
+        if not clearing and not chosen and not (
+                isinstance(target, (list, tuple, set)) and len(target) == 0):
+            # An empty list is the table saying "no rows selected" -- a deliberate
+            # clean slate. Anything else matching nothing is a miss worth naming,
+            # though the clean slate still follows: an unmatched selection and an
+            # empty one must land the same.
+            warn(f"select matched nothing ({_describe_target(target, criteria)}); "
+                 f"restoring the scope to visible.")
         chosen_ids = {l.get("id") for l in chosen}
 
         if scope is not None:
