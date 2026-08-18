@@ -147,6 +147,15 @@ suite("a static export renders without any backend", async () => {
             const sidebar = await page.locator(".swiftmap-sidebar").innerText();
             assert.ok(sidebar.includes("Sites") && sidebar.includes("Zone"),
                 "the sidebar lists the exported layers");
+
+            // The demo sets no center: its data sits near Madrid while the fallback
+            // view is Gibraltar, so the map only opens on the data if the auto-fit
+            // union rode the export and was applied at startup. The fit's moveend
+            // echoes the final center into the model, which is the probe.
+            await page.waitForTimeout(600);
+            const center = await page.evaluate(() => window.__model.get("center"));
+            assert.ok(Math.abs(center[0] - 40.05) < 0.3 && Math.abs(center[1] + 3.7) < 0.3,
+                `auto-fit opened the export on its data, got ${JSON.stringify(center)}`);
             assert.deepEqual(errors, [], "no errors with no backend behind the page");
         }, "static-export.html");
     } finally {

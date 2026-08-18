@@ -51,10 +51,14 @@ class Map(anywidget.AnyWidget):
 
     Parameters
     ----------
-    center : List[float], default [36.0, -5.35]
-        Initial map center coordinates `[latitude, longitude]`.
-    zoom : int, default 10
-        Initial map zoom level (0 to 22).
+    center : List[float], optional
+        Initial map center coordinates `[latitude, longitude]`. Left unset, the map
+        fits itself to the data: every added layer extends a running bounds union and
+        the viewport follows, until you set a view (center/zoom, `fit_bounds`, or a
+        pan in the browser). With no data it opens on [36.0, -5.35].
+    zoom : int, optional
+        Initial map zoom level (0 to 22). Setting it disables the auto-fit above;
+        unset with no data it is 10.
     show_legend : bool, default False
         If True, `legend_html` returns markup for the active layers. There is no built-in
         map overlay yet -- render the string wherever your app wants it.
@@ -123,8 +127,8 @@ class Map(anywidget.AnyWidget):
  
     def __init__(
         self,
-        center: List[float] = [36.0, -5.35],
-        zoom: int = 10,
+        center: Optional[List[float]] = None,
+        zoom: Optional[int] = None,
         show_legend: bool = False,
         show_logo: bool = True,
         height: Optional[str] = None,
@@ -146,12 +150,22 @@ class Map(anywidget.AnyWidget):
         # so the client always starts from a state that provably matches this object.
         self.on_msg(self._handle_client_msg)
 
-        self.center = center
-        self.zoom = zoom
+        # Auto-fit: with no explicit view, the map follows the data -- every add
+        # extends a min/max union of the layer bounds already computed at add time and
+        # refreshes the fit request. It disarms the moment anyone sets a view: center
+        # or zoom here, a fit_bounds() call, or a pan echoed back from the browser --
+        # so a map builds to the union of its layers, fits once on display, and is
+        # then left alone.
+        self._auto_fit_armed = center is None and zoom is None
+        self._auto_fit_bounds = None
+
+        self.center = center if center is not None else [36.0, -5.35]
+        self.zoom = zoom if zoom is not None else 10
         self.crs = crs
         self.show_legend = show_legend
         self.show_logo = show_logo
         self.auto_sync = auto_sync
+        self.observe(self._disarm_auto_fit, names=["center", "zoom"])
 
         # Internal layer list counter
         self._layer_counter = 0
@@ -540,6 +554,14 @@ class Map(anywidget.AnyWidget):
         """
         if not bounds:
             return self
+        # An explicit fit is a view choice, so the data stops steering the viewport.
+        self._auto_fit_armed = False
+        return self._request_fit(bounds, zoom_offset=zoom_offset,
+                                 max_zoom=max_zoom, padding=padding)
+
+    def _request_fit(self, bounds: List[List[float]], zoom_offset: int = 0,
+                     max_zoom: Optional[int] = None,
+                     padding: Optional[int] = None) -> "Map":
         self._fit_sequence = getattr(self, "_fit_sequence", 0) + 1
         self.fit_bounds_request = {
             "bounds": bounds,
@@ -549,6 +571,35 @@ class Map(anywidget.AnyWidget):
             "seq": self._fit_sequence,
         }
         return self
+
+    def _disarm_auto_fit(self, change: Any = None) -> None:
+        self._auto_fit_armed = False
+
+    def _auto_fit_extend(self, config: Any) -> None:
+        """
+        Grows the auto-fit union with one more layer's bounds and refreshes the fit.
+
+        Every data layer arrives with its bounds already computed, so this is four
+        comparisons per add. Basemaps and anything else without bounds contribute
+        nothing. Single points still get a sane frame from the max_zoom ceiling.
+        """
+        if not getattr(self, "_auto_fit_armed", False):
+            return
+        bounds = config.get("bounds")
+        if not bounds:
+            return
+        (a_lat, a_lon), (b_lat, b_lon) = bounds
+        if self._auto_fit_bounds is None:
+            self._auto_fit_bounds = [[a_lat, a_lon], [b_lat, b_lon]]
+        else:
+            u = self._auto_fit_bounds
+            u[0][0] = min(u[0][0], a_lat)
+            u[0][1] = min(u[0][1], a_lon)
+            u[1][0] = max(u[1][0], b_lat)
+            u[1][1] = max(u[1][1], b_lon)
+        self._request_fit([[self._auto_fit_bounds[0][0], self._auto_fit_bounds[0][1]],
+                           [self._auto_fit_bounds[1][0], self._auto_fit_bounds[1][1]]],
+                          max_zoom=15, padding=30)
 
     def get_layer(self, identifier: Union[str, Any], name: Optional[str] = None) -> Optional[LayerConfig]:
         """

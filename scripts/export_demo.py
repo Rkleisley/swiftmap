@@ -7,16 +7,19 @@ import sys
 
 import swiftmap
 
-m = swiftmap.Map(center=[36.05, -5.25], zoom=12, show_logo=False)
+# No center or zoom: the data is nowhere near the fallback view, so the export only
+# opens on it if auto-fit carried the bounds union into the file -- which is what
+# tier 3 asserts.
+m = swiftmap.Map(show_logo=False)
 
 # color_col/radius_col need a column, so use a frame-shaped input.
 m.add_circle_markers(
-    {"lat": [36.00, 36.04, 36.06, 36.10],
-     "lon": [-5.30, -5.24, -5.22, -5.20],
+    {"lat": [40.00, 40.04, 40.06, 40.10],
+     "lon": [-3.75, -3.69, -3.67, -3.65],
      "value": [1.0, 4.0, 7.0, 10.0]},
     name="Sites", color_col="value", radius_col="value")
 m.add_polygon(
-    [[36.00, -5.30], [36.00, -5.20], [36.10, -5.20]],
+    [[40.00, -3.75], [40.00, -3.65], [40.10, -3.65]],
     name="Zone", color="#ff0000", fill_color="#00ff00", weight=5)
 
 m.save(sys.argv[1] if len(sys.argv) > 1 else "swiftmap-demo.html")

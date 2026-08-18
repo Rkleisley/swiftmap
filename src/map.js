@@ -765,7 +765,7 @@ export default {
         // Fitting the view is a command, not state: asking to fit the same bounds twice
         // must move the map both times, since the user may have panned away in between.
         // The request carries a sequence number so an identical fit still fires a change.
-        model.on("change:fit_bounds_request", () => {
+        function applyFitRequest() {
             const req = model.get("fit_bounds_request") || {};
             const bounds = req.bounds;
             if (!bounds || bounds.length === 0) return;
@@ -779,7 +779,13 @@ export default {
             if (req.zoom_offset) {
                 map.setZoom(map.getZoom() + req.zoom_offset);
             }
-        });
+        }
+        model.on("change:fit_bounds_request", applyFitRequest);
+        // A request set before this view attached -- a pre-display fit_bounds() call,
+        // or the union a fresh map maintains as auto-fit while layers are added -- is
+        // already state by now, so the change event will never fire for it. It used
+        // to be silently dropped; apply it once the map is ready instead.
+        map.whenReady(() => applyFitRequest());
 
         let syncTimeout = null;
         let isSyncing = false;

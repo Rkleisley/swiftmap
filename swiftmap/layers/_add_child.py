@@ -188,7 +188,9 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
             
         # Replace the old reference inside the layers list with our new instance
         self._layers_replace(existing, new_config)
+        self._auto_fit_extend(child_config)
         return self
 
     self._layers_append(child_config)
+    self._auto_fit_extend(child_config)
     return self

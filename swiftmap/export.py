@@ -56,6 +56,7 @@ const model = {{
     send() {{}},
     save_changes() {{}},
 }};
+window.__model = model;   // console access for whoever opens the file
 const widgetSrc = {widget_src_json};
 const url = URL.createObjectURL(new Blob([widgetSrc], {{ type: "text/javascript" }}));
 const widget = (await import(url)).default;
@@ -91,6 +92,9 @@ def to_html(self, title: str = "SwiftMap") -> str:
         "sync_trigger": 0,
         "show_logo": self.show_logo,
         "show_legend": self.show_legend,
+        # The auto-fit union (or a pre-display fit_bounds call) rides along, so an
+        # export opens on its data exactly like the live widget.
+        "fit_bounds_request": self.fit_bounds_request,
         "time_config": self.time_config,
         "time_current": self.time_current,
     }

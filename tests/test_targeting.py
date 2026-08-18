@@ -281,8 +281,11 @@ def test_bounds_of_nothing_is_none(dwells):
 
 def test_fitting_to_no_bounds_does_nothing(dwells):
     """So m.fit_bounds(m.bounds_of(sel)) is safe on an empty selection."""
+    # The fixture built without a view, so auto-fit has already issued a request;
+    # "does nothing" means no NEW one.
+    before = dict(dwells.fit_bounds_request)
     dwells.fit_bounds(None)
-    assert dwells.fit_bounds_request == {}
+    assert dwells.fit_bounds_request == before
 
 
 def test_fitting_the_same_bounds_twice_still_moves_the_map(dwells):
@@ -351,9 +354,10 @@ def test_select_can_fit_the_view_to_what_it_selected(dwells):
 
 
 def test_select_does_not_move_the_view_unless_asked(dwells):
+    before = dict(dwells.fit_bounds_request)   # auto-fit's build-time request
     ids = [l["id"] for l in dwells.find_layers(group="Dwells")]
     dwells.select([ids[0]], scope="Dwells")
-    assert dwells.fit_bounds_request == {}, "a highlight should not yank the map"
+    assert dwells.fit_bounds_request == before, "a highlight should not yank the map"
 
 
 def test_a_whole_selection_is_one_patch_message(dwells):
