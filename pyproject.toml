@@ -7,11 +7,18 @@ name = "swiftmap"
 version = "0.1.0"
 description = "Enhancing Leaflet maps with high-performance WebGL overlays and hierarchical controls for Shiny"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "anywidget>=0.4.0",
+    # Imported directly (map.py declares traits with it); today it arrives
+    # transitively through anywidget -> ipywidgets, but a direct import deserves
+    # a direct requirement.
+    "traitlets",
     "numpy",
 ]
+
+[project.urls]
+Repository = "https://github.com/Rkleisley/swiftmap"
 
 [project.optional-dependencies]
 dev = [

@@ -95,6 +95,20 @@ Nothing in `src/` may import from Python or assume anywidget — `src/map.js` is
 *adapter*, and the reusable pieces it builds on are exported from `src/index.js` so the same
 renderer can back a React app.
 
+### Building an installable package
+
+```bash
+npm run wheel
+```
+
+Rebuilds the JS bundle, then builds the wheel and sdist into `pydist/` (kept apart
+from `dist/`, which is the esbuild output). Chained deliberately: a wheel must never
+ship a stale bundle, and the committed `swiftmap/static/` is what the wheel carries —
+installing needs no Node, ever. `pip install pydist/swiftmap-*.whl` into a fresh
+environment is the acceptance test; `Map().to_html()` proves the static assets load
+from the installed location. Runtime dependencies are anywidget, traitlets and numpy
+only — pandas/polars/geopandas stay optional and are detected at parse time.
+
 ### Testing the JavaScript
 
 ```bash

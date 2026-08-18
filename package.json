@@ -17,6 +17,7 @@
   "scripts": {
     "build": "node build.mjs",
     "build:watch": "node build.mjs --watch",
+    "wheel": "node build.mjs && python -m build --outdir pydist",
     "test": "node --test",
     "test:watch": "node --test --watch",
     "test:unit": "node --test test/tier1-logic.test.mjs test/tier2-sidebar.test.mjs"

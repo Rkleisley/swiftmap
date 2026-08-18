@@ -172,3 +172,6 @@ test/fixtures/static-export.html
 
 # Written by the example notebooks when run (01_quickstart's export step)
 examples/*.html
+
+# Python distribution builds (npm run wheel)
+pydist/
