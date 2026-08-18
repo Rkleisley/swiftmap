@@ -4,7 +4,8 @@ from ._display import extract_display_config
 from ._style import pop_style_options, pop_data_options, resolve_styles
 from .._colormaps import data_driven_colors, data_driven_legend, rgb_hex
 from ._batching import batched
-from ._grouping import build_group_specs, resolve_group_path, resolve_layer_name
+from ._grouping import (build_group_specs, resolve_group_path, resolve_layer_name,
+                        resolve_feature_label)
 from .._warnings import warn, EmptyLayerWarning
 from ._targeting import bounds_of_coords
 from ..parsers.sources._utils import PolygonGeom
@@ -118,6 +119,7 @@ def add_polygon(
     # Parse polygon coordinates
     explicit_style, static_style = pop_style_options(kwargs, "add_polygon", "polygon")
     data_opts = pop_data_options(kwargs, "add_polygon", "polygon")
+    label = kwargs.pop("label", None)
     try:
         polygons_coords, props = parse_polygons(
             data,
@@ -195,7 +197,8 @@ def add_polygon(
             **display_config,
             **kwargs,
             **({"fillColor": rgb_hex(colors_u8[i])} if colors_u8 is not None else {}),
-            **({"legend": legend_block} if legend_block else {})
+            **({"legend": legend_block} if legend_block else {}),
+            **({"label": resolve_feature_label(label, props, i)} if label is not None else {})
         })
 
     return self

@@ -217,3 +217,18 @@
     border: 2px solid #fff;
     cursor: pointer;
 }
+
+/* Permanent feature labels: quiet chips, no tooltip arrow. */
+.swiftmap-feature-label {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    color: #333;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 5px;
+}
+.swiftmap-feature-label::before {
+    display: none;
+}

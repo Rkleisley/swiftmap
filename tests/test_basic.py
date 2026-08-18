@@ -446,3 +446,51 @@ def test_map_crs():
     m2 = Map(crs="EPSG:4326")
     assert m2.crs == "EPSG:4326"
 
+
+
+# --- permanent labels ---------------------------------------------------------------
+# `label` resolves string-or-column exactly like `name`: a column names each feature
+# from its own value, a literal repeats. Points carry a per-feature `labels` list
+# aligned with the coordinate buffer; one-feature vectors carry a single `label`.
+def test_point_labels_come_from_a_column():
+    m = Map()
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                          "site": ["Alpha", "Bravo"]},
+                         name="Sites", label="site")
+    assert m.layers[-1].labels == ["Alpha", "Bravo"]
+
+
+def test_grouped_points_slice_their_labels():
+    m = Map()
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                          "site": ["Alpha", "Bravo"], "kind": ["a", "b"]},
+                         name="Sites", label="site", layer_group=["Fleet", "kind"])
+    by_group = {l.layer_group: l for l in m.layers if l.get("type") == "circle_markers"}
+    assert by_group["Fleet/a"].labels == ["Alpha"]
+    assert by_group["Fleet/b"].labels == ["Bravo"]
+
+
+def test_vector_labels_resolve_per_feature():
+    df = pd.DataFrame({
+        "zone": ["North", "South"],
+        "wkt": ["POLYGON ((0 0, 1 0, 1 1, 0 0))", "POLYGON ((5 5, 6 5, 6 6, 5 5))"],
+    })
+    m = Map()
+    m.add_polygon(df, name="zone", label="zone")
+    polys = [l for l in m.layers if l.get("type") == "polygon"]
+    assert [p.label for p in polys] == ["North", "South"]
+
+
+def test_a_literal_label_is_taken_as_text():
+    m = Map()
+    m.add_polygon([[36.0, -5.3], [36.0, -5.2], [36.1, -5.2]],
+                  name="Zone", label="Restricted")
+    assert m.layers[-1].label == "Restricted"
+    m.add_circle([36.0, -5.3], radius=500, name="Ring", label="Search Area")
+    assert m.layers[-1].label == "Search Area"
+
+
+def test_unlabelled_layers_carry_nothing():
+    m = Map()
+    m.add_circle_markers([[36.0, -5.3]], name="Plain")
+    assert m.layers[-1].labels is None and m.layers[-1].label is None

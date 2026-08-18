@@ -6,7 +6,8 @@ from ._style import pop_style_options, pop_data_options, resolve_styles
 from .._colormaps import (data_driven_colors, data_driven_radii, data_driven_legend,
                           data_driven_size_legend)
 from ._batching import batched
-from ._grouping import build_group_specs, resolve_group_path, is_column, static_group_path
+from ._grouping import (build_group_specs, resolve_group_path, is_column,
+                        static_group_path, resolve_feature_labels)
 from .._warnings import warn, EmptyLayerWarning
 
 @batched
@@ -84,6 +85,7 @@ def add_markers(
     # 1. Parse all coordinates and properties first
     explicit_style, static_style = pop_style_options(kwargs, "add_markers", "markers")
     data_opts = pop_data_options(kwargs, "add_markers", "markers")
+    label = kwargs.pop("label", None)
     try:
         lats, lons, props = parse_points(data, lat_col, lon_col, coord_order=coord_order)
     except TypeError as exc:
@@ -118,6 +120,12 @@ def add_markers(
     radii_f32 = data_driven_radii(props, data_opts, "add_markers")
     legend_block = data_driven_legend(props, data_opts)
     size_legend = data_driven_size_legend(props, data_opts)
+
+    feature_labels = resolve_feature_labels(label, props, num_points)
+    if feature_labels and num_points > 1000:
+        warn(f"add_markers: {num_points} permanent labels means {num_points} DOM "
+             f"elements on the map. Labels are for site-scale layers; at this count "
+             f"expect the browser to struggle.")
 
     # 3. Group the dataset by the unique combinations of these path strings and names
     group_map = {}
@@ -201,6 +209,9 @@ def add_markers(
             "bounds": sub_bounds,
             **({"legend": legend_block} if legend_block else {}),
             **({"legend_size": size_legend} if size_legend else {}),
+            **({"labels": (feature_labels if whole
+                           else [feature_labels[i] for i in indices])}
+               if feature_labels else {}),
             **layer_style,
             **display_config,
             **kwargs

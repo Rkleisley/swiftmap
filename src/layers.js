@@ -103,7 +103,7 @@ export async function renderLayer(map, layer, coordBuffer, model) {
 // (the layers JSON then carries no coordinates at all), or inline `locations` for
 // hand-built configs and fixtures. Materialised only on rebuild, which vector buckets
 // on the GPU path rarely do.
-function vectorCoords(layer, coordinateBuffers) {
+export function vectorCoords(layer, coordinateBuffers) {
     if (layer.locations) return layer.locations;
     const raw = coordinateBuffers[layer.id];
     if (!raw) return null;

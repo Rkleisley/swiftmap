@@ -66,6 +66,7 @@ def add_circle(
     display_config = extract_display_config(kwargs, name)
     explicit_style, static_style = pop_style_options(kwargs, "add_circle", "circle")
     pop_data_options(kwargs, "add_circle", "circle")   # warns; a circle is one feature
+    label = kwargs.pop("label", None)
     layer_style, _ = resolve_styles(
         explicit_style, static_style, {}, 1,
         {"color": "#3388ff", "fill_color": "#3388ff", "fill_opacity": 0.2})
@@ -79,6 +80,7 @@ def add_circle(
         "location": location,
         "radius": radius,
         "bounds": bounds_of_circle(location, radius),
+        **({"label": str(label)} if label is not None else {}),
         **layer_style,
         "properties": properties or {},
         "autobind_popup": bool(popup),

@@ -17,10 +17,11 @@ m.add_circle_markers(
     {"lat": [40.00, 40.04, 40.06, 40.10],
      "lon": [-3.75, -3.69, -3.67, -3.65],
      "value": [1.0, 4.0, 7.0, 10.0]},
-    name="Sites", color_col="value", radius_col="value")
+    name="Sites", color_col="value", radius_col="value", label="value")
 m.add_polygon(
     [[40.00, -3.75], [40.00, -3.65], [40.10, -3.65]],
-    name="Zone", color="#ff0000", fill_color="#00ff00", weight=5)
+    name="Zone", color="#ff0000", fill_color="#00ff00", weight=5,
+    label="Restricted Zone")
 
 m.configure_legend(show=True, title="Demo Key")
 m.legend_add("Patrol boundary", shape="line", color="#ff0000", group="Zone Group")

@@ -1,6 +1,7 @@
 import { loadCSS, loadJS } from "./utils.js";
 import { renderSidebarControls, normalizeRadioLayers, sendLayerWrite } from "./sidebar.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
+import { renderLabels } from "./labels.js";
 import { renderLayer, renderMergedGlLayer } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
@@ -233,6 +234,8 @@ export default {
         }
         applyHeight();
 
+        let labelsGroup = null;   // created after the map; filled by each sync
+
         const crsName = model.get("crs");
         let mapCrs = L.CRS.EPSG3857;
         if (crsName === "EPSG:4326") {
@@ -256,6 +259,8 @@ export default {
         
         map.createPane("pointsPane");
         map.getPane("pointsPane").style.zIndex = "430";
+
+        labelsGroup = L.layerGroup().addTo(map);
 
         // Local mirrors of the layer list and coordinate buffers.
         //
@@ -719,6 +724,12 @@ export default {
             renderSidebarControls(sidebar, layers, model, map, () => {
                 performSync();
             });
+
+            // Permanent labels follow the same derive-per-sync pattern as the legend,
+            // so they track visibility with no bucket or meta-key involvement.
+            if (labelsGroup) {
+                renderLabels(L, labelsGroup, layers, coordinateBuffers, groupConfigs);
+            }
 
             const legendCfg = model.get("legend_config") || {};
             if (model.get("show_legend")) {

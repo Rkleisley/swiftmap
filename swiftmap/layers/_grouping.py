@@ -56,6 +56,32 @@ def is_column(name: Optional[str], props: Dict[str, List[Any]]) -> bool:
     return name is not None and bool(props) and name in props
 
 
+def resolve_feature_labels(label: Any, props: Dict[str, List[Any]],
+                           count: int) -> Optional[List[str]]:
+    """
+    One label per feature: the column's values when `label` names one, else the
+    literal repeated -- the same string-or-column resolution `name` uses. None stays
+    None so unlabelled layers carry nothing.
+    """
+    if label is None:
+        return None
+    if is_column(label, props):
+        values = props[label]
+        return ["" if v is None else str(v) for v in values[:count]]
+    return [str(label)] * count
+
+
+def resolve_feature_label(label: Any, props: Dict[str, List[Any]],
+                          index: int) -> Optional[str]:
+    """One vector feature's label, column-or-literal like resolve_feature_labels."""
+    if label is None:
+        return None
+    if is_column(label, props):
+        value = props[label][index] if index < len(props[label]) else None
+        return "" if value is None else str(value)
+    return str(label)
+
+
 def resolve_layer_name(
     name: Optional[str],
     props: Dict[str, List[Any]],

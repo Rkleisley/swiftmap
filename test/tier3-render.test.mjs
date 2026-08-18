@@ -203,6 +203,38 @@ suite("a fit requested while hidden lands when the container gains size", async 
     }, "widget-hidden.html", null);
 });
 
+suite("permanent labels render, follow visibility, and stay text", async () => {
+    // Applied dynamically so the other suites' screenshot clips never contain them.
+    await withPage(async (page, errors) => {
+        const texts = () => page.evaluate(() =>
+            [...document.querySelectorAll(".swiftmap-feature-label")]
+                .map(e => e.textContent));
+
+        assert.deepEqual(await texts(), [], "no labels until asked");
+
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === "pts" ? { ...l, labels: ["Alpha", "<b>Bravo</b>"] } : l));
+        });
+        await page.waitForTimeout(500);
+        assert.deepEqual((await texts()).sort(), ["<b>Bravo</b>", "Alpha"],
+            "labels render, and markup in data stays text");
+        const bolded = await page.evaluate(() =>
+            document.querySelectorAll(".swiftmap-feature-label b").length);
+        assert.equal(bolded, 0, "no element was parsed out of a label");
+
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === "pts" ? { ...l, visible: false } : l));
+        });
+        await page.waitForTimeout(500);
+        assert.deepEqual(await texts(), [], "labels follow their layer's visibility");
+        assert.deepEqual(errors, [], "no errors along the way");
+    });
+});
+
 suite("the legend derives, dims, and obeys overrides", async () => {
     // Enabled dynamically so the other suites' screenshot clips never contain it.
     await withPage(async (page, errors) => {
