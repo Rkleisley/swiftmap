@@ -235,6 +235,43 @@ suite("permanent labels render, follow visibility, and stay text", async () => {
     });
 });
 
+suite("an empty-map click reports where, and only when nothing else claimed it", async () => {
+    await withPage(async (page, errors) => {
+        const box = await page.locator(".leaflet-container").boundingBox();
+        // Top-left of the view: north-west of every fixture feature.
+        await page.mouse.click(box.x + box.width * 0.08, box.y + box.height * 0.10);
+        await page.waitForTimeout(400);
+
+        const state = await page.evaluate(() => ({
+            latlng: window.__model.get("clicked_latlng"),
+            id: window.__model.get("clicked_layer_id"),
+            seq: window.__model.get("click_seq"),
+        }));
+        assert.equal(state.id, "", "an empty click carries no layer");
+        assert.equal(state.seq, 1, "and still bumps the one observable");
+        assert.ok(Array.isArray(state.latlng) && state.latlng.length === 2,
+            "the location arrived");
+        const [lat, lng] = state.latlng;
+        // The fixture centres on [36.05, -5.25] at zoom 12; the click landed in the
+        // view's north-west, so the coordinate must sit near there -- Leaflet's own
+        // unprojection did the work, whatever the CRS.
+        assert.ok(lat > 36.05 && lat < 36.2 && lng < -5.25 && lng > -5.45,
+            `a plausible north-west coordinate -- got ${JSON.stringify(state.latlng)}`);
+
+        // Opt into the readout and click again: a mono popup with 5-decimal coords.
+        await page.evaluate(() => window.__model.set("show_click_coordinates", true));
+        await page.mouse.click(box.x + box.width * 0.08, box.y + box.height * 0.10);
+        await page.waitForTimeout(400);
+        const popup = await page.evaluate(() => {
+            const el = document.querySelector(".swiftmap-coords-popup .leaflet-popup-content");
+            return el ? el.textContent : null;
+        });
+        assert.match(popup || "", /^-?\d+\.\d{5}, -?\d+\.\d{5}$/,
+            `the readout is the coordinate pair -- got ${popup}`);
+        assert.deepEqual(errors, [], "no errors through both clicks");
+    });
+});
+
 suite("labels follow the time window", async () => {
     // The fixture's three points sit on separate days; labelling them and seeking
     // the slider must swap the chips with the points, since every tick re-enters

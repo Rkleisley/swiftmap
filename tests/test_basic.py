@@ -35,10 +35,12 @@ def test_every_constructor_flag_round_trips_through_get_state():
     # difference from show_logo was the declaration line, so this pins the round
     # trip for each constructor flag.
     m = Map(center=[10.0, 20.0], zoom=7, show_legend=True, show_logo=False,
-            height="500px", crs="EPSG:4326", auto_sync=False)
+            show_click_coordinates=True, height="500px", crs="EPSG:4326",
+            auto_sync=False)
     state = m.get_state()
     for name, value in [("center", [10.0, 20.0]), ("zoom", 7),
                         ("show_legend", True), ("show_logo", False),
+                        ("show_click_coordinates", True),
                         ("height", "500px"), ("crs", "EPSG:4326"),
                         ("auto_sync", False)]:
         assert name in state, f"{name} is not a synced trait -- the frontend never sees it"
@@ -49,6 +51,12 @@ def test_click_seq_starts_at_zero():
     # The frontend bumps it on every click; observing this one trait catches
     # repeat clicks that change neither clicked_layer_id nor selected_index.
     assert Map().click_seq == 0
+
+
+def test_click_location_traits_default_empty_and_off():
+    m = Map()
+    assert m.clicked_latlng == []
+    assert m.show_click_coordinates is False
 
 
 def test_chaining():

@@ -232,3 +232,11 @@
 .swiftmap-feature-label::before {
     display: none;
 }
+
+/* The empty-click coordinate readout: small, mono, selectable for copying. */
+.swiftmap-coords-popup .leaflet-popup-content {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+    margin: 6px 10px;
+    user-select: text;
+}

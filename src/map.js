@@ -2,7 +2,7 @@ import { loadCSS, loadJS } from "./utils.js";
 import { renderSidebarControls, normalizeRadioLayers, sendLayerWrite } from "./sidebar.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
-import { renderLayer, renderMergedGlLayer } from "./layers.js";
+import { renderLayer, renderMergedGlLayer, registerClickMatch } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
          collectDurationsMs, POSITIONS } from "./timecontrol.js";
@@ -752,6 +752,33 @@ export default {
 
         let isUpdatingCenterFromMap = false;
         let isUpdatingZoomFromMap = false;
+
+        // Empty-map clicks: report where. Registered through the same arbitration the
+        // feature handlers use, at the lowest priority, so a click that hit a feature
+        // stays that feature's click -- this wins only when nothing claimed the event.
+        // e.latlng is already unprojected through whichever CRS the map runs (3857 and
+        // 4326 alike), so there is no pixel math to get wrong here; wrap() keeps a
+        // world-panned map from reporting longitude -364.
+        map.on("click", (e) => {
+            registerClickMatch(map, 99, () => {
+                const ll = e.latlng.wrap();
+                const lat = Math.round(ll.lat * 1e5) / 1e5;
+                const lng = Math.round(ll.lng * 1e5) / 1e5;
+                try {
+                    model.set("clicked_layer_id", "");
+                    model.set("selected_index", -1);
+                    model.set("clicked_latlng", [lat, lng]);
+                    model.set("click_seq", (model.get("click_seq") || 0) + 1);
+                    model.save_changes();
+                } catch (err) { /* no live backend */ }
+                if (model.get("show_click_coordinates")) {
+                    L.popup({ className: "swiftmap-coords-popup", closeButton: false })
+                        .setLatLng(e.latlng)
+                        .setContent(`${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`)
+                        .openOn(map);
+                }
+            });
+        });
 
         // Bind zoom and center changes back to Python safely
         map.on("moveend", () => {

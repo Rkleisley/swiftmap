@@ -14,7 +14,7 @@ function setupGlifyProjection(glInstance) {
     }
 }
 
-function registerClickMatch(map, priority, action) {
+export function registerClickMatch(map, priority, action) {
     if (!map._clickMatches) {
         map._clickMatches = [];
     }
@@ -295,6 +295,12 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                                 try {
                                     model.set("clicked_layer_id", layer.id);
                                     model.set("selected_index", 0);
+                                    // Where the click landed, feature or not: one
+                                    // trait always answers "where", clicked_layer_id
+                                    // answers "on what" ("" for open map).
+                                    model.set("clicked_latlng",
+                                        [Math.round(e.latlng.wrap().lat * 1e5) / 1e5,
+                                         Math.round(e.latlng.wrap().lng * 1e5) / 1e5]);
                                     // Bumped on EVERY click: clicking the same feature
                                     // twice changes neither id nor index, so without
                                     // this no trait fires and handlers miss the click.
@@ -425,6 +431,12 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                                 try {
                                     model.set("clicked_layer_id", layer.id);
                                     model.set("selected_index", 0);
+                                    // Where the click landed, feature or not: one
+                                    // trait always answers "where", clicked_layer_id
+                                    // answers "on what" ("" for open map).
+                                    model.set("clicked_latlng",
+                                        [Math.round(e.latlng.wrap().lat * 1e5) / 1e5,
+                                         Math.round(e.latlng.wrap().lng * 1e5) / 1e5]);
                                     // Bumped on EVERY click: clicking the same feature
                                     // twice changes neither id nor index, so without
                                     // this no trait fires and handlers miss the click.
@@ -632,6 +644,9 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             try {
                                 model.set("clicked_layer_id", layer.id);
                                 model.set("selected_index", originalIndex);
+                                // The clicked point's own coordinates -- more
+                                // truthful than the mouse position for a point.
+                                model.set("clicked_latlng", [point[0], point[1]]);
                                 // Bumped on EVERY click; see the vector click handlers.
                                 model.set("click_seq", (model.get("click_seq") || 0) + 1);
                                 model.save_changes();

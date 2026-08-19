@@ -66,6 +66,10 @@ class Map(anywidget.AnyWidget):
         and title.
     show_logo : bool, default True
         If True, displays branding logos on the map viewport.
+    show_click_coordinates : bool, default False
+        If True, clicking open map (not a feature) opens a small popup with the
+        clicked coordinates. Either way the click reaches Python: `clicked_latlng`
+        holds [lat, lon], `clicked_layer_id` clears to "", and `click_seq` bumps.
     height : str, optional
         CSS height for the map ('600px', '40vh'). Sizes both the widget element and
         the map container, and an explicit value overrides the default 400px minimum.
@@ -126,10 +130,17 @@ class Map(anywidget.AnyWidget):
     # Selection and click interaction tracking
     selected_index = traitlets.Int(-1).tag(sync=True)
     clicked_layer_id = traitlets.Unicode("").tag(sync=True)
-    # Bumped by the frontend on EVERY feature click. Observe this one trait for
-    # clicks: id and index stay put when the same feature is clicked twice, so
-    # observers watching only them miss repeat clicks entirely.
+    # Bumped by the frontend on EVERY click -- features and open map alike. Observe
+    # this one trait for clicks: id and index stay put when the same feature is
+    # clicked twice, so observers watching only them miss repeat clicks entirely.
     click_seq = traitlets.Int(0).tag(sync=True)
+    # Where the last click landed, [lat, lon], feature or open map -- the frontend
+    # reads Leaflet's own unprojection, so it is correct under EPSG:4326 too. On an
+    # empty click, clicked_layer_id clears to "" and selected_index to -1: one
+    # click_seq observer reads "where" here and "on what" there.
+    clicked_latlng = traitlets.List([]).tag(sync=True)
+    # When True, an empty-map click also opens a small popup showing the coordinates.
+    show_click_coordinates = traitlets.Bool(False).tag(sync=True)
     # Explicit widget height ('600px', '40vh'); empty means fill the parent with the
     # stylesheet's 400px floor. Applied by the frontend, which also drops the floor
     # for an explicit value.
@@ -153,6 +164,7 @@ class Map(anywidget.AnyWidget):
         zoom: Optional[int] = None,
         show_legend: bool = False,
         show_logo: bool = True,
+        show_click_coordinates: bool = False,
         height: Optional[str] = None,
         crs: str = "EPSG:3857",
         auto_sync: bool = True,
@@ -186,6 +198,7 @@ class Map(anywidget.AnyWidget):
         self.crs = crs
         self.show_legend = show_legend
         self.show_logo = show_logo
+        self.show_click_coordinates = show_click_coordinates
         self.auto_sync = auto_sync
         if height:
             self.height = height
