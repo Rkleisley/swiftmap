@@ -267,6 +267,14 @@ export default {
         map.createPane("pointsPane");
         map.getPane("pointsPane").style.zIndex = "430";
 
+        // Drawn vectors live ABOVE the GL panes. Geoman defaults them into Leaflet's
+        // overlayPane (400), which sits under the GL canvases (410/420/430) whose
+        // pointer-events are forced on -- so with any GL layer present, clicks meant
+        // for a drawn shape never arrived: drawing worked (Geoman listens on the
+        // container) while removal, edit and drag silently did nothing.
+        map.createPane("swiftmapDrawPane");
+        map.getPane("swiftmapDrawPane").style.zIndex = "440";
+
         labelsGroup = L.layerGroup().addTo(map);
 
         // Local mirrors of the layer list and coordinate buffers.
@@ -809,9 +817,11 @@ export default {
                 let layer;
                 if (props.kind === "circle" && feature.geometry.type === "Point") {
                     const [lng, lat] = feature.geometry.coordinates;
-                    layer = L.circle([lat, lng], { radius: props.radius || 100 });
+                    layer = L.circle([lat, lng], { radius: props.radius || 100,
+                                                   pane: "swiftmapDrawPane" });
                 } else {
-                    layer = L.geoJSON(feature).getLayers()[0];
+                    layer = L.geoJSON(feature, { pane: "swiftmapDrawPane" })
+                        .getLayers()[0];
                 }
                 if (!layer) continue;
                 layer._swiftmapDrawId = props.draw_id || `draw_${++drawIdCounter}`;
@@ -824,13 +834,24 @@ export default {
             const cfg = model.get("draw_config") || {};
             if (show && !drawReady) {
                 drawReady = true;
+                // Everything Geoman creates goes to the pane above the GL stack.
+                map.pm.setGlobalOptions({
+                    panes: { layerPane: "swiftmapDrawPane",
+                             vertexPane: "markerPane", markerPane: "markerPane" },
+                });
                 drawingsGroup = L.featureGroup().addTo(map);
                 rehydrateDrawings();
                 map.on("pm:create", (e) => {
                     adoptDrawing(e.layer);
                     writeDrawings();
                 });
-                map.on("pm:remove", () => writeDrawings());
+                map.on("pm:remove", (e) => {
+                    // Geoman removes the layer from the MAP; the feature group still
+                    // holds it, and writeDrawings reads the group -- evict it first
+                    // or the deletion never reaches the trait.
+                    drawingsGroup.removeLayer(e.layer);
+                    writeDrawings();
+                });
                 model.on("change:drawings", () => {
                     if (!suppressDrawingsEcho) rehydrateDrawings();
                 });
@@ -914,6 +935,18 @@ export default {
         // 4326 alike), so there is no pixel math to get wrong here; wrap() keeps a
         // world-panned map from reporting longitude -364.
         map.on("click", (e) => {
+            // Stamped synchronously, before any glify handler registers its match
+            // (this handler was bound first, so Leaflet runs it first): the whole
+            // click pipeline -- feature popups and this fallback alike -- stands
+            // down while a Geoman mode is armed. Deferred checks miss modes that
+            // close themselves on their finishing click (a completed rectangle),
+            // which is why the state is captured at click time.
+            const pm = map.pm;
+            map._pmModeActive = Boolean(pm
+                && ((pm.globalRemovalModeEnabled && pm.globalRemovalModeEnabled())
+                    || (pm.globalEditModeEnabled && pm.globalEditModeEnabled())
+                    || (pm.globalDragModeEnabled && pm.globalDragModeEnabled())
+                    || (pm.globalDrawModeEnabled && pm.globalDrawModeEnabled())));
             registerClickMatch(map, 99, () => {
                 const ll = e.latlng.wrap();
                 const lat = Math.round(ll.lat * 1e5) / 1e5;

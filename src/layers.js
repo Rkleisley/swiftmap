@@ -22,7 +22,11 @@ export function registerClickMatch(map, priority, action) {
     if (!map._clickTimeout) {
         map._clickTimeout = setTimeout(() => {
             map._clickMatches.sort((a, b) => a.priority - b.priority);
-            if (map._clickMatches.length > 0) {
+            // While a Geoman mode is armed (the widget's click handler stamps this
+            // per click, before any feature handler runs), EVERY match stands down:
+            // a click in removal mode is a deletion attempt, and answering it with
+            // a feature popup or a coords readout reads as "remove is broken".
+            if (map._clickMatches.length > 0 && !map._pmModeActive) {
                 map._clickMatches[0].action();
             }
             map._clickMatches = [];

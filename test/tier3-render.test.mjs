@@ -300,7 +300,29 @@ suite("drawing a rectangle lands in the drawings trait", async () => {
         assert.equal(state.type, "Polygon", "a rectangle arrives as a polygon feature");
         assert.ok(state.id, "carrying its draw_id");
         assert.ok(state.seq >= 1, "and draw_seq bumped for the one-observer pattern");
-        assert.deepEqual(errors, [], "no errors while drawing");
+
+        // The reported bug, reproduced under its own conditions: this fixture has GL
+        // layers whose canvases sit over the whole map, and drawn vectors used to
+        // live UNDER them -- removal clicks never arrived, and the empty-click
+        // fallback answered with a coords popup instead. Removal must now work
+        // through the GL stack, and the fallback must stand down while armed.
+        await page.evaluate(() => window.__model.set("show_click_coordinates", true));
+        const clicksBefore = await page.evaluate(() =>
+            window.__model.get("click_seq"));
+        await page.click(".leaflet-pm-icon-delete");
+        await page.mouse.click(box.x + box.width * 0.42, box.y + box.height * 0.42);
+        await page.waitForTimeout(500);
+
+        const after = await page.evaluate(() => ({
+            count: (window.__model.get("drawings") || []).length,
+            clicks: window.__model.get("click_seq"),
+            popup: Boolean(document.querySelector(".swiftmap-coords-popup")),
+        }));
+        assert.equal(after.count, 0, "removal reaches the drawn shape through the GL panes");
+        assert.equal(after.clicks, clicksBefore,
+            "the coords fallback stood down while removal was armed");
+        assert.ok(!after.popup, "and no coordinate popup pretended to answer");
+        assert.deepEqual(errors, [], "no errors while drawing and removing");
     });
 });
 
