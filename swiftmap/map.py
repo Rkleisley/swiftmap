@@ -70,6 +70,10 @@ class Map(anywidget.AnyWidget):
         If True, clicking open map (not a feature) opens a small popup with the
         clicked coordinates. Either way the click reaches Python: `clicked_latlng`
         holds [lat, lon], `clicked_layer_id` clears to "", and `click_seq` bumps.
+    show_scale : bool, default False
+        If True, draws a scale bar (bottom-left by default). `configure_scale`
+        chooses units -- 'metric', 'imperial', 'both', or 'nautical' -- position
+        and width.
     height : str, optional
         CSS height for the map ('600px', '40vh'). Sizes both the widget element and
         the map container, and an explicit value overrides the default 400px minimum.
@@ -141,6 +145,9 @@ class Map(anywidget.AnyWidget):
     clicked_latlng = traitlets.List([]).tag(sync=True)
     # When True, an empty-map click also opens a small popup showing the coordinates.
     show_click_coordinates = traitlets.Bool(False).tag(sync=True)
+    # The scale bar and its options (units/position/max_width); see configure_scale.
+    show_scale = traitlets.Bool(False).tag(sync=True)
+    scale_config = traitlets.Dict({}).tag(sync=True)
     # Explicit widget height ('600px', '40vh'); empty means fill the parent with the
     # stylesheet's 400px floor. Applied by the frontend, which also drops the floor
     # for an explicit value.
@@ -165,6 +172,7 @@ class Map(anywidget.AnyWidget):
         show_legend: bool = False,
         show_logo: bool = True,
         show_click_coordinates: bool = False,
+        show_scale: bool = False,
         height: Optional[str] = None,
         crs: str = "EPSG:3857",
         auto_sync: bool = True,
@@ -199,6 +207,7 @@ class Map(anywidget.AnyWidget):
         self.show_legend = show_legend
         self.show_logo = show_logo
         self.show_click_coordinates = show_click_coordinates
+        self.show_scale = show_scale
         self.auto_sync = auto_sync
         if height:
             self.height = height
@@ -383,6 +392,60 @@ class Map(anywidget.AnyWidget):
             },
             buffers=buffers,
         )
+        return self
+
+    _SCALE_UNITS = frozenset({"metric", "imperial", "both", "nautical"})
+    _SCALE_POSITIONS = frozenset({"top-left", "top-right",
+                                  "bottom-left", "bottom-right"})
+
+    def configure_scale(self, *, show: Optional[bool] = None,
+                        units: Optional[str] = None,
+                        position: Optional[str] = None,
+                        max_width: Optional[int] = None) -> "Map":
+        """
+        Configures the scale bar. Only the options given change.
+
+        Parameters
+        ----------
+        show : bool, optional
+            Convenience for setting `show_scale`.
+        units : {'metric', 'imperial', 'both', 'nautical'}, optional
+            What the bar reads in. 'both' shows metric over imperial; 'nautical'
+            shows nautical miles, which Leaflet's own control cannot. The bar
+            measures through the map's CRS, so every unit is correct under
+            EPSG:4326 too. Default 'metric'.
+        position : str, optional
+            A corner: 'top-left', 'top-right', 'bottom-left' (default),
+            'bottom-right'. Corners only -- Leaflet controls do not anchor to edge
+            centres. The legend also defaults bottom-left; move one of them when
+            both are on.
+        max_width : int, optional
+            The bar's maximum width in pixels. Default 120.
+
+        Examples
+        --------
+        >>> m.configure_scale(show=True, units="nautical")
+        >>> m.configure_scale(position="bottom-right", max_width=160)
+        """
+        cfg = dict(self.scale_config)
+        if units is not None:
+            if units not in self._SCALE_UNITS:
+                warn(f"configure_scale: units must be one of "
+                     f"{', '.join(sorted(self._SCALE_UNITS))}; got {units!r}. Ignored.")
+            else:
+                cfg["units"] = units
+        if position is not None:
+            if position not in self._SCALE_POSITIONS:
+                warn(f"configure_scale: position must be a corner "
+                     f"({', '.join(sorted(self._SCALE_POSITIONS))}); got {position!r}. "
+                     f"Ignored.")
+            else:
+                cfg["position"] = position
+        if max_width is not None:
+            cfg["max_width"] = int(max_width)
+        self.scale_config = cfg
+        if show is not None:
+            self.show_scale = bool(show)
         return self
 
     _LEGEND_POSITIONS = frozenset({

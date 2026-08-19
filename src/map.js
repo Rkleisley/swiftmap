@@ -753,6 +753,51 @@ export default {
         let isUpdatingCenterFromMap = false;
         let isUpdatingZoomFromMap = false;
 
+        // The scale bar: Leaflet's own control, which measures through the map's CRS
+        // (haversine under 3857 and 4326 alike -- no pixel math of ours), extended
+        // with the unit Leaflet lacks and this domain runs on: nautical miles.
+        const NauticalScale = L.Control.Scale.extend({
+            onAdd: function (m) {
+                const container = L.Control.Scale.prototype.onAdd.call(this, m);
+                this._nauticalScale = L.DomUtil.create(
+                    "div", "leaflet-control-scale-line", container);
+                this._update();
+                return container;
+            },
+            _updateScales: function (maxMeters) {
+                L.Control.Scale.prototype._updateScales.call(this, maxMeters);
+                if (this._nauticalScale && maxMeters) {
+                    const maxNm = maxMeters / 1852;
+                    const nm = this._getRoundNum(maxNm);
+                    this._updateScale(this._nauticalScale, `${nm} nm`, nm / maxNm);
+                }
+            },
+        });
+
+        let scaleControl = null;
+        function syncScale() {
+            if (scaleControl) {
+                scaleControl.remove();
+                scaleControl = null;
+            }
+            if (!model.get("show_scale")) return;
+            const cfg = model.get("scale_config") || {};
+            const units = cfg.units || "metric";
+            const options = {
+                position: (cfg.position || "bottom-left").replace("-", ""),
+                maxWidth: cfg.max_width || 120,
+                metric: units === "metric" || units === "both",
+                imperial: units === "imperial" || units === "both",
+            };
+            scaleControl = units === "nautical"
+                ? new NauticalScale(options)
+                : L.control.scale(options);
+            scaleControl.addTo(map);
+        }
+        syncScale();
+        model.on("change:show_scale", syncScale);
+        model.on("change:scale_config", syncScale);
+
         // Empty-map clicks: report where. Registered through the same arbitration the
         // feature handlers use, at the lowest priority, so a click that hit a feature
         // stays that feature's click -- this wins only when nothing claimed the event.

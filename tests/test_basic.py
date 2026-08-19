@@ -1,6 +1,6 @@
 import pytest
 from swiftmap import Map
-from swiftmap._warnings import EmptyLayerWarning
+from swiftmap._warnings import EmptyLayerWarning, SwiftMapWarning
 import pandas as pd
 import numpy as np
 
@@ -519,3 +519,15 @@ def test_merged_collection_parts_keep_their_bounds():
     assert parts["polygon"].get("label") == "Dwell N"
     assert parts["circle_markers"].get("bounds") is not None
     assert m.bounds_of("Dwell N") == [[36.0, -5.3], [36.1, -5.2]]
+
+
+def test_configure_scale_merges_and_validates():
+    m = Map()
+    m.configure_scale(show=True, units="nautical", max_width=160)
+    assert m.show_scale is True
+    assert m.scale_config == {"units": "nautical", "max_width": 160}
+    with pytest.warns(SwiftMapWarning, match="units must be one of"):
+        m.configure_scale(units="cubits")
+    with pytest.warns(SwiftMapWarning, match="position must be a corner"):
+        m.configure_scale(position="bottom-center")
+    assert m.scale_config["units"] == "nautical", "bad values change nothing"

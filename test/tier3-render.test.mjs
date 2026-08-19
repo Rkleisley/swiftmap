@@ -272,6 +272,35 @@ suite("an empty-map click reports where, and only when nothing else claimed it",
     });
 });
 
+suite("the scale bar shows, reads nautical, and moves corners", async () => {
+    await withPage(async (page, errors) => {
+        const scaleText = () => page.evaluate(() => {
+            const el = document.querySelector(".leaflet-control-scale");
+            return el ? el.textContent : null;
+        });
+        assert.equal(await scaleText(), null, "off by default");
+
+        await page.evaluate(() => window.__model.set("show_scale", true));
+        await page.waitForTimeout(300);
+        assert.match(await scaleText() || "", /\d+\s*(km|m)\b/,
+            "metric by default");
+
+        await page.evaluate(() =>
+            window.__model.set("scale_config", { units: "nautical",
+                                                 position: "bottom-right" }));
+        await page.waitForTimeout(300);
+        const text = await scaleText();
+        assert.match(text || "", /\d+(\.\d+)?\s*nm\b/,
+            `the nautical line renders -- got ${text}`);
+        assert.ok(!/\bkm\b/.test(text || ""), "and metric stands down");
+        const corner = await page.evaluate(() =>
+            Boolean(document.querySelector(
+                ".leaflet-bottom.leaflet-right .leaflet-control-scale")));
+        assert.ok(corner, "the bar moved to its corner");
+        assert.deepEqual(errors, [], "no errors while reconfiguring");
+    });
+});
+
 suite("labels follow the time window", async () => {
     // The fixture's three points sit on separate days; labelling them and seeking
     // the slider must swap the chips with the points, since every tick re-enters
