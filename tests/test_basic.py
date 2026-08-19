@@ -502,3 +502,20 @@ def test_unlabelled_layers_carry_nothing():
     m = Map()
     m.add_circle_markers([[36.0, -5.3]], name="Plain")
     assert m.layers[-1].labels is None and m.layers[-1].label is None
+
+
+def test_merged_collection_parts_keep_their_bounds():
+    # The reported shape: a polygon and its centre marker share a name and merge
+    # into a collection. `bounds` was never in _SUB_LAYER_ATTRS, so every merged
+    # part came back bounds=None -- which silently broke label anchors on merged
+    # polygons, bounds_of() over parts, and select(zoom=True) for collections.
+    m = Map()
+    m.add_polygon([[36.0, -5.3], [36.0, -5.2], [36.1, -5.2]], name="Dwell N",
+                  layer_group="Dwells", label="Dwell N")
+    m.add_circle_markers([[36.05, -5.25]], name="Dwell N", layer_group="Dwells")
+    group = [l for l in m.layers if l.get("type") == "group"][0]
+    parts = {s["type"]: s for s in group.get("layers")}
+    assert parts["polygon"].get("bounds") == [[36.0, -5.3], [36.1, -5.2]]
+    assert parts["polygon"].get("label") == "Dwell N"
+    assert parts["circle_markers"].get("bounds") is not None
+    assert m.bounds_of("Dwell N") == [[36.0, -5.3], [36.1, -5.2]]

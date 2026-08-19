@@ -53,6 +53,10 @@ _SUB_LAYER_ATTRS = (
     "radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity",
     "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations",
     "location", "geojson", "rings", "legend", "legend_size", "label", "labels",
+    # bounds was missing here for the whole life of the merge, which silently broke
+    # everything that anchors or zooms from a collection part's own box: label
+    # anchors on merged polygons, bounds_of() over parts, select(zoom=True).
+    "bounds",
 ) + DISPLAY_KEYS
 
 # Same set, plus the flags that are carried down but not stripped from the group.

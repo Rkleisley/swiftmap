@@ -73,6 +73,24 @@ export function collectLabels(layers, buffers, groupConfigs, timeState = null) {
             } else if (layer.location) {
                 out.push({ lat: layer.location[0], lng: layer.location[1],
                            text: String(layer.label), center: true });
+            } else {
+                // No bounds on the config -- the collection merge dropped them for
+                // its whole history, and hand-built configs may never carry them.
+                // The coordinates are still in the buffer under the layer's own id,
+                // exactly as the polyline branch reads them; a missing box must
+                // degrade to computing one, never to silently dropping the label.
+                const locs = vectorCoords(layer, buffers || {}) || [];
+                if (locs.length === 0) continue;
+                let minLat = Infinity, maxLat = -Infinity;
+                let minLng = Infinity, maxLng = -Infinity;
+                for (const [lat, lng] of locs) {
+                    if (lat < minLat) minLat = lat;
+                    if (lat > maxLat) maxLat = lat;
+                    if (lng < minLng) minLng = lng;
+                    if (lng > maxLng) maxLng = lng;
+                }
+                out.push({ lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2,
+                           text: String(layer.label), center: true });
             }
         }
     }

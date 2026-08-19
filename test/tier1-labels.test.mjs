@@ -94,3 +94,14 @@ test("no timeState shows every label, exactly as before", () => {
     const buffers = { p: buf([[36.0, -5.3]]), "p::times": buf([[T0, T0]]) };
     assert.equal(collectLabels(layers, buffers, {}).length, 1);
 });
+
+test("a bounds-less polygon label anchors from its coordinate buffer", () => {
+    // The collection merge dropped bounds from sub-layers for its whole history;
+    // a missing box degrades to computing one from the buffer, never to silently
+    // dropping the label.
+    const out = collectLabels(
+        [layer({ id: "g", type: "polygon", label: "Zone" })],
+        { g: buf([[35.0, -6.0], [35.0, -5.0], [36.0, -5.0], [35.0, -6.0]]) }, {});
+    assert.deepEqual(out.map(l => [l.lat, l.lng, l.text]),
+        [[35.5, -5.5, "Zone"]]);
+});
