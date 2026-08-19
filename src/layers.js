@@ -169,7 +169,13 @@ function areaParts(layer, coordinateBuffers) {
 }
 
 export async function renderMergedGlLayer(map, type, layersList, coordinateBuffers, model,
-                                           timeState = null, vectorGpu = false) {
+                                           timeState = null, vectorGpu = false,
+                                           isFeatureVisible = null) {
+    // Hit-test guard: GPU-path buckets hold hidden layers (and out-of-window
+    // features), masked only by shader uniforms glify's hit-tests cannot see. The
+    // widget passes a live lookup; the fallback covers plain-JS consumers with the
+    // config's own flag.
+    const visibleNow = isFeatureVisible || ((l) => l.visible !== false);
     // Lines, polygons and circles are one geometry per layer. On the GPU path (map.js
     // passes vectorGpu when the bucket qualifies) every feature stays in the buffers and
     // the shader decides visibility per tick and per layer toggle -- a line-shaped track
@@ -288,6 +294,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                         return feature.properties.weight;
                     },
                     click: (e, feature) => {
+                        if (!feature || !feature.properties || !feature.properties.layer
+                                || !visibleNow(feature.properties.layer)) return;
                         registerClickMatch(map, 2, () => {
                             if (feature && feature.properties && feature.properties.layer) {
                                 const layer = feature.properties.layer;
@@ -316,7 +324,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     },
                     hover: (e, feature) => {
                         this._isHovering = true;
-                        if (feature && feature.properties && feature.properties.layer) {
+                        if (feature && feature.properties && feature.properties.layer
+                                && visibleNow(feature.properties.layer)) {
                             registerHoverMatch(map, 2, () => {
                                 const layer = feature.properties.layer;
                                 map.getContainer().style.cursor = 'pointer';
@@ -424,6 +433,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                         return feature.properties.colorRGB;
                     },
                     click: (e, feature) => {
+                        if (!feature || !feature.properties || !feature.properties.layer
+                                || !visibleNow(feature.properties.layer)) return;
                         registerClickMatch(map, 3, () => {
                             if (feature && feature.properties && feature.properties.layer) {
                                 const layer = feature.properties.layer;
@@ -452,7 +463,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     },
                     hover: (e, feature) => {
                         this._isHovering = true;
-                        if (feature && feature.properties && feature.properties.layer) {
+                        if (feature && feature.properties && feature.properties.layer
+                                && visibleNow(feature.properties.layer)) {
                             registerHoverMatch(map, 3, () => {
                                 const layer = feature.properties.layer;
                                 map.getContainer().style.cursor = 'pointer';
@@ -637,9 +649,17 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     const maxDist = type === "markers" ? 25 : 12;
                     if (pixelDist > maxDist) return;
 
+                    // Resolved BEFORE competing for the click: a hidden or
+                    // out-of-window point must not enter the arbitration at all, so
+                    // whatever sits beneath it -- a visible feature, or the
+                    // empty-map fallback -- wins instead.
+                    const idx = pointsList.indexOf(point);
+                    const preInfo = indexMapping[idx];
+                    if (!preInfo || !visibleNow(preInfo.layer, preInfo.originalIndex)) {
+                        return;
+                    }
                     registerClickMatch(map, 1, () => {
-                        const idx = pointsList.indexOf(point);
-                        const info = indexMapping[idx];
+                        const info = preInfo;
                         if (info) {
                             const layer = info.layer;
                             const originalIndex = info.originalIndex;
@@ -668,12 +688,15 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                         const maxDist = type === "markers" ? 25 : 12;
                         if (pixelDist > maxDist) return;
 
+                        const idx = pointsList.indexOf(point);
+                        const info = indexMapping[idx];
+                        if (!info || !visibleNow(info.layer, info.originalIndex)) {
+                            return;
+                        }
                         registerHoverMatch(map, 1, () => {
                             map.getContainer().style.cursor = 'pointer';
                             const el = getInteractiveEl();
                             if (el) el.style.cursor = 'pointer';
-                            const idx = pointsList.indexOf(point);
-                            const info = indexMapping[idx];
                             if (info) {
                                 const layer = info.layer;
                                 const originalIndex = info.originalIndex;

@@ -428,6 +428,61 @@ suite("the legend derives, dims, and obeys overrides", async () => {
     });
 });
 
+suite("hidden features do not answer clicks", async () => {
+    // GPU-path buckets keep every layer -- visibility is a shader uniform -- but
+    // glify's hit-tests run against the bucket's DATA, which cannot see uniforms:
+    // a radio-hidden layer's features still won clicks and popped up, and so did
+    // points outside the current time window. Visibility is now consulted live,
+    // per event, before a feature competes for the click.
+    await withPage(async (page, errors) => {
+        // Container position of a latlng, by pure CRS math off the fixture's fixed
+        // centre and zoom -- Leaflet exposes no map handle to project through.
+        const clickAt = async (lat, lng) => {
+            const off = await page.evaluate(([la, ln]) => {
+                const z = window.__model.get("zoom");
+                const c = window.__model.get("center");
+                const p = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(la, ln), z);
+                const pc = window.L.CRS.EPSG3857.latLngToPoint(
+                    window.L.latLng(c[0], c[1]), z);
+                return [p.x - pc.x, p.y - pc.y];
+            }, [lat, lng]);
+            const box = await page.locator(".leaflet-container").boundingBox();
+            await page.mouse.click(box.x + box.width / 2 + off[0],
+                                   box.y + box.height / 2 + off[1]);
+            await page.waitForTimeout(400);
+        };
+        const clicked = () => page.evaluate(() => ({
+            id: window.__model.get("clicked_layer_id"),
+            popups: document.querySelectorAll(".leaflet-popup").length,
+        }));
+
+        // Tick 0 shows only the Jan-1 observation. Bravo (Jan 2) is time-hidden:
+        // clicking its position must fall through to the empty-map answer.
+        await clickAt(36.10, -5.20);
+        let state = await clicked();
+        assert.equal(state.id, "", "an out-of-window point does not answer");
+        assert.equal(state.popups, 0, "and opens no popup");
+
+        // Alpha (Jan 1) is genuinely visible: it must still answer.
+        await clickAt(36.00, -5.30);
+        state = await clicked();
+        assert.equal(state.id, "pts", "a visible point answers as before");
+
+        // Hide the whole layer -- what a radio group does -- and Alpha goes quiet.
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === "pts" ? { ...l, visible: false } : l));
+        });
+        await page.waitForTimeout(500);
+        await clickAt(36.00, -5.30);
+        state = await clicked();
+        assert.equal(state.id, "",
+            "a layer hidden by its visible flag -- a radio deselection -- is unclickable");
+        assert.deepEqual(errors, [], "no errors through the three clicks");
+    }, "widget-time.html");
+});
+
 suite("the sidebar renders the nested folder tree", async () => {
     await withPage(async page => {
         const text = await page.locator(".swiftmap-sidebar").innerText();

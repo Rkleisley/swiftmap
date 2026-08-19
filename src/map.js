@@ -5,7 +5,8 @@ import { renderLabels } from "./labels.js";
 import { renderLayer, renderMergedGlLayer, registerClickMatch } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
-         collectDurationsMs, POSITIONS } from "./timecontrol.js";
+         collectDurationsMs, POSITIONS, timesFor, windowFor, featureInWindow,
+         effectiveDuration } from "./timecontrol.js";
 import { gpuTimeAvailable, vectorGpuAvailable, LAYER_SLOTS } from "./gputime.js";
 
 // True if a layer is visible and no folder above it is switched off.
@@ -291,6 +292,45 @@ export default {
             const next = applySwiftmapPatch({ layers: layerState, buffers: bufferState }, ops, buffers);
             layerState = next.layers;
             bufferState = next.buffers;
+        }
+
+        // Live feature visibility, for hit-testing. GPU-path buckets keep EVERY
+        // layer -- hidden ones are masked by a shader uniform -- and glify's
+        // hit-tests run against the bucket's data, which cannot see uniforms: a
+        // radio-hidden layer's features still won clicks and answered with popups.
+        // Looked up fresh per event, because the config captured at build time goes
+        // stale the moment a patch op replaces it; the time check reads the live
+        // tick the same way, since ticks change without rebuilding the bucket.
+        function findLayerNow(list, id) {
+            for (const l of list) {
+                if (l.id === id) return l;
+                if (l.type === "group") {
+                    const sub = findLayerNow(l.layers || [], id);
+                    if (sub) return sub;
+                }
+            }
+            return null;
+        }
+        function featureVisibleNow(layer, index) {
+            const current = findLayerNow(layerState, layer.id) || layer;
+            if (!isLayerEffectiveVisible(current, model.get("group_configs") || {})) {
+                return false;
+            }
+            if (!current.time || !timeState) return true;
+            const times = timesFor(current, bufferState);
+            if (!times) return true;
+            const win = windowFor(timeState.tick,
+                effectiveDuration(current, timeState), timeState.period);
+            if (index != null && times.length > 2) {
+                const start = times[index * 2];
+                return Number.isNaN(start)
+                    || featureInWindow(start, times[index * 2 + 1], win);
+            }
+            for (let i = 0; i < times.length; i += 2) {
+                if (Number.isNaN(times[i])
+                        || featureInWindow(times[i], times[i + 1], win)) return true;
+            }
+            return false;
         }
 
         const activeTileLayers = {};
@@ -666,7 +706,7 @@ export default {
                         state.layer.remove();
                     }
                     if (visibleLayers.length > 0) {
-                        state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, model, timeState, vectorGpu);
+                        state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, model, timeState, vectorGpu, featureVisibleNow);
                         if (state.layer) {
                             state.layer.addTo(map);
                         }
