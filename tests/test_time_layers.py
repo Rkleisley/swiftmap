@@ -423,3 +423,35 @@ def test_polygon_rings_do_not_grow_a_vertex_series():
     poly = [l for l in m.layers if l.get("type") == "polygon"][0]
     assert not isinstance(poly.properties.get("vertex"), list), \
         "vertex order around a ring is not a time series"
+
+
+def test_tz_aware_order_columns_survive_and_land_as_utc_epochs():
+    # The 06/09 smoke runs' find: DatetimeTZDtype is an extension dtype that
+    # np.issubdtype RAISES on ("Cannot interpret 'datetime64[us, UTC]'"), killing
+    # the whole add_line. tz-aware normalises through UTC, so a tz-aware column and
+    # its naive-UTC twin land identical epochs -- identical slider positions.
+    import pandas as pd
+    df = track_frame()
+    df["ts"] = pd.to_datetime(df["ts"], unit="ms").dt.tz_localize("UTC") \
+        .dt.tz_convert("Europe/Madrid")
+    m = swiftmap.Map()
+    m.add_polyline(df, line_id_col="track_id", order_col="ts", name="track_id")
+    lines = [l for l in m.layers if l.get("type") == "polyline"]
+    assert lines[0].properties["ts"] == [int(T0), int(T0 + HOUR), int(T0 + 2 * HOUR)]
+
+
+def test_polars_tz_aware_order_columns_were_never_broken_and_stay_that_way():
+    # The pandas twin raised on DatetimeTZDtype; polars' schema check is native
+    # (is_temporal covers tz) and dt.epoch('ms') already lands UTC epochs. Pinned so
+    # the "suspect too" from the smoke-run report stays cleared.
+    pl = pytest.importorskip("polars")
+    from datetime import datetime, timezone
+    df = pl.DataFrame({
+        "lat": [36.0, 36.1], "lon": [-5.3, -5.2], "track_id": ["A", "A"],
+        "ts": [datetime(2026, 1, 1, tzinfo=timezone.utc),
+               datetime(2026, 1, 1, 1, tzinfo=timezone.utc)],
+    })
+    m = swiftmap.Map()
+    m.add_polyline(df, line_id_col="track_id", order_col="ts", name="T")
+    line = [l for l in m.layers if l.get("type") == "polyline"][0]
+    assert line.properties["ts"] == [int(T0), int(T0 + HOUR)]

@@ -42,7 +42,20 @@ def _order_values(series: Any) -> list:
     so the vectorised numeric time path applies instead of a per-value parse.
     Via datetime64[ms], not a division: pandas keeps whatever unit the data arrived
     in (ns, us, ms...), so the int64 view's scale is not knowable up front."""
-    if np.issubdtype(series.dtype, np.datetime64):
+    dtype = series.dtype
+    if getattr(dtype, "tz", None) is not None:
+        # tz-aware columns are pandas' DatetimeTZDtype, an EXTENSION dtype that
+        # np.issubdtype does not interpret -- it raises ("Cannot interpret
+        # 'datetime64[us, UTC]'"), which killed the whole add_line. Normalise to
+        # naive UTC first; naive parses as UTC everywhere else in the time path,
+        # so slider positions come out identical.
+        series = series.dt.tz_convert("UTC").dt.tz_localize(None)
+        dtype = series.dtype
+    try:
+        is_datetime = np.issubdtype(dtype, np.datetime64)
+    except TypeError:
+        is_datetime = False   # some other extension dtype: keep the raw values
+    if is_datetime:
         series = series.astype("datetime64[ms]").astype("int64")
     return series.to_list()
 

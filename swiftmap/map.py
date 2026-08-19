@@ -560,10 +560,15 @@ class Map(anywidget.AnyWidget):
     @property
     def legend_html(self) -> str:
         """
-        Returns HTML listing the active layers, or "" when `show_legend` is False.
+        Returns a plain HTML listing of layer names with colour chips, or "" when
+        `show_legend` is False.
 
-        Not drawn on the map: place it in your own layout (a Shiny ui element, a notebook
-        display call). A built-in overlay is not implemented.
+        Legacy beside the real legend: the map now draws a full overlay itself --
+        derived entries, ramps and size keys from color_col/radius_col, and the
+        `legend_add`/`legend_remove` overrides -- switched on with `show_legend=True`
+        and configured through `configure_legend`. This property predates all of that
+        and renders none of it; it survives only for layouts that embed a simple
+        list outside the map. Expect it to be retired.
         """
         if not self.show_legend:
             return ""
