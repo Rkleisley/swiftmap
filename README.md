@@ -62,6 +62,8 @@ Three things worth noticing:
   (explicit `center=`/`zoom=` at construction, a `fit_bounds()` call, or panning the map
   in the browser), after which it is left alone. Frame something on demand any time with
   `m.fit_bounds(m.bounds_of("Sites"))`.
+- **Sizing:** `Map(height="500px")` fixes the widget's height, and assigning `m.height`
+  resizes a live map. Unset, it fills whatever container it is in.
 
 ## Quick start (Shiny)
 
@@ -99,8 +101,7 @@ def server(input, output, session):
         if input.status() == "All":
             m.select(None, scope="Points")
         else:
-            m.select(m.find_layers(group=f"Points/{input.status()}"),
-                     scope="Points")
+            m.select(group=f"Points/{input.status()}", scope="Points")
 
 app = App(app_ui, server)
 ```
@@ -215,9 +216,29 @@ binary buffers beside the coordinates, never as per-feature style dicts in the l
 JSON, so coloring five million points does not bloat the payload that every sidebar
 toggle and view attach has to carry.
 
-There is no built-in legend control yet — a map colored by `color_col` does not label its
-ramp on screen. `legend_html` returns simple markup for the active layers when
-`show_legend=True`, for placing in your own layout.
+The legend below picks all of this up automatically — the ramp, the bins, the
+categories, and a stated size row for `radius_col` (`size ∝ volume (10 – 500)`;
+stated, never drawn, because legend pixels are not map pixels at any zoom).
+
+## The legend
+
+One call puts a legend on the map, and it derives from the same layer state the map
+renders — glyphs per geometry, sections per sidebar folder, ramps/bins/categories
+straight from `color_col` — so there is nothing to fall out of step:
+
+```python
+m.configure_legend(show=True, title="Key", position="bottom-right")
+```
+
+`scope='all'` (default) lists every layer and dims the hidden ones — a legend is the
+map's vocabulary; `scope='visible'` tracks the screen instead, and `dim_hidden=False`
+gives the print-style static key. Eight anchor positions, shared with the time control.
+
+When derivation isn't what you want to say, `legend_add` writes your own rows — plain
+swatches, ramps, or category lists, optionally bound to a live layer's visibility
+(`layer=`) — and `legend_remove` is a persistent suppressor that keeps matching across
+every re-derivation. `configure_legend(auto=False)` hands the whole legend over to
+manual entries. Exports carry it all.
 
 ---
 
@@ -263,7 +284,8 @@ layer, and silence is the failure you would not notice.
 
 Layer clicks sync back to Python: `m.clicked_layer_id` and `m.selected_index` update
 reactively when a feature is clicked, with overlapping geometry resolved top-down
-(points over lines over polygons).
+(points over lines over polygons) — and `m.click_seq` bumps on every click, so handlers
+catch repeat clicks on the same feature by observing it.
 
 ---
 
@@ -335,6 +357,21 @@ in an `href` or `src` are additionally checked for a safe URL scheme.
 
 If you need raw HTML stored *inside* the data itself to render as markup, that is an explicit
 opt-in and should only be used with data you control.
+
+## Labels
+
+`label=` puts permanent text chips on features — a column name labels each feature from
+its own value, anything else is the literal text:
+
+```python
+m.add_circle_markers(sites, name="Sites", label="site")
+m.add_polygon(zones, name="zone_id", label="zone_id")
+```
+
+Every geometry takes one: points anchor at the point, lines at their middle vertex, areas
+at their centre. Label text is escaped like popup values, and on a time layer the chips
+appear and vanish with their features. Labels are DOM elements — built for sites and
+zones, not point clouds — so the point builders warn past a thousand.
 
 ---
 
