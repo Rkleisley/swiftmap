@@ -11,10 +11,16 @@ Maps are built but never displayed (no browser, no kernel); this proves the
 Python side end to end. Rendering is the manual verification session's job.
 """
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+
+# Some notebooks write files when run (the export steps). Executing in a scratch
+# directory keeps those artifacts out of the repo no matter where this is launched.
+os.chdir(tempfile.mkdtemp(prefix="swiftmap-examples-"))
 
 failed = False
 for nb_path in sorted(EXAMPLES.glob("*.ipynb")):
