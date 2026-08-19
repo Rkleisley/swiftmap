@@ -272,6 +272,38 @@ suite("an empty-map click reports where, and only when nothing else claimed it",
     });
 });
 
+suite("drawing a rectangle lands in the drawings trait", async () => {
+    // Geoman loads lazily from unpkg only when a map turns drawing on; the drawn
+    // shape must arrive in Python as a GeoJSON feature with draw_seq bumped.
+    await withPage(async (page, errors) => {
+        await page.evaluate(() => window.__model.set("show_draw", true));
+        await page.waitForSelector(".leaflet-pm-toolbar", { timeout: 20000 });
+
+        // Rectangle: arm the tool, click one corner, click the opposite one.
+        await page.click(".leaflet-pm-icon-rectangle");
+        const box = await page.locator(".leaflet-container").boundingBox();
+        await page.mouse.click(box.x + box.width * 0.30, box.y + box.height * 0.30);
+        await page.waitForTimeout(200);
+        await page.mouse.click(box.x + box.width * 0.55, box.y + box.height * 0.55);
+        await page.waitForTimeout(500);
+
+        const state = await page.evaluate(() => {
+            const drawings = window.__model.get("drawings") || [];
+            return {
+                count: drawings.length,
+                type: drawings[0] && drawings[0].geometry.type,
+                id: drawings[0] && drawings[0].properties.draw_id,
+                seq: window.__model.get("draw_seq"),
+            };
+        });
+        assert.equal(state.count, 1, "one drawing recorded");
+        assert.equal(state.type, "Polygon", "a rectangle arrives as a polygon feature");
+        assert.ok(state.id, "carrying its draw_id");
+        assert.ok(state.seq >= 1, "and draw_seq bumped for the one-observer pattern");
+        assert.deepEqual(errors, [], "no errors while drawing");
+    });
+});
+
 suite("the scale bar shows, reads nautical, and moves corners", async () => {
     await withPage(async (page, errors) => {
         const scaleText = () => page.evaluate(() => {

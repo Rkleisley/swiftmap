@@ -216,6 +216,13 @@ export default {
         loadCSS("leaflet-css", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
         await loadJS("leaflet-js", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js");
         await loadJS("leaflet-glify", "https://unpkg.com/leaflet.glify@3.3.0/dist/glify-browser.js");
+        // Geoman must load BEFORE the map is constructed: it attaches map.pm through
+        // a Leaflet init hook, which only runs for maps created after the plugin
+        // exists -- lazy-loading it later leaves map.pm undefined forever.
+        loadCSS("leaflet-geoman-css",
+            "https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.css");
+        await loadJS("leaflet-geoman",
+            "https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.min.js");
 
         const container = document.createElement("div");
         container.className = "swiftmap-container";
@@ -752,6 +759,108 @@ export default {
 
         let isUpdatingCenterFromMap = false;
         let isUpdatingZoomFromMap = false;
+
+        // Draw / AOI tools: Leaflet-Geoman (the maintained successor to Leaflet.draw,
+        // which breaks on Leaflet 1.9), loaded from unpkg like Leaflet and glify --
+        // lazily, only when a map turns drawing on, so every other map pays nothing.
+        // Drawn shapes live in their own feature group and sync to Python as GeoJSON
+        // features under the `drawings` trait, with `draw_seq` bumping per change so
+        // one observer catches create, edit and delete alike. The trait syncs both
+        // ways: Python can seed AOIs or clear them, and exports carry the drawings.
+        let drawReady = false;
+        let drawingsGroup = null;
+        let drawIdCounter = 0;
+        let suppressDrawingsEcho = false;
+
+        function drawingToFeature(l) {
+            const gj = l.toGeoJSON();
+            gj.properties = { ...(gj.properties || {}), draw_id: l._swiftmapDrawId };
+            if (typeof l.getRadius === "function" && l instanceof L.Circle) {
+                gj.properties.kind = "circle";
+                gj.properties.radius = l.getRadius();
+            }
+            return gj;
+        }
+
+        function writeDrawings() {
+            const features = [];
+            drawingsGroup.eachLayer(l => features.push(drawingToFeature(l)));
+            suppressDrawingsEcho = true;
+            try {
+                model.set("drawings", features);
+                model.set("draw_seq", (model.get("draw_seq") || 0) + 1);
+                model.save_changes();
+            } catch (err) { /* no live backend; the drawings still live on the map */ }
+            suppressDrawingsEcho = false;
+        }
+
+        function adoptDrawing(layer) {
+            if (!layer._swiftmapDrawId) {
+                layer._swiftmapDrawId = `draw_${++drawIdCounter}`;
+            }
+            drawingsGroup.addLayer(layer);
+            layer.on("pm:update pm:dragend pm:rotateend", writeDrawings);
+        }
+
+        function rehydrateDrawings() {
+            drawingsGroup.clearLayers();
+            for (const feature of model.get("drawings") || []) {
+                const props = feature.properties || {};
+                let layer;
+                if (props.kind === "circle" && feature.geometry.type === "Point") {
+                    const [lng, lat] = feature.geometry.coordinates;
+                    layer = L.circle([lat, lng], { radius: props.radius || 100 });
+                } else {
+                    layer = L.geoJSON(feature).getLayers()[0];
+                }
+                if (!layer) continue;
+                layer._swiftmapDrawId = props.draw_id || `draw_${++drawIdCounter}`;
+                adoptDrawing(layer);
+            }
+        }
+
+        function syncDraw() {
+            const show = model.get("show_draw");
+            const cfg = model.get("draw_config") || {};
+            if (show && !drawReady) {
+                drawReady = true;
+                drawingsGroup = L.featureGroup().addTo(map);
+                rehydrateDrawings();
+                map.on("pm:create", (e) => {
+                    adoptDrawing(e.layer);
+                    writeDrawings();
+                });
+                map.on("pm:remove", () => writeDrawings());
+                model.on("change:drawings", () => {
+                    if (!suppressDrawingsEcho) rehydrateDrawings();
+                });
+            }
+            if (!drawReady) return;
+            if (show) {
+                const tools = cfg.tools
+                    || ["marker", "polyline", "rectangle", "polygon", "circle"];
+                map.pm.addControls({
+                    position: (cfg.position || "top-left").replace("-", ""),
+                    drawMarker: tools.includes("marker"),
+                    drawPolyline: tools.includes("polyline"),
+                    drawRectangle: tools.includes("rectangle"),
+                    drawPolygon: tools.includes("polygon"),
+                    drawCircle: tools.includes("circle"),
+                    drawCircleMarker: false,
+                    drawText: false,
+                    rotateMode: false,
+                    cutPolygon: false,
+                    editMode: true,
+                    dragMode: true,
+                    removalMode: true,
+                });
+            } else {
+                map.pm.removeControls();
+            }
+        }
+        syncDraw();
+        model.on("change:show_draw", syncDraw);
+        model.on("change:draw_config", syncDraw);
 
         // The scale bar: Leaflet's own control, which measures through the map's CRS
         // (haversine under 3857 and 4326 alike -- no pixel math of ours), extended

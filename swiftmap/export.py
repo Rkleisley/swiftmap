@@ -95,6 +95,10 @@ def to_html(self, title: str = "SwiftMap") -> str:
         "show_click_coordinates": self.show_click_coordinates,
         "show_scale": self.show_scale,
         "scale_config": self.scale_config,
+        "show_draw": self.show_draw,
+        "draw_config": self.draw_config,
+        "drawings": self.drawings,
+        "draw_seq": 0,
         "height": self.height,
         "legend_config": self.legend_config,
         # The auto-fit union (or a pre-display fit_bounds call) rides along, so an

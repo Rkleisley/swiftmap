@@ -25,5 +25,12 @@ m.add_polygon(
 
 m.configure_legend(show=True, title="Demo Key")
 m.legend_add("Patrol boundary", shape="line", color="#ff0000", group="Zone Group")
+m.configure_scale(show=True, units="nautical", position="bottom-right")
+m.configure_draw(show=True)
+m.drawings = [{"type": "Feature", "properties": {"draw_id": "draw_1"},
+               "geometry": {"type": "Polygon",
+                            "coordinates": [[[-3.72, 40.02], [-3.68, 40.02],
+                                             [-3.68, 40.05], [-3.72, 40.05],
+                                             [-3.72, 40.02]]]}}]
 
 m.save(sys.argv[1] if len(sys.argv) > 1 else "swiftmap-demo.html")

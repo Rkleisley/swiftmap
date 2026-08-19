@@ -148,6 +148,16 @@ class Map(anywidget.AnyWidget):
     # The scale bar and its options (units/position/max_width); see configure_scale.
     show_scale = traitlets.Bool(False).tag(sync=True)
     scale_config = traitlets.Dict({}).tag(sync=True)
+    # Draw/AOI tools (Leaflet-Geoman) and everything drawn with them. `drawings` is
+    # a list of GeoJSON features that syncs BOTH ways -- the frontend writes every
+    # create/edit/delete, and Python may seed or clear it -- with `draw_seq` bumping
+    # per change so one observer catches them all. Circles carry
+    # properties.kind="circle" and properties.radius (metres) since GeoJSON has no
+    # circle geometry.
+    show_draw = traitlets.Bool(False).tag(sync=True)
+    draw_config = traitlets.Dict({}).tag(sync=True)
+    drawings = traitlets.List([]).tag(sync=True)
+    draw_seq = traitlets.Int(0).tag(sync=True)
     # Explicit widget height ('600px', '40vh'); empty means fill the parent with the
     # stylesheet's 400px floor. Applied by the frontend, which also drops the floor
     # for an explicit value.
@@ -392,6 +402,65 @@ class Map(anywidget.AnyWidget):
             },
             buffers=buffers,
         )
+        return self
+
+    _DRAW_TOOLS = frozenset({"marker", "polyline", "rectangle", "polygon", "circle"})
+    _DRAW_POSITIONS = frozenset({"top-left", "top-right",
+                                 "bottom-left", "bottom-right"})
+
+    def configure_draw(self, *, show: Optional[bool] = None,
+                       tools: Optional[List[str]] = None,
+                       position: Optional[str] = None) -> "Map":
+        """
+        Configures the draw/AOI toolbar. Only the options given change.
+
+        The toolbar draws markers, lines, rectangles, polygons and circles, with
+        vertex editing, dragging and deletion. Everything drawn lands in
+        `m.drawings` as GeoJSON features, and `draw_seq` bumps on every create,
+        edit and delete -- observe that one trait and read `m.drawings` in the
+        handler. Setting `m.drawings` from Python seeds shapes onto the map, and
+        `clear_drawings()` empties it.
+
+        Parameters
+        ----------
+        show : bool, optional
+            Convenience for setting `show_draw`.
+        tools : list of str, optional
+            Which draw tools to offer, from 'marker', 'polyline', 'rectangle',
+            'polygon', 'circle'. Default: all of them. Edit, drag and delete are
+            always available while the toolbar is shown.
+        position : str, optional
+            A corner: 'top-left' (default), 'top-right', 'bottom-left',
+            'bottom-right'.
+
+        Examples
+        --------
+        >>> m.configure_draw(show=True, tools=["rectangle", "polygon"])
+        >>> aoi = m.drawings[0]["geometry"]     # after the analyst draws one
+        """
+        cfg = dict(self.draw_config)
+        if tools is not None:
+            bad = [t for t in tools if t not in self._DRAW_TOOLS]
+            if bad:
+                warn(f"configure_draw: unknown tools {bad!r}; expected a subset of "
+                     f"{', '.join(sorted(self._DRAW_TOOLS))}. Ignored.")
+            else:
+                cfg["tools"] = list(tools)
+        if position is not None:
+            if position not in self._DRAW_POSITIONS:
+                warn(f"configure_draw: position must be a corner "
+                     f"({', '.join(sorted(self._DRAW_POSITIONS))}); got {position!r}. "
+                     f"Ignored.")
+            else:
+                cfg["position"] = position
+        self.draw_config = cfg
+        if show is not None:
+            self.show_draw = bool(show)
+        return self
+
+    def clear_drawings(self) -> "Map":
+        """Removes everything drawn with the AOI tools, here and on the map."""
+        self.drawings = []
         return self
 
     _SCALE_UNITS = frozenset({"metric", "imperial", "both", "nautical"})

@@ -35,12 +35,12 @@ def test_every_constructor_flag_round_trips_through_get_state():
     # difference from show_logo was the declaration line, so this pins the round
     # trip for each constructor flag.
     m = Map(center=[10.0, 20.0], zoom=7, show_legend=True, show_logo=False,
-            show_click_coordinates=True, height="500px", crs="EPSG:4326",
-            auto_sync=False)
+            show_click_coordinates=True, show_scale=True, height="500px",
+            crs="EPSG:4326", auto_sync=False)
     state = m.get_state()
     for name, value in [("center", [10.0, 20.0]), ("zoom", 7),
                         ("show_legend", True), ("show_logo", False),
-                        ("show_click_coordinates", True),
+                        ("show_click_coordinates", True), ("show_scale", True),
                         ("height", "500px"), ("crs", "EPSG:4326"),
                         ("auto_sync", False)]:
         assert name in state, f"{name} is not a synced trait -- the frontend never sees it"
@@ -531,3 +531,28 @@ def test_configure_scale_merges_and_validates():
     with pytest.warns(SwiftMapWarning, match="position must be a corner"):
         m.configure_scale(position="bottom-center")
     assert m.scale_config["units"] == "nautical", "bad values change nothing"
+
+
+def test_configure_draw_merges_and_validates():
+    m = Map()
+    m.configure_draw(show=True, tools=["rectangle", "polygon"], position="top-right")
+    assert m.show_draw is True
+    assert m.draw_config == {"tools": ["rectangle", "polygon"],
+                             "position": "top-right"}
+    with pytest.warns(SwiftMapWarning, match="unknown tools"):
+        m.configure_draw(tools=["freehand"])
+    with pytest.warns(SwiftMapWarning, match="position must be a corner"):
+        m.configure_draw(position="bottom-center")
+    assert m.draw_config["tools"] == ["rectangle", "polygon"]
+
+
+def test_drawings_seed_and_clear_from_python():
+    m = Map()
+    aoi = {"type": "Feature", "properties": {"draw_id": "draw_1"},
+           "geometry": {"type": "Polygon",
+                        "coordinates": [[[-5.3, 36.0], [-5.2, 36.0],
+                                         [-5.2, 36.1], [-5.3, 36.0]]]}}
+    m.drawings = [aoi]
+    assert m.drawings[0]["geometry"]["type"] == "Polygon"
+    m.clear_drawings()
+    assert m.drawings == []
