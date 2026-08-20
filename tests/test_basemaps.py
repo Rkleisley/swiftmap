@@ -93,6 +93,67 @@ def test_raw_url_template_passes_through():
     assert child["url"] == url
 
 
+def test_wms_registry_name_builds_a_wms_config():
+    m = Map()
+    m.add_basemap("USGS Imagery")
+    child = _find(m, "USGS Imagery")
+    assert child["url"].endswith("WmsServer")
+    assert "{z}" not in child["url"]
+    assert child["wms"]["layers"] == "0"
+    assert child["wms"]["format"] == "image/png"
+    assert child["attribution"]
+
+
+def test_wms_aliases_are_case_insensitive_and_display_canonically():
+    m = Map()
+    m.add_basemap("USGS IMAGERY WMS")
+    child = _find(m, "USGS Imagery")
+    assert child["wms"]["layers"] == "0"
+
+
+def test_wms_registry_extends_at_runtime():
+    # The other network pastes its own registry in after import; the flatten
+    # must see it.
+    from swiftmap.layers.basemap import WMS_PROVIDERS
+    WMS_PROVIDERS["test"] = {
+        "Office Elevation": {
+            "url": "https://internal.test/wmsserver",
+            "layers": "elev:dtm",
+            "name": "Office Elevation",
+            "attribution": "internal",
+            "aliases": ["dtm"],
+        },
+    }
+    try:
+        m = Map()
+        m.add_basemap("dtm")
+        child = _find(m, "Office Elevation")
+        assert child["wms"]["layers"] == "elev:dtm"
+    finally:
+        del WMS_PROVIDERS["test"]
+
+
+def test_url_with_wms_layers_is_a_wms_endpoint():
+    m = Map()
+    m.add_basemap("https://host.test/service/WmsServer", wms_layers="3,7",
+                  wms_transparent=True, attribution="svc")
+    child = _find(m, "https://host.test/service/WmsServer")
+    assert child["wms"] == {"layers": "3,7", "format": "image/png",
+                            "version": "1.1.1", "transparent": True}
+    assert child["attribution"] == "svc"
+
+
+def test_xyz_configs_carry_no_wms_block():
+    m = Map()
+    m.add_basemap("Esri.WorldImagery")
+    assert "wms" not in _find(m, "Esri.WorldImagery")
+
+
+def test_list_basemaps_includes_the_wms_registry():
+    m = Map()
+    assert "USGS Imagery" in m.list_basemaps("usgs")
+
+
 def test_list_basemaps_spans_presets_and_catalogue():
     m = Map()
     names = m.list_basemaps()

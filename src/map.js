@@ -576,6 +576,17 @@ export default {
             // xyzservices providers declare their own {s} hosts; Leaflet's
             // default "abc" is wrong for anything else.
             if (layer.subdomains) options.subdomains = layer.subdomains;
+            if (layer.wms) {
+                // WMS request CRS follows the map's, so 4326 maps ask in 4326.
+                return L.tileLayer.wms(layer.url, {
+                    ...options,
+                    layers: layer.wms.layers,
+                    format: layer.wms.format || 'image/png',
+                    version: layer.wms.version || '1.1.1',
+                    transparent: !!layer.wms.transparent,
+                    ...(layer.wms.styles ? { styles: layer.wms.styles } : {})
+                });
+            }
             return L.tileLayer(layer.url, options);
         }
 

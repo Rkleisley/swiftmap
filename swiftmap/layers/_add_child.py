@@ -58,8 +58,9 @@ _SUB_LAYER_ATTRS = (
     # anchors on merged polygons, bounds_of() over parts, select(zoom=True).
     "bounds",
     # Read by the frontend's tile-layer factory; basemaps only merge when placed
-    # in a non-Basemaps group, but losing it there would break provider tiles.
-    "subdomains",
+    # in a non-Basemaps group, but losing these there would break provider tiles
+    # (subdomains) or turn a WMS endpoint into a broken XYZ template (wms).
+    "subdomains", "wms",
 ) + DISPLAY_KEYS
 
 # Same set, plus the flags that are carried down but not stripped from the group.
