@@ -18,6 +18,7 @@ from .layers._style import (STYLE_KEYS, POINTS, LINES, AREAS, pop_style_options,
                             warn_on_undrawn_options, normalize as normalize_style)
 
 # Import layer methods
+from . import basemap_registry as _basemap_registry
 from .layers.basemap import add_basemap, list_basemaps
 from .layers.circle_markers import add_circle_markers
 from .layers.markers import add_markers
@@ -230,12 +231,12 @@ class Map(anywidget.AnyWidget):
         # Internal layer list counter
         self._layer_counter = 0
 
-        # Initialize default basemaps based on projection
-        if self.crs == "EPSG:4326":
-            self.add_basemap("Esri WGS84", layer_group="Basemaps", group_multi_select=False, visible=True)
-        else:
-            self.add_basemap("Open Street Map", layer_group="Basemaps", group_multi_select=False, visible=True)
-            self.add_basemap("Dark Matter", layer_group="Basemaps", group_multi_select=False, visible=False)
+        # Default basemaps come from the network's registry file, per CRS --
+        # the other network defaults a bare Map() to its own services.
+        defaults = _basemap_registry.DEFAULT_BASEMAPS
+        for bm_name, bm_visible in defaults.get(self.crs, defaults.get("EPSG:3857", [])):
+            self.add_basemap(bm_name, layer_group="Basemaps",
+                             group_multi_select=False, visible=bm_visible)
 
     # ------------------------------------------------------------------
     # Patch transport

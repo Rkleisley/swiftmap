@@ -1,7 +1,10 @@
-"""add_basemap name resolution: presets, the xyzservices catalogue, raw URLs."""
+"""add_basemap name resolution: presets, the xyzservices catalogue, raw URLs,
+and the network registry file that owns all of it."""
+import json
+
 import pytest
 
-from swiftmap import Map
+from swiftmap import Map, basemap_registry
 from swiftmap._warnings import SwiftMapWarning
 
 
@@ -152,6 +155,48 @@ def test_xyz_configs_carry_no_wms_block():
 def test_list_basemaps_includes_the_wms_registry():
     m = Map()
     assert "USGS Imagery" in m.list_basemaps("usgs")
+
+
+def test_constructor_defaults_come_from_the_registry(monkeypatch):
+    # The other network's registry file defaults a bare Map() to its own
+    # services -- a WMS entry here proves any name form works as a default.
+    monkeypatch.setitem(basemap_registry.DEFAULT_BASEMAPS, "EPSG:3857",
+                        [("USGS Imagery", True)])
+    m = Map()
+    child = _find(m, "USGS Imagery")
+    assert child["visible"] is True
+    assert child["wms"]["layers"] == "0"
+
+
+_OFFICE_CATALOGUE = {
+    "Office": {"Ortho": {"url": "https://tiles.internal/{z}/{x}/{y}.png",
+                         "attribution": "internal", "max_zoom": 18}}}
+
+
+def test_xyz_catalogue_swaps_through_the_registry(monkeypatch):
+    monkeypatch.setattr(basemap_registry, "XYZ_PROVIDERS", _OFFICE_CATALOGUE)
+    monkeypatch.setitem(basemap_registry.DEFAULT_BASEMAPS, "EPSG:3857", [])
+    m = Map()
+    m.add_basemap("Office.Ortho")
+    child = _find(m, "Office.Ortho")
+    assert child["url"] == "https://tiles.internal/{z}/{x}/{y}.png"
+    assert child["max_native_zoom"] == 18
+    # The public catalogue is out of play entirely.
+    with pytest.warns(SwiftMapWarning, match="no basemap named"):
+        m.add_basemap("CartoDB.DarkMatter")
+    names = m.list_basemaps()
+    assert "Office.Ortho" in names
+    assert "CartoDB.DarkMatter" not in names
+
+
+def test_xyz_catalogue_loads_from_a_json_file(tmp_path, monkeypatch):
+    path = tmp_path / "providers.json"
+    path.write_text(json.dumps(_OFFICE_CATALOGUE), encoding="utf-8")
+    monkeypatch.setattr(basemap_registry, "XYZ_PROVIDERS", str(path))
+    monkeypatch.setitem(basemap_registry.DEFAULT_BASEMAPS, "EPSG:3857", [])
+    m = Map()
+    m.add_basemap("office ortho")   # tolerant lookup works on a custom catalogue
+    assert _find(m, "office ortho")["url"].startswith("https://tiles.internal")
 
 
 def test_list_basemaps_spans_presets_and_catalogue():

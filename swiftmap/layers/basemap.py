@@ -1,46 +1,19 @@
+import json
+from pathlib import Path
 from typing import List, Optional
 
 import xyzservices
 
+# All network-specific basemap data -- presets, alias spellings, WMS services,
+# the xyz catalogue choice, constructor defaults -- lives in the registry
+# module, the ONE file a network swaps or patches. This module is pure
+# resolution logic over it: every lookup reads the registry's CURRENT
+# attributes, so reassigning a dictionary wholesale is seen, not just
+# mutating one. The names below are re-exported for direct imports.
+from .. import basemap_registry as _registry
+from ..basemap_registry import ALIASES, BASEMAPS, WMS_PROVIDERS
 from ._batching import batched
 from .._warnings import warn
-
-# The one basemap the catalogue cannot supply: Esri World Imagery tiled for
-# EPSG:4326. Every xyzservices template is web-mercator XYZ, and the 4326 map
-# default needs the WGS84 tiling scheme.
-BASEMAPS = {
-    "Esri WGS84": {
-        "url": "https://wi.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        "attribution": "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
-        "max_zoom": 15,
-        "max_native_zoom": 15
-    }
-}
-
-# WMS services callable by name, mirroring StructMap's WmsProviders structure
-# (category -> name -> entry) so a network's registry pastes straight in --
-# xyz is the primary source on this network, WMS on the other, and both work
-# everywhere. Extend at runtime: WMS_PROVIDERS["cat"]["Name"] = {...}.
-# Entry keys: url (the WMS endpoint, no {z}/{x}/{y}), layers, name, attribution,
-# aliases; optional format, version, transparent, styles, max_zoom.
-WMS_PROVIDERS = {
-    "usgs": {
-        "USGS Imagery": {
-            "url": "https://basemap.nationalmap.gov/arcgis/services/USGSImageryOnly/MapServer/WmsServer",
-            "layers": "0",
-            "name": "USGS Imagery",
-            "attribution": "USGS The National Map",
-            "aliases": ["usgs imagery wms"],
-        },
-        "USGS Topo": {
-            "url": "https://basemap.nationalmap.gov/arcgis/services/USGSTopo/MapServer/WmsServer",
-            "layers": "0",
-            "name": "USGS Topo",
-            "attribution": "USGS The National Map",
-            "aliases": ["usgs topo wms"],
-        },
-    },
-}
 
 
 def _flatten_wms() -> dict:
@@ -48,7 +21,7 @@ def _flatten_wms() -> dict:
     WMS_PROVIDERS is meant to be extended at runtime, and an import-time
     flatten would freeze out anything registered after import."""
     flat = {}
-    for category in WMS_PROVIDERS.values():
+    for category in _registry.WMS_PROVIDERS.values():
         for key, entry in category.items():
             flat[key.lower()] = entry
             for alias in entry.get("aliases", []):
@@ -56,18 +29,46 @@ def _flatten_wms() -> dict:
     return flat
 
 
-# Historical preset spellings, forwarded into the catalogue. Names only -- the
-# tile definitions live in xyzservices, and query_name would miss these forms
-# ("Dark Matter" does not normalise to "cartodbdarkmatter").
-_ALIASES = {
-    "OpenStreetMap": "OpenStreetMap.Mapnik",
-    "Open Street Map": "OpenStreetMap.Mapnik",
-    "Dark Matter": "CartoDB.DarkMatter",
-    "DarkMatter": "CartoDB.DarkMatter",
-    "CartoDB dark_matter": "CartoDB.DarkMatter",
-    "Positron": "CartoDB.Positron",
-    "CartoDB positron": "CartoDB.Positron",
-}
+def _build_bunch(data: dict, prefix: str = "") -> "xyzservices.Bunch":
+    """A nested dict of providers -> a real xyzservices Bunch, so a custom
+    catalogue answers query_name/flatten/build_url exactly like the bundled
+    one. A dict with a "url" is a provider; anything else nests. "name"
+    defaults to the dotted path, the catalogue's own convention."""
+    out = {}
+    for key, value in data.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, dict) and "url" in value:
+            provider = dict(value)
+            provider.setdefault("name", path)
+            out[key] = xyzservices.TileProvider(provider)
+        elif isinstance(value, dict):
+            out[key] = _build_bunch(value, prefix=f"{path}.")
+        else:
+            out[key] = value
+    return xyzservices.Bunch(out)
+
+
+_xyz_cache = (None, None)   # (registry source object, built Bunch)
+
+
+def _xyz_catalogue() -> "xyzservices.Bunch":
+    """The catalogue name resolution runs against: the xyzservices bundled one
+    when the registry says None, otherwise the registry's own -- a nested dict
+    or a providers JSON path -- built once and cached until the registry
+    attribute is REASSIGNED (assign a new value to refresh, per its doc)."""
+    global _xyz_cache
+    src = _registry.XYZ_PROVIDERS
+    if src is None:
+        return xyzservices.providers
+    if _xyz_cache[0] is src:
+        return _xyz_cache[1]
+    if isinstance(src, (str, Path)):
+        data = json.loads(Path(src).read_text(encoding="utf-8"))
+    else:
+        data = src
+    built = _build_bunch(data)
+    _xyz_cache = (src, built)
+    return built
 
 @batched
 def add_basemap(
@@ -123,7 +124,7 @@ def add_basemap(
     """
     subdomains = None
     wms = None
-    info = BASEMAPS.get(name)
+    info = _registry.BASEMAPS.get(name)
     wms_entry = None if info else _flatten_wms().get(name.lower())
     if info:
         url = info["url"]
@@ -160,7 +161,7 @@ def add_basemap(
         # deliberately tolerant -- "CartoDB.DarkMatter", "CartoDB DarkMatter" and
         # "cartodb darkmatter" all resolve.
         try:
-            provider = xyzservices.providers.query_name(_ALIASES.get(name, name))
+            provider = _xyz_catalogue().query_name(_registry.ALIASES.get(name, name))
         except ValueError:
             # It used to silently substitute OpenStreetMap here -- asked for X,
             # quietly shown Y, the radius disease with tiles. Say so instead.
@@ -227,8 +228,9 @@ def list_basemaps(self, search: Optional[str] = None) -> List[str]:
     >>> m.list_basemaps("esri")[:3]
     ['Esri.AntarcticBasemap', 'Esri.AntarcticImagery', 'Esri.ArcticImagery']
     """
-    names = set(BASEMAPS) | set(_ALIASES) | set(xyzservices.providers.flatten())
-    for category in WMS_PROVIDERS.values():
+    names = (set(_registry.BASEMAPS) | set(_registry.ALIASES)
+             | set(_xyz_catalogue().flatten()))
+    for category in _registry.WMS_PROVIDERS.values():
         names |= set(category)
     if search:
         needle = search.lower()
