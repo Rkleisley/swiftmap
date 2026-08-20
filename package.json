@@ -1,6 +1,6 @@
 {
   "name": "swiftmap-core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "High-performance Leaflet + WebGL map rendering core, usable standalone or via the swiftmap Python widget",
   "license": "MIT",
   "type": "module",
