@@ -26,9 +26,10 @@ Not yet on PyPI; install from a checkout:
 pip install -e .
 ```
 
-Only `anywidget` and `numpy` are required. Pandas, Polars, GeoPandas, and geostructures
-are all supported as data sources but none is a dependency — swiftmap parses whatever you
-have installed. The bundled JavaScript ships with the package, so installing never
+Required: `anywidget`, `numpy`, and `xyzservices` (the tile-provider catalogue behind
+name-callable basemaps — pure metadata, no compiled bits). Pandas, Polars, GeoPandas,
+and geostructures are all supported as data sources but none is a dependency — swiftmap
+parses whatever you have installed. The bundled JavaScript ships with the package, so installing never
 requires Node.
 
 ---
@@ -126,7 +127,7 @@ rejects the map argument at decoration time).
 | `add_polygon` (+ `add_polygons`, `add_shape`, `add_shapes`) | Polygons | Interior holes and MultiPolygons render correctly; one MultiPolygon is one layer |
 | `add_circle` | Geodesic circle | Center plus `radius` in **meters** — note the unit difference from circle markers |
 | `add_collection` (aliases `add_geojson`, `add_geostructures`) | Every kind in a mixed dataset | One layer per geometry kind, merged under a single sidebar entry; points render as circle markers unless `point_type="markers"` |
-| `add_basemap` | Tile layer | Presets (`"OpenStreetMap"`, `"Dark Matter"`, `"Positron"`, `"Esri WGS84"`) or any `{z}/{x}/{y}` URL template |
+| `add_basemap` | Tile layer | Any xyzservices catalogue name (~880 providers), a WMS registry name or raw WMS endpoint, or a raw `{z}/{x}/{y}` template — see [Basemaps](#basemaps) |
 
 Every `add_*` method accepts the same range of inputs:
 
@@ -145,6 +146,29 @@ A method that cannot read what you passed **warns and adds nothing** rather than
 a map is built by a chain of `add_*` calls, and an exception partway through would discard
 the layers already added. Rows with missing coordinates are dropped and counted in a
 warning rather than failing the layer.
+
+## Basemaps
+
+`add_basemap` resolves, in order: a preset, a WMS registry name, a raw URL, then the
+xyzservices catalogue — ~880 providers, with tolerant lookup (`"CartoDB.DarkMatter"`,
+`"CartoDB DarkMatter"`, and `"cartodb darkmatter"` all land):
+
+```python
+m.add_basemap("Esri.WorldImagery", visible=True)   # catalogue name
+m.add_basemap("USGS Imagery")                      # WMS, from the registry
+m.add_basemap("https://server/wms", wms_layers="0")        # raw WMS endpoint
+m.add_basemap("https://{s}.tile.../{z}/{x}/{y}.png")       # raw XYZ template
+```
+
+`m.list_basemaps("dark")` searches every accepted name. An unknown name **warns and
+adds nothing** — you never silently get OpenStreetMap when you asked for something
+else — and a provider that needs an API key warns by the exact keyword it expects
+(`accessToken=`, `apiKey=`, ...). WMS requests follow the map's CRS, so an EPSG:4326
+map asks in 4326.
+
+Deploying on a network with its own tile and WMS infrastructure — different
+services, a different catalogue, different defaults — is one swappable module:
+see [DEPLOYING.md](DEPLOYING.md).
 
 ---
 
@@ -240,6 +264,19 @@ swatches, ramps, or category lists, optionally bound to a live layer's visibilit
 every re-derivation. `configure_legend(auto=False)` hands the whole legend over to
 manual entries. Exports carry it all.
 
+## Scale bar
+
+Off by default, one call away, with the unit maritime work runs on alongside the
+usual ones:
+
+```python
+m.show_scale = True
+m.configure_scale(units="nautical")     # metric (default) | imperial | both | nautical
+```
+
+It measures through the map's CRS — Leaflet's own control underneath, so there is no
+pixel math of swiftmap's to get wrong — and exports carry it.
+
 ---
 
 ## The sidebar: hierarchy from your data
@@ -282,10 +319,31 @@ layer's styling, so clearing them restores what was underneath with nothing reme
 A call that matches nothing **warns** — a mistyped name looks identical to a hidden
 layer, and silence is the failure you would not notice.
 
-Layer clicks sync back to Python: `m.clicked_layer_id` and `m.selected_index` update
-reactively when a feature is clicked, with overlapping geometry resolved top-down
-(points over lines over polygons) — and `m.click_seq` bumps on every click, so handlers
-catch repeat clicks on the same feature by observing it.
+Clicks sync back to Python — on features and on open map alike. A feature click sets
+`m.clicked_layer_id` and `m.selected_index` (overlaps resolved top-down: points over
+lines over polygons); a click on open map clears them and reports `m.clicked_latlng`
+as `[lat, lon]`. Feature clicks record their location too — a point reports its own
+coordinates, not the mouse's. `m.click_seq` bumps on every click, so one observer
+reads "where" and "on what" from a single event.
+
+## Drawing & AOIs
+
+`configure_draw(show=True)` puts a draw toolbar on the map — markers, lines,
+rectangles, polygons and circles, with vertex editing, dragging and deletion.
+Everything drawn lands in `m.drawings` as GeoJSON features (a circle carries
+`properties.kind` and its radius, since GeoJSON has no circle), and `m.draw_seq`
+bumps on every create, edit and delete — observe that one trait and read
+`m.drawings` in the handler, the same pattern clicks use:
+
+```python
+m.configure_draw(show=True, tools=["rectangle", "polygon"])
+aoi = m.drawings[0]["geometry"]          # after the analyst draws one
+```
+
+The trait syncs both ways: setting `m.drawings` from Python seeds AOIs onto the map,
+`clear_drawings()` empties it, and exports carry the drawings and the toolbar with
+them. The drawing engine (Leaflet-Geoman) loads from unpkg at view time, the same
+way Leaflet and glify do.
 
 ---
 

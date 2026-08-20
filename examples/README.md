@@ -18,6 +18,7 @@ alone for anyone arriving with a task.
 | [09_showcase](09_showcase.ipynb) | The capstone: sensors, marching tracks, lapsing dwells, labels, legend, a selection moment, shipped as one file | everything above, together |
 | [10_ipywidgets](10_ipywidgets.ipynb) | Notebook-native reactivity: `observe`, `interact`, map traits driving widgets, layout, sizing — plus an honest findings section | `observe`, `batch`, `click_seq`, `time_current`, `height` |
 | [11_legend](11_legend.ipynb) | The auto-derived legend: ramps/bins/categories/size rows, scope and dimming, manual entries, persistent suppression, full takeover | `configure_legend`, `legend_add`, `legend_remove`, `legend_clear` |
+| [12_draw_aoi](12_draw_aoi.ipynb) | The draw toolbar: shapes coming back as GeoJSON, seeding AOIs from Python, filtering data against them | `configure_draw`, `drawings`, `draw_seq`, `clear_drawings` |
 
 ## Shiny apps
 
@@ -27,6 +28,7 @@ Apps cannot be notebooks; these run with `shiny run <file>` from `shiny/`:
 | --- | --- |
 | [shiny/01_basic_app.py](shiny/01_basic_app.py) | The build-once rule, `map_effect`, and a select-driven filter |
 | [shiny/02_linked_table.py](shiny/02_linked_table.py) | Table ↔ map both ways: row selection drives `select()`, clicks report back via `clicked_layer_id` |
+| [shiny/03_draw_filter.py](shiny/03_draw_filter.py) | Draw an AOI, filter the data: `draw_seq` + `drawings` feeding a table, a count, and a map spotlight |
 
 ## Conventions
 
