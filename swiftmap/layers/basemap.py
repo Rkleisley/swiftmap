@@ -5,61 +5,29 @@ import xyzservices
 from ._batching import batched
 from .._warnings import warn
 
+# The one basemap the catalogue cannot supply: Esri World Imagery tiled for
+# EPSG:4326. Every xyzservices template is web-mercator XYZ, and the 4326 map
+# default needs the WGS84 tiling scheme.
 BASEMAPS = {
-    "OpenStreetMap": {
-        "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "attribution": '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        "max_zoom": 22,
-        "max_native_zoom": 19
-    },
-    "Open Street Map": {
-        "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "attribution": '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        "max_zoom": 22,
-        "max_native_zoom": 19
-    },
-    "Dark Matter": {
-        "url": "https://{s}.basemap.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        "attribution": '&copy; <a href="https://carto.com/attributions">CARTO</a>',
-        "max_zoom": 22,
-        "max_native_zoom": 20
-    },
-    "CartoDB dark_matter": {
-        "url": "https://{s}.basemap.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        "attribution": '&copy; <a href="https://carto.com/attributions">CARTO</a>',
-        "max_zoom": 22,
-        "max_native_zoom": 20
-    },
-    "DarkMatter": {
-        "url": "https://{s}.basemap.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        "attribution": '&copy; <a href="https://carto.com/attributions">CARTO</a>',
-        "max_zoom": 22,
-        "max_native_zoom": 20
-    },
-    "CartoDB positron": {
-        "url": "https://{s}.basemap.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        "attribution": '&copy; <a href="https://carto.com/attributions">CARTO</a>',
-        "max_zoom": 22,
-        "max_native_zoom": 20
-    },
-    "Positron": {
-        "url": "https://{s}.basemap.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        "attribution": '&copy; <a href="https://carto.com/attributions">CARTO</a>',
-        "max_zoom": 22,
-        "max_native_zoom": 20
-    },
-    "CartoDB.Positron": {
-        "url": "https://{s}.basemap.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        "attribution": '&copy; <a href="https://carto.com/attributions">CARTO</a>',
-        "max_zoom": 22,
-        "max_native_zoom": 20
-    },
     "Esri WGS84": {
         "url": "https://wi.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         "attribution": "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
         "max_zoom": 15,
         "max_native_zoom": 15
     }
+}
+
+# Historical preset spellings, forwarded into the catalogue. Names only -- the
+# tile definitions live in xyzservices, and query_name would miss these forms
+# ("Dark Matter" does not normalise to "cartodbdarkmatter").
+_ALIASES = {
+    "OpenStreetMap": "OpenStreetMap.Mapnik",
+    "Open Street Map": "OpenStreetMap.Mapnik",
+    "Dark Matter": "CartoDB.DarkMatter",
+    "DarkMatter": "CartoDB.DarkMatter",
+    "CartoDB dark_matter": "CartoDB.DarkMatter",
+    "Positron": "CartoDB.Positron",
+    "CartoDB positron": "CartoDB.Positron",
 }
 
 @batched
@@ -77,11 +45,12 @@ def add_basemap(
     Parameters
     ----------
     name : str
-        Preset basemap name ('OpenStreetMap', 'Dark Matter', 'Positron', 'Esri WGS84'),
-        any provider from the xyzservices catalogue ('CartoDB.DarkMatter',
+        Any provider from the xyzservices catalogue ('CartoDB.DarkMatter',
         'Esri.WorldImagery', 'OpenTopoMap', ... -- `m.list_basemaps("dark")` to
-        search it), or a custom tile URL template
-        (e.g. 'https://{s}.tile.../{z}/{x}/{y}.png').
+        search it), a custom tile URL template
+        (e.g. 'https://{s}.tile.../{z}/{x}/{y}.png'), or 'Esri WGS84' for the
+        EPSG:4326 imagery default. Historical spellings ('Dark Matter',
+        'Positron', 'Open Street Map') forward to their catalogue providers.
     layer_group : str, default 'Basemaps'
         Folder name in sidebar controls.
     group_multi_select : bool, optional
@@ -123,7 +92,7 @@ def add_basemap(
         # deliberately tolerant -- "CartoDB.DarkMatter", "CartoDB DarkMatter" and
         # "cartodb darkmatter" all resolve.
         try:
-            provider = xyzservices.providers.query_name(name)
+            provider = xyzservices.providers.query_name(_ALIASES.get(name, name))
         except ValueError:
             # It used to silently substitute OpenStreetMap here -- asked for X,
             # quietly shown Y, the radius disease with tiles. Say so instead.
@@ -187,7 +156,7 @@ def list_basemaps(self, search: Optional[str] = None) -> List[str]:
     >>> m.list_basemaps("esri")[:3]
     ['Esri.AntarcticBasemap', 'Esri.AntarcticImagery', 'Esri.ArcticImagery']
     """
-    names = set(BASEMAPS) | set(xyzservices.providers.flatten())
+    names = set(BASEMAPS) | set(_ALIASES) | set(xyzservices.providers.flatten())
     if search:
         needle = search.lower()
         names = {n for n in names if needle in n.lower()}

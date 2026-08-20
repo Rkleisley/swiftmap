@@ -13,12 +13,25 @@ def _find(m, name):
     return next(l for l in _basemaps(m) if l.get("name") == name)
 
 
-def test_preset_names_resolve_as_before():
+def test_historical_spellings_forward_to_the_catalogue():
+    # The old preset dict is gone; its spellings must still land, now on
+    # catalogue-supplied definitions.
     m = Map()
     m.add_basemap("Positron")
     child = _find(m, "Positron")
     assert "light_all" in child["url"]
     assert child["max_native_zoom"] == 20
+    m.add_basemap("Dark Matter")
+    assert "dark_all" in _find(m, "Dark Matter")["url"]
+
+
+def test_esri_wgs84_stays_hand_defined():
+    # The catalogue is web-mercator only; the 4326 imagery default cannot
+    # come from it.
+    m = Map(crs="EPSG:4326")
+    child = _find(m, "Esri WGS84")
+    assert "wi.maptiles.arcgis.com" in child["url"]
+    assert child["max_native_zoom"] == 15
 
 
 def test_xyzservices_provider_by_name():
