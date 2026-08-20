@@ -172,6 +172,25 @@ see [DEPLOYING.md](DEPLOYING.md).
 
 ---
 
+## Imagery
+
+A georeferenced raster — a GeoTIFF, a COG, anything GDAL reads — drops onto the map
+as an overlay. The raster is reprojected into the map's CRS, so any source
+projection lands where it belongs, and nodata pixels come out transparent:
+
+```python
+m.add_imagery("scene.tif", opacity=0.8)                          # RGB as-is
+m.add_imagery("elevation.tif", colormap="turbo", vmin=0, vmax=1500)
+```
+
+Single-band rasters colour through the same colormaps `color_col` uses; RGB(A)
+rasters keep their own pixels. Large rasters are downsampled to `max_size=2048` on
+the longest edge on the way in. The overlay behaves like any layer — sidebar
+toggle, groups, `opacity`, static export — and sits above the basemap, below your
+vectors. Requires `rasterio` (`pip install rasterio`), an optional dependency.
+
+---
+
 ## Styling
 
 Every `add_*` method takes the same styling vocabulary as keyword arguments — `color`,

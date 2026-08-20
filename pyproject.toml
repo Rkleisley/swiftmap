@@ -30,6 +30,11 @@ dev = [
     "black",
     "isort",
 ]
+# add_imagery's raster engine (warp to the map CRS, band reads, nodata masks).
+# Optional so the core carries no GDAL; only imagery ingest needs it.
+imagery = [
+    "rasterio",
+]
 
 # The parser suite covers every supported data source, so running it in full needs
 # them all installed. They stay optional at runtime: each test module skips itself
