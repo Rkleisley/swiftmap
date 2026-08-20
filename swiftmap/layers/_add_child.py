@@ -57,6 +57,9 @@ _SUB_LAYER_ATTRS = (
     # everything that anchors or zooms from a collection part's own box: label
     # anchors on merged polygons, bounds_of() over parts, select(zoom=True).
     "bounds",
+    # Read by the frontend's tile-layer factory; basemaps only merge when placed
+    # in a non-Basemaps group, but losing it there would break provider tiles.
+    "subdomains",
 ) + DISPLAY_KEYS
 
 # Same set, plus the flags that are carried down but not stripped from the group.

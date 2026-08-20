@@ -18,7 +18,7 @@ from .layers._style import (STYLE_KEYS, POINTS, LINES, AREAS, pop_style_options,
                             warn_on_undrawn_options, normalize as normalize_style)
 
 # Import layer methods
-from .layers.basemap import add_basemap
+from .layers.basemap import add_basemap, list_basemaps
 from .layers.circle_markers import add_circle_markers
 from .layers.markers import add_markers
 from .layers.polyline import add_line, add_polyline
@@ -98,6 +98,7 @@ class Map(anywidget.AnyWidget):
 
     # Assign helper methods
     add_basemap = add_basemap
+    list_basemaps = list_basemaps
     add_circle_markers = add_circle_markers
     add_markers = add_markers
     add_line = add_line

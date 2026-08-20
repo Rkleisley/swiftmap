@@ -15,6 +15,10 @@ dependencies = [
     # a direct requirement.
     "traitlets",
     "numpy",
+    # The tile-provider catalogue behind name-callable basemaps
+    # ("CartoDB.DarkMatter", "Esri.WorldImagery", ...). Pure metadata, no
+    # compiled bits, so it rides along everywhere the widget does.
+    "xyzservices",
 ]
 
 [project.urls]

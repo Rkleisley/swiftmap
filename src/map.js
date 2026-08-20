@@ -568,11 +568,15 @@ export default {
 
 
         function getTileLayer(layer) {
-            return L.tileLayer(layer.url, {
+            const options = {
                 attribution: layer.attribution || '',
                 maxZoom: layer.max_zoom || 22,
                 maxNativeZoom: layer.max_native_zoom || 19
-            });
+            };
+            // xyzservices providers declare their own {s} hosts; Leaflet's
+            // default "abc" is wrong for anything else.
+            if (layer.subdomains) options.subdomains = layer.subdomains;
+            return L.tileLayer(layer.url, options);
         }
 
         async function syncMapState() {
