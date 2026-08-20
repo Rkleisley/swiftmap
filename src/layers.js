@@ -83,7 +83,52 @@ export function getIndexedProperties(properties, index) {
 
 
 
+// An imagery overlay's identity: everything the rendered element derives from its
+// config. The sync loop recreates the overlay when this changes (or when the
+// binary buffer object under the layer id is replaced), since a DOM image is a
+// single cheap node -- no incremental update machinery needed.
+export function imageMetaKey(layer) {
+    return JSON.stringify([layer.url || null, layer.bounds,
+                           layer.opacity ?? 1, layer.image_format || null]);
+}
+
+// Georeferenced pixels pinned to a lat/lon box. The config is pure data --
+// {type: "image", bounds, opacity, url | bytes under the layer id} -- so a
+// plain-JS consumer passes a URL and the widget path ships bytes over the
+// binary buffer transport. Python has already warped the raster into the MAP's
+// own CRS grid (rasterio side), which is what makes Leaflet's linear corner
+// stretch exactly correct; this stays a dumb renderer.
+function renderImageLayer(map, layer, coordBuffer) {
+    if (!layer.bounds) return null;
+    let url = layer.url;
+    let objectUrl = null;
+    if (!url && coordBuffer) {
+        const blob = new Blob([coordBuffer],
+            { type: layer.image_format || "image/png" });
+        objectUrl = url = URL.createObjectURL(blob);
+    }
+    if (!url) return null;
+    const overlay = L.imageOverlay(url, layer.bounds, {
+        opacity: layer.opacity ?? 1,
+        // Context, not a click target: clicks fall through to features and the
+        // empty-map coordinate fallback. The default overlayPane (z 400)
+        // already sits above tiles (200) and below the GL panes (410+).
+        interactive: false,
+    });
+    if (objectUrl) {
+        overlay.on("remove", () => URL.revokeObjectURL(objectUrl));
+    }
+    overlay.addTo(map);
+    overlay.layerType = layer.type;
+    overlay.imageMeta = imageMetaKey(layer);
+    overlay.imageSource = coordBuffer || null;
+    return overlay;
+}
+
 export async function renderLayer(map, layer, coordBuffer, model) {
+    if (layer.type === "image") {
+        return renderImageLayer(map, layer, coordBuffer);
+    }
     if (layer.type === "group") {
         const group = L.layerGroup();
         const coordinateBuffers = model.get("coordinate_buffers") || {};

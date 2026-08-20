@@ -2,7 +2,7 @@ import { loadCSS, loadJS } from "./utils.js";
 import { renderSidebarControls, normalizeRadioLayers, sendLayerWrite } from "./sidebar.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
-import { renderLayer, renderMergedGlLayer, registerClickMatch } from "./layers.js";
+import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
          collectDurationsMs, POSITIONS, timesFor, windowFor, featureInWindow,
@@ -667,7 +667,14 @@ export default {
 
                 if (activeOverlayLayers[layer.id]) {
                     const existing = activeOverlayLayers[layer.id];
-                    if (existing.layerType !== layer.type) {
+                    // Image overlays recreate when their config or their buffer
+                    // changes -- a replace op swaps the config object and a
+                    // buffer op swaps the DataView, and a stale image would
+                    // otherwise sit until a visibility bounce.
+                    const staleImage = layer.type === "image"
+                        && (existing.imageMeta !== imageMetaKey(layer)
+                            || existing.imageSource !== (coordinateBuffers[layer.id] || null));
+                    if (existing.layerType !== layer.type || staleImage) {
                         existing.remove();
                         delete activeOverlayLayers[layer.id];
                     } else {

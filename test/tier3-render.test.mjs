@@ -858,6 +858,55 @@ suite("a multipolygon fills both parts and area clicks are exact", async () => {
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });
 
+suite("imagery renders from a URL and from the binary transport", async () => {
+    // The image layer type is pure data -- {type:"image", bounds, opacity,
+    // url | bytes under the layer id} -- so a plain-JS consumer needs only a
+    // URL while the widget path ships bytes as a coordinate buffer. Leaflet's
+    // imageOverlay does the drawing; the sync loop owns visibility and
+    // recreates the overlay when config or buffer change.
+    await withPage(async (page, errors) => {
+        await page.waitForFunction(() => {
+            const imgs = [...document.querySelectorAll("img.leaflet-image-layer")];
+            return imgs.length === 2 && imgs.every(i => i.complete && i.naturalWidth > 0);
+        }, null, { timeout: 15000 });
+        const info = await page.evaluate(() =>
+            [...document.querySelectorAll("img.leaflet-image-layer")].map(i => ({
+                scheme: i.src.split(":")[0], opacity: i.style.opacity })));
+        assert.ok(info.some(i => i.scheme === "data"), "the URL path renders");
+        assert.ok(info.some(i => i.scheme === "blob"), "the buffer path renders");
+
+        const mapArea = { x: 40, y: 40, width: 560, height: 520 };
+        const shot = () => page.screenshot({ clip: mapArea });
+        const setLayer = (id, patch) => page.evaluate(([i, p]) => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === i ? { ...l, ...p } : l));
+        }, [id, patch]).then(() => page.waitForTimeout(900));
+
+        // Pixels paint, and the overlay behaves like any layer on toggle.
+        const both = await shot();
+        await setLayer("imgbuf", { visible: false });
+        const one = await shot();
+        assert.notEqual(Buffer.compare(both, one), 0,
+            "the buffer image draws pixels of its own");
+        assert.equal(await page.evaluate(() =>
+            document.querySelectorAll("img.leaflet-image-layer").length), 1,
+            "a hidden overlay leaves the DOM");
+        await setLayer("imgbuf", { visible: true });
+        assert.equal(await page.evaluate(() =>
+            document.querySelectorAll("img.leaflet-image-layer").length), 2,
+            "and returns on show");
+
+        // A config change re-renders without a visibility bounce.
+        await setLayer("imgurl", { opacity: 0.3 });
+        const opacity = await page.evaluate(() =>
+            [...document.querySelectorAll("img.leaflet-image-layer")]
+                .find(i => i.src.startsWith("data:")).style.opacity);
+        assert.equal(opacity, "0.3", "an opacity update lands on the live overlay");
+        assert.deepEqual(errors, [], "no errors through render and toggles");
+    }, "widget-image.html", "img.leaflet-image-layer");
+});
+
 suite("vector time layers tick and toggle without rebuilding", async () => {
     // Regression for the second deselection crash: a line-shaped track has as many
     // vertices as a point track has points, and lines/polygons were left on the
