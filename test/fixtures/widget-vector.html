@@ -62,6 +62,16 @@ const model = makeModel({
       rings: [[5, 5]],
       locations: [[35.95, -5.34], [35.95, -5.26], [35.90, -5.26], [35.90, -5.34], [35.95, -5.34],
                   [35.935, -5.32], [35.935, -5.28], [35.915, -5.28], [35.915, -5.32], [35.935, -5.32]] },
+    // A MULTIPOLYGON: rings = [[5,5],[5]] -- a holed part plus a solid part, the
+    // shape that exposed glify's silent zero-triangle handling of MultiPolygon
+    // features inside a FeatureCollection. Each part must fill; the hole must not.
+    { id: "mpz", type: "polygon", name: "MultiZone", layer_group: "Vectors",
+      visible: true, color: "#00ffee", fillColor: "#ff0044", weight: 2,
+      fillOpacity: 0.9, properties: { kind: "multi" },
+      rings: [[5, 5], [5]],
+      locations: [[35.97, -5.215], [35.97, -5.155], [35.91, -5.155], [35.91, -5.215], [35.97, -5.215],
+                  [35.955, -5.200], [35.955, -5.170], [35.925, -5.170], [35.925, -5.200], [35.955, -5.200],
+                  [35.905, -5.210], [35.905, -5.190], [35.885, -5.190], [35.885, -5.210], [35.905, -5.210]] },
   ],
   group_configs: {},
   coordinate_buffers: {

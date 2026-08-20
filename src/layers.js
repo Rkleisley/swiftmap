@@ -213,6 +213,13 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                                 geometry: { type: "LineString", coordinates: ring },
                                 properties: {
                                     layer: layer,
+                                    // Outline pixels only -- the area's shapes instance
+                                    // owns interaction with exact containment. Left
+                                    // clickable, these rings answered through glify's
+                                    // line tolerance (0.1 DEGREES for clicks vs 0.03
+                                    // for hovers): popups well outside the shape and
+                                    // inside holes, hover disagreeing with click.
+                                    isBorder: true,
                                     colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: style.opacity || 1.0 },
                                     weight: style.weight || 3
                                 }
@@ -294,7 +301,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                         return feature.properties.weight;
                     },
                     click: (e, feature) => {
-                        if (!feature || !feature.properties || !feature.properties.layer
+                        if (!feature || !feature.properties || feature.properties.isBorder
+                                || !feature.properties.layer
                                 || !visibleNow(feature.properties.layer)) return;
                         registerClickMatch(map, 2, () => {
                             if (feature && feature.properties && feature.properties.layer) {
@@ -324,7 +332,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     },
                     hover: (e, feature) => {
                         this._isHovering = true;
-                        if (feature && feature.properties && feature.properties.layer
+                        if (feature && feature.properties && !feature.properties.isBorder
+                                && feature.properties.layer
                                 && visibleNow(feature.properties.layer)) {
                             registerHoverMatch(map, 2, () => {
                                 const layer = feature.properties.layer;
@@ -370,7 +379,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
             // exactly D + 2h - 2 triangles -- a property of geometry, not of glify's
             // earcut; h = 0 gives the familiar D - 2. Rings are closed by now, so each
             // contributes length - 1 distinct vertices. Parts triangulate separately
-            // (glify explodes a MultiPolygon into per-part draws) and sum.
+            // and sum.
             let triangles = 0;
             for (const rings of parts) {
                 const distinct = rings.reduce((sum, r) => sum + r.length - 1, 0);
@@ -384,16 +393,23 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
             // "red outline, pale blue fill" -- the most basic polygon styling ask --
             // impossible; the outline itself is drawn by the lines bucket.
             const rgb = parseColor(style.fillColor || style.fill_color || style.color, "#3388ff");
-            features.push({
-                type: "Feature",
-                geometry: parts.length === 1
-                    ? { type: "Polygon", coordinates: parts[0] }
-                    : { type: "MultiPolygon", coordinates: parts },
-                properties: {
-                    layer: layer,
-                    colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: style.fillOpacity || 0.2 }
-                }
-            });
+            // One Feature PER PART, never a MultiPolygon: glify's shapes only
+            // explodes MultiPolygon when handed a bare Feature or geometry -- in a
+            // FeatureCollection the coordinates reach earcut.flatten unexploded,
+            // earcut returns no indices, and the feature silently draws ZERO fill
+            // triangles (verified against glify 3.3.0; its "unhandled polygon"
+            // throw sits inside the empty loop and never fires). Parts stay
+            // consecutive, so per-layer vertexCounts still align for GPU time.
+            for (const rings of parts) {
+                features.push({
+                    type: "Feature",
+                    geometry: { type: "Polygon", coordinates: rings },
+                    properties: {
+                        layer: layer,
+                        colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: style.fillOpacity || 0.2 }
+                    }
+                });
+            }
         }
 
         if (features.length === 0) return null;

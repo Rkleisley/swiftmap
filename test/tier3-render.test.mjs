@@ -780,6 +780,76 @@ suite("lines and polygons each earn their own pixels", async () => {
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });
 
+suite("a multipolygon fills both parts and area clicks are exact", async () => {
+    // The four-WKT-shape report, distilled. Fill half: glify's shapes only explodes
+    // MultiPolygon for bare-Feature data -- inside a FeatureCollection the raw multi
+    // coordinates reach earcut, which returns no indices, and the feature silently
+    // draws ZERO fill triangles (the "unhandled polygon" throw sits inside the empty
+    // loop and never fires). Parts now ship as one Polygon feature each. Click half:
+    // area outlines ride the lines bucket, and glify's line CLICK tolerance is 0.1
+    // degrees against 0.03 for hover -- borders answered clicks far outside the
+    // shape and inside holes while hover stayed honest. Borders are inert now; the
+    // shapes instance owns area interaction with exact, hole-aware containment.
+    await withPage(async (page, errors) => {
+        const box = await page.locator(".leaflet-container").boundingBox();
+        const at = async (lat, lng) => {
+            const off = await page.evaluate(([la, ln]) => {
+                const z = window.__model.get("zoom");
+                const c = window.__model.get("center");
+                const p = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(la, ln), z);
+                const pc = window.L.CRS.EPSG3857.latLngToPoint(
+                    window.L.latLng(c[0], c[1]), z);
+                return [p.x - pc.x, p.y - pc.y];
+            }, [lat, lng]);
+            return [box.x + box.width / 2 + off[0], box.y + box.height / 2 + off[1]];
+        };
+        const shotAt = async (lat, lng, size) => {
+            const [x, y] = await at(lat, lng);
+            return page.screenshot({ clip: {
+                x: x - size / 2, y: y - size / 2, width: size, height: size } });
+        };
+        const setVis = (v) => page.evaluate((vis) => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === "mpz" ? { ...l, visible: vis } : l));
+        }, v).then(() => page.waitForTimeout(1200));
+
+        // Interior of the holed part's ring zone, interior of the solid part, and
+        // the hole's centre -- all clear of every ring by 15+ pixels.
+        const part1On = await shotAt(35.917, -5.207, 10);
+        const part2On = await shotAt(35.895, -5.200, 10);
+        const holeOn = await shotAt(35.940, -5.185, 12);
+        await setVis(false);
+        const part1Off = await shotAt(35.917, -5.207, 10);
+        const part2Off = await shotAt(35.895, -5.200, 10);
+        const holeOff = await shotAt(35.940, -5.185, 12);
+        await setVis(true);
+
+        assert.notEqual(Buffer.compare(part1On, part1Off), 0,
+            "the holed part draws fill pixels of its own");
+        assert.notEqual(Buffer.compare(part2On, part2Off), 0,
+            "the second part draws fill pixels too");
+        assert.equal(Buffer.compare(holeOn, holeOff), 0,
+            "the hole stays empty whether the layer shows or not");
+
+        const clickAt = async (lat, lng) => {
+            const [x, y] = await at(lat, lng);
+            await page.mouse.click(x, y);
+            await page.waitForTimeout(400);
+            return page.evaluate(() => window.__model.get("clicked_layer_id"));
+        };
+        assert.equal(await clickAt(35.917, -5.207), "mpz",
+            "a part interior answers the click");
+        assert.equal(await clickAt(35.940, -5.185), "",
+            "a hole click falls through to the open map");
+        assert.equal(await clickAt(35.895, -5.200), "mpz",
+            "the second part answers as its own containment");
+        assert.equal(await clickAt(35.880, -5.160), "",
+            "near-but-outside no longer answers through the border");
+        assert.deepEqual(errors, [], "no errors through fills and clicks");
+    }, "widget-vector.html", ".leaflet-polylines-pane canvas");
+});
+
 suite("vector time layers tick and toggle without rebuilding", async () => {
     // Regression for the second deselection crash: a line-shaped track has as many
     // vertices as a point track has points, and lines/polygons were left on the
