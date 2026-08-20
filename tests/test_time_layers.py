@@ -208,6 +208,51 @@ def test_no_match_warns(m):
         m.make_time_layer("Typo")
 
 
+def test_an_explicit_time_field_overrides_the_probe():
+    # Both a probed name and a custom one present: the explicit field wins.
+    mp = quiet_map()
+    mp.add_circle_markers(
+        {"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+         "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T06:00:00Z"],
+         "obs_time": ["2026-02-01T00:00:00Z", "2026-02-01T06:00:00Z"]},
+        name="V")
+    mp.make_time_layer("V", time_field="obs_time")
+    assert mp.find_layers("V")[0]["time"]["field"] == "obs_time"
+
+
+def test_a_typoed_time_field_warns_with_the_layers_properties():
+    # The generic "pass time_field=" message told the user to do what they had
+    # just done; an explicit miss must name the field and what IS there.
+    mp = quiet_map()
+    mp.add_circle_markers(
+        {"lat": [36.0], "lon": [-5.3], "timestamp": ["2026-01-01T00:00:00Z"]},
+        name="V")
+    with pytest.warns(SwiftMapWarning, match="'obs_time' is not a property"):
+        mp.make_time_layer("V", time_field="obs_time")
+    assert mp.find_layers("V")[0].get("time") is None
+
+
+def test_an_explicit_end_field_joins_the_probed_start():
+    mp = quiet_map()
+    mp.add_circle_markers(
+        {"lat": [36.0], "lon": [-5.3],
+         "timestamp": ["2026-01-01T00:00:00Z"],
+         "departed": ["2026-01-01T06:00:00Z"]},
+        name="V")
+    mp.make_time_layer("V", time_end_field="departed")
+    layer = mp.find_layers("V")[0]
+    assert layer["time"]["field"] == "timestamp/departed"
+    times = np.frombuffer(mp.coordinate_buffers[f"{layer['id']}::times"])
+    assert list(times) == [T0, T0 + 6 * HOUR]
+
+
+def test_a_missing_end_field_warns_and_uses_starts(m):
+    with pytest.warns(SwiftMapWarning, match="end field 'departed'"):
+        m.make_time_layer("Vessel", time_field="timestamp",
+                          time_end_field="departed")
+    assert m.find_layers("Vessel")[0]["time"]["field"] == "timestamp"
+
+
 def test_a_bad_duration_falls_back_to_period(m):
     with pytest.warns(SwiftMapWarning, match="not an ISO8601 duration"):
         m.make_time_layer("Vessel", duration="6 hours")

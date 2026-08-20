@@ -97,8 +97,22 @@ def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = Non
 
     with self.batch():
         for layer in matched:
+            props = layer.get("properties") or {}
+            # An explicit field that misses gets its own message: falling through
+            # to the generic "pass time_field=" told the user to do the thing
+            # they had just done, with no hint the name was the problem.
+            if time_field and time_field not in props:
+                have = ", ".join(sorted(map(str, props))) or "none"
+                warn(f"make_time_layer: {time_field!r} is not a property of layer "
+                     f"{layer.get('name')!r} (properties: {have}). Its features "
+                     f"stay visible at every tick.")
+                continue
+            if time_end_field and time_end_field not in props:
+                warn(f"make_time_layer: end field {time_end_field!r} is not a "
+                     f"property of layer {layer.get('name')!r}; using start times "
+                     f"only.")
             interleaved, field, timeless = normalize_layer_times(
-                layer.get("properties"), time_field, time_end_field)
+                props, time_field, time_end_field)
             if interleaved is None:
                 warn(f"make_time_layer: layer {layer.get('name')!r} has no time "
                      f"property. Pass time_field= naming one; its features stay "

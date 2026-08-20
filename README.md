@@ -358,6 +358,15 @@ m.add_circle_markers(df, name="Vessel")          # df has a timestamp column
 m.make_time_layer("Vessel", period="PT1H")
 ```
 
+The automatic probe checks the usual names (`times`, `datetime_start`/`datetime_end`,
+`timestamp`, `datetime`, `time`, `date`). When your column is called something else —
+or the probe would pick the wrong one — name it yourself, like any other override:
+
+```python
+m.make_time_layer("Vessel", time_field="obs_time", period="PT1H")
+m.make_time_layer("Dwells", time_field="arrived", time_end_field="departed")
+```
+
 One slider serves every time layer on the map; animating a second layer joins it to the
 same slider rather than adding another control. The slider steps through generated
 periods (`'P1D'`, `'PT15M'`, ...) rather than through the observed timestamps, so a

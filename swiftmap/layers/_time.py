@@ -151,13 +151,23 @@ def normalize_layer_times(
     with no time is a request that cannot be honoured.
     """
     props = props or {}
-    start_field, end_field = (time_field, time_end_field) if time_field \
-        else detect_time_fields(props)
+    if time_field:
+        start_field, end_field = time_field, time_end_field
+    else:
+        start_field, end_field = detect_time_fields(props)
+        # An explicit end field overrides the detected one even when the start
+        # is left to autodetect -- kwargs beat probing piecemeal, as everywhere.
+        if time_end_field:
+            end_field = time_end_field
     if not start_field or start_field not in props:
         return None, None, 0
+    # An end field that is not actually present reads as absent everywhere --
+    # the field description must not claim a column the values never came from.
+    if end_field and end_field not in props:
+        end_field = None
 
     starts = _values_of(props, start_field)
-    ends = _values_of(props, end_field) if end_field and end_field in props else None
+    ends = _values_of(props, end_field) if end_field else None
     if ends is not None and len(ends) != len(starts):
         ends = None
 
