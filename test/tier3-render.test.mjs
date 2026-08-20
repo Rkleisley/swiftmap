@@ -846,6 +846,14 @@ suite("a multipolygon fills both parts and area clicks are exact", async () => {
             "the second part answers as its own containment");
         assert.equal(await clickAt(35.880, -5.160), "",
             "near-but-outside no longer answers through the border");
+
+        // Real polylines: the degree-constant tolerance is replaced by a few
+        // pixels at the current zoom. On the route still answers; 0.025 degrees
+        // off it -- a quarter of glify's old click tolerance -- falls through.
+        assert.equal(await clickAt(36.05, -5.25), "ln",
+            "a click on the line answers");
+        assert.equal(await clickAt(36.072, -5.261), "",
+            "a click well off the line reaches the open map");
         assert.deepEqual(errors, [], "no errors through fills and clicks");
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });

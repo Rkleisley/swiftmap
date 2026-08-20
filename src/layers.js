@@ -131,6 +131,25 @@ function closeRing(ring) {
     return ring;
 }
 
+// glify's line hit tolerance is `sensitivity + weight/scale`, and sensitivity is a
+// CONSTANT in latlng degrees -- 0.1 for clicks (~11 km) and 0.03 for hovers,
+// zoom-blind, so a click within sight of a line matched it and starved the
+// empty-map fallback. The weight/scale term already covers the drawn width;
+// replace the constant with a few pixels' worth at the current zoom. The instance
+// getters read `settings` live per event, so updating on zoom is enough -- no
+// glify patching. Returns the unsubscribe for onRemove.
+const LINE_HIT_SLACK_PX = 8;
+function trackLineSensitivity(map, instance) {
+    const apply = () => {
+        const slack = LINE_HIT_SLACK_PX / Math.pow(2, map.getZoom());
+        instance.settings.sensitivity = slack;
+        instance.settings.sensitivityHover = slack;
+    };
+    apply();
+    map.on("zoomend", apply);
+    return () => map.off("zoomend", apply);
+}
+
 // An area layer's geometry as parts -> closed [lon, lat] rings: a polygon's flat
 // coordinate run sliced by its `rings` table (one hole-free ring without it), or a
 // circle's generated ring. Feeds both the fill (earcut, in the polygon bucket) and
@@ -344,6 +363,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     }
                 });
                 setupGlifyProjection(this.glLines);
+                this._sensitivityOff = trackLineSensitivity(m, this.glLines);
                 if (vectorTime) {
                     this._swiftmapTime = attachTimeToVectorInstance(this.glLines, vectorMeta, vertexCounts);
                 }
@@ -352,6 +372,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 if (this._mapMouseMoveHandler) {
                     m.off("mousemove", this._mapMouseMoveHandler);
                 }
+                if (this._sensitivityOff) this._sensitivityOff();
                 if (this.glLines) this.glLines.remove();
                 if (this._sharedTooltip) {
                     this._sharedTooltip.remove();
