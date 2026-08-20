@@ -1,17 +1,14 @@
-import json
-from pathlib import Path
 from typing import List, Optional
 
-import xyzservices
-
 # All network-specific basemap data -- presets, alias spellings, WMS services,
-# the xyz catalogue choice, constructor defaults -- lives in the registry
-# module, the ONE file a network swaps or patches. This module is pure
-# resolution logic over it: every lookup reads the registry's CURRENT
-# attributes, so reassigning a dictionary wholesale is seen, not just
-# mutating one. The names below are re-exported for direct imports.
+# the xyz catalogue (SERVICES, where the xyzservices work happens),
+# constructor defaults -- lives in the registry module, the ONE file a
+# network swaps or patches. This module is pure resolution logic over it:
+# every lookup reads the registry's CURRENT attributes, so reassigning a
+# value wholesale is seen, not just mutating one. The names below are
+# re-exported for direct imports.
 from .. import basemap_registry as _registry
-from ..basemap_registry import ALIASES, BASEMAPS, WMS_PROVIDERS
+from ..basemap_registry import ALIASES, BASEMAPS, SERVICES, WMS_PROVIDERS
 from ._batching import batched
 from .._warnings import warn
 
@@ -27,48 +24,6 @@ def _flatten_wms() -> dict:
             for alias in entry.get("aliases", []):
                 flat[alias.lower()] = entry
     return flat
-
-
-def _build_bunch(data: dict, prefix: str = "") -> "xyzservices.Bunch":
-    """A nested dict of providers -> a real xyzservices Bunch, so a custom
-    catalogue answers query_name/flatten/build_url exactly like the bundled
-    one. A dict with a "url" is a provider; anything else nests. "name"
-    defaults to the dotted path, the catalogue's own convention."""
-    out = {}
-    for key, value in data.items():
-        path = f"{prefix}{key}"
-        if isinstance(value, dict) and "url" in value:
-            provider = dict(value)
-            provider.setdefault("name", path)
-            out[key] = xyzservices.TileProvider(provider)
-        elif isinstance(value, dict):
-            out[key] = _build_bunch(value, prefix=f"{path}.")
-        else:
-            out[key] = value
-    return xyzservices.Bunch(out)
-
-
-_xyz_cache = (None, None)   # (registry source object, built Bunch)
-
-
-def _xyz_catalogue() -> "xyzservices.Bunch":
-    """The catalogue name resolution runs against: the xyzservices bundled one
-    when the registry says None, otherwise the registry's own -- a nested dict
-    or a providers JSON path -- built once and cached until the registry
-    attribute is REASSIGNED (assign a new value to refresh, per its doc)."""
-    global _xyz_cache
-    src = _registry.XYZ_PROVIDERS
-    if src is None:
-        return xyzservices.providers
-    if _xyz_cache[0] is src:
-        return _xyz_cache[1]
-    if isinstance(src, (str, Path)):
-        data = json.loads(Path(src).read_text(encoding="utf-8"))
-    else:
-        data = src
-    built = _build_bunch(data)
-    _xyz_cache = (src, built)
-    return built
 
 @batched
 def add_basemap(
@@ -161,7 +116,7 @@ def add_basemap(
         # deliberately tolerant -- "CartoDB.DarkMatter", "CartoDB DarkMatter" and
         # "cartodb darkmatter" all resolve.
         try:
-            provider = _xyz_catalogue().query_name(_registry.ALIASES.get(name, name))
+            provider = _registry.SERVICES.query_name(_registry.ALIASES.get(name, name))
         except ValueError:
             # It used to silently substitute OpenStreetMap here -- asked for X,
             # quietly shown Y, the radius disease with tiles. Say so instead.
@@ -229,7 +184,7 @@ def list_basemaps(self, search: Optional[str] = None) -> List[str]:
     ['Esri.AntarcticBasemap', 'Esri.AntarcticImagery', 'Esri.ArcticImagery']
     """
     names = (set(_registry.BASEMAPS) | set(_registry.ALIASES)
-             | set(_xyz_catalogue().flatten()))
+             | set(_registry.SERVICES.flatten()))
     for category in _registry.WMS_PROVIDERS.values():
         names |= set(category)
     if search:

@@ -6,13 +6,54 @@ which presets exist, which friendly spellings forward where, which WMS services
 are callable by name, and what a bare Map() shows. swiftmap/layers/basemap.py
 ingests this module and holds no tile data of its own, so a different network
 ships a different copy of THIS file (or patches it in place) and the rest of
-the package never changes. Even the xyz catalogue is swappable: XYZ_PROVIDERS
-below chooses between the xyzservices package's bundled public catalogue and a
-network-owned one.
+the package never changes. Even the xyz catalogue lives here: xyzservices is
+imported and worked into SERVICES below, and name resolution imports SERVICES
+from this module -- a network with its own catalogue rebuilds that one line.
 
 Every value here is read live -- extend the dictionaries in place or reassign
 them wholesale after import, both are seen by the next lookup.
 """
+import json
+from pathlib import Path
+from typing import Optional, Union
+
+import xyzservices
+
+
+def _build_bunch(data: dict, prefix: str = "") -> "xyzservices.Bunch":
+    """A nested dict of providers -> a real xyzservices Bunch, so a custom
+    catalogue answers query_name/flatten/build_url exactly like the bundled
+    one. A dict with a "url" is a provider; anything else nests. "name"
+    defaults to the dotted path, the catalogue's own convention."""
+    out = {}
+    for key, value in data.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, dict) and "url" in value:
+            provider = dict(value)
+            provider.setdefault("name", path)
+            out[key] = xyzservices.TileProvider(provider)
+        elif isinstance(value, dict):
+            out[key] = _build_bunch(value, prefix=f"{path}.")
+        else:
+            out[key] = value
+    return xyzservices.Bunch(out)
+
+
+def build_services(source: Optional[Union[str, Path, dict]] = None) -> "xyzservices.Bunch":
+    """
+    The xyz catalogue SERVICES is built from.
+
+    None returns the xyzservices package's bundled public catalogue (878
+    providers). A nested dict, or the path to a providers JSON file of the
+    same shape -- categories of entries, each entry at least {url,
+    attribution} -- builds the network's own catalogue instead, with full
+    query_name/flatten/token behaviour.
+    """
+    if source is None:
+        return xyzservices.providers
+    if isinstance(source, (str, Path)):
+        source = json.loads(Path(source).read_text(encoding="utf-8"))
+    return _build_bunch(source)
 
 # Hand-defined tile basemaps the catalogue cannot supply. Currently one: Esri
 # World Imagery tiled for EPSG:4326. Every xyzservices template is web-mercator
@@ -64,13 +105,10 @@ WMS_PROVIDERS = {
 }
 
 # The xyz tile catalogue behind bare provider names ("CartoDB.DarkMatter",
-# "Esri.WorldImagery", ...). None uses the xyzservices package's bundled public
-# catalogue. A network with its own catalogue points this at a providers JSON
-# file (str or Path) or a nested dict of the same shape -- categories of
-# entries, each entry at least {url, attribution}; "name" defaults to the
-# dotted path. Name resolution, token handling, and list_basemaps then all
-# work against that catalogue instead.
-XYZ_PROVIDERS = None
+# "Esri.WorldImagery", ...). This network uses the bundled public catalogue;
+# a network with its own rewrites this line, e.g.
+#   SERVICES = build_services("/path/to/providers.json")
+SERVICES = build_services()
 
 # What a bare Map() adds, per CRS: (name, initially_visible) pairs resolved
 # through add_basemap, so any name form above works here -- including WMS

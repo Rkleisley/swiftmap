@@ -174,7 +174,8 @@ _OFFICE_CATALOGUE = {
 
 
 def test_xyz_catalogue_swaps_through_the_registry(monkeypatch):
-    monkeypatch.setattr(basemap_registry, "XYZ_PROVIDERS", _OFFICE_CATALOGUE)
+    monkeypatch.setattr(basemap_registry, "SERVICES",
+                        basemap_registry.build_services(_OFFICE_CATALOGUE))
     monkeypatch.setitem(basemap_registry.DEFAULT_BASEMAPS, "EPSG:3857", [])
     m = Map()
     m.add_basemap("Office.Ortho")
@@ -192,7 +193,8 @@ def test_xyz_catalogue_swaps_through_the_registry(monkeypatch):
 def test_xyz_catalogue_loads_from_a_json_file(tmp_path, monkeypatch):
     path = tmp_path / "providers.json"
     path.write_text(json.dumps(_OFFICE_CATALOGUE), encoding="utf-8")
-    monkeypatch.setattr(basemap_registry, "XYZ_PROVIDERS", str(path))
+    monkeypatch.setattr(basemap_registry, "SERVICES",
+                        basemap_registry.build_services(str(path)))
     monkeypatch.setitem(basemap_registry.DEFAULT_BASEMAPS, "EPSG:3857", [])
     m = Map()
     m.add_basemap("office ortho")   # tolerant lookup works on a custom catalogue
