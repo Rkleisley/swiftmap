@@ -199,7 +199,7 @@ test("re-rendering replaces the tree rather than appending to it", () => {
 });
 
 // --- toggles target the rendered list, not the trait --------------------------------
-// The sidebar renders from the list map.js keeps locally, which patches update in place.
+// The sidebar renders from the list core.js keeps locally, which patches update in place.
 // Python's _set_trait_quietly deliberately skips the notification, so the frontend's copy
 // of the `layers` trait never advances past the initial state message. A handler that
 // worked from the trait would silently drop every layer added after display: the toggle

@@ -22,11 +22,11 @@ const builds = [
     // Framework-agnostic core, for npm consumers.
     { ...shared, entryPoints: ["src/index.js"], outfile: "dist/index.js" },
     // anywidget entry: what the Python widget loads.
-    { ...shared, entryPoints: ["src/map.js"], outfile: "dist/anywidget.js" },
+    { ...shared, entryPoints: ["src/anywidget.js"], outfile: "dist/anywidget.js" },
     // Same anywidget bundle, written where the Python package ships it from.
     // anywidget inlines this file as a string, so a sibling .map is never fetchable --
     // inline the sourcemap instead of emitting a dead reference.
-    { ...shared, entryPoints: ["src/map.js"], outfile: "swiftmap/static/widget.js", sourcemap: "inline" },
+    { ...shared, entryPoints: ["src/anywidget.js"], outfile: "swiftmap/static/widget.js", sourcemap: "inline" },
 ];
 
 mkdirSync("swiftmap/static", { recursive: true });

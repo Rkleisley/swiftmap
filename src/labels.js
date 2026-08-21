@@ -5,7 +5,7 @@
 // data in, Leaflet layers out, re-derived each sync so labels follow visibility
 // without touching the GL buckets or their meta keys.
 
-import { isLayerEffectiveVisible } from "./map.js";
+import { isLayerEffectiveVisible } from "./patch.js";
 import { vectorCoords, lineParts } from "./layers.js";
 import { windowFor, featureInWindow, effectiveDuration, timesFor } from "./timecontrol.js";
 

@@ -11,7 +11,7 @@
 // arrive with their colours already resolved (Python resolves at the add_* boundary,
 // manual entries at legend_add), so there is no anchor table to drift.
 
-import { isLayerEffectiveVisible } from "./map.js";
+import { isLayerEffectiveVisible } from "./patch.js";
 
 const GLYPHS = {
     circle_markers: "circle",

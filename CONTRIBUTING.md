@@ -91,9 +91,12 @@ two modules declare the same top-level name — a duplicate would otherwise shad
 Keep that in mind when naming things in `src/`; it is the constraint esbuild removes.
 
 The JS is plain ES modules with real `import`/`export`, bundled by esbuild (`build.mjs`).
-Nothing in `src/` may import from Python or assume anywidget — `src/map.js` is the anywidget
-*adapter*, and the reusable pieces it builds on are exported from `src/index.js` so the same
-renderer can back a React app.
+Nothing in `src/` may import from Python or assume anywidget. `src/core.js` mounts a map
+over a *host* — the five-method interface documented in `src/host.js` (`get`, `set`, `on`,
+`send`, `save_changes`), which anywidget's model satisfies as-is and which
+`createHostStub` implements for exports and tests. `src/anywidget.js` is the anywidget
+*adapter*, a dozen lines over the core; the reusable pieces are exported from
+`src/index.js` so the same renderer backs a static export or a React app.
 
 ### Building an installable package
 

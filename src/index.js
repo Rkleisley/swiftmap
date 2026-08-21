@@ -3,9 +3,13 @@
 // Everything exported here operates on a Leaflet map instance plus plain layer-config
 // objects, with no dependency on Python, anywidget, or any UI framework. The anywidget
 // widget (src/anywidget.js) is one consumer of this; a React or vanilla app is another.
+// createSwiftMap mounts the whole map over a host (src/host.js); the rest are the
+// pieces it is built from, for consumers that compose their own.
 
+export { createSwiftMap } from "./core.js";
+export { createHostStub } from "./host.js";
 export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers,
-         collectPointLayersAll } from "./map.js";
+         collectPointLayersAll } from "./patch.js";
 export { renderLayer, renderMergedGlLayer, styleFor, getIndexedProperties } from "./layers.js";
 export { renderSidebarControls, normalizeRadioLayers, getLayerBounds, sendLayerWrite } from "./sidebar.js";
 export { deriveLegendSpec, renderLegend } from "./legend.js";
