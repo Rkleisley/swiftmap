@@ -20,6 +20,9 @@ function makeModel(state) {
     on(e, f) { (listeners[e] = listeners[e] || []).push(f); },
     send(content, buffers) { model.sent.push({ content, buffers }); },
     save_changes() {},
+    // Test hook: fire a registered listener, so a suite can push a real
+    // swiftmap_patch through msg:custom exactly as Python does.
+    emit(e, ...args) { (listeners[e] || []).forEach(f => f(...args)); },
   };
   return model;
 }

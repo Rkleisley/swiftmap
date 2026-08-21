@@ -945,6 +945,157 @@ suite("a multi-part line leaves its gap unpainted and keeps GPU time", async () 
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });
 
+suite("an in-place data update repaints the new positions and keeps visibility", async () => {
+    // update_layer(data=...) sends a buffer op plus a replace for an EXISTING id.
+    // The GL meta key used to carry only the buffer's byte length, so moving two
+    // points to two new places -- same length -- would not have rebuilt the bucket
+    // and the old positions would have stayed on screen. The key now carries
+    // buffer identity. Driven through msg:custom, the real transport path.
+    await withPage(async (page, errors) => {
+        const box = await page.locator(".leaflet-container").boundingBox();
+        const at = async (lat, lng) => {
+            const off = await page.evaluate(([la, ln]) => {
+                const z = window.__model.get("zoom");
+                const c = window.__model.get("center");
+                const p = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(la, ln), z);
+                const pc = window.L.CRS.EPSG3857.latLngToPoint(
+                    window.L.latLng(c[0], c[1]), z);
+                return [p.x - pc.x, p.y - pc.y];
+            }, [lat, lng]);
+            return [box.x + box.width / 2 + off[0], box.y + box.height / 2 + off[1]];
+        };
+        const shotAt = async (lat, lng, size) => {
+            const [x, y] = await at(lat, lng);
+            return page.screenshot({ clip: {
+                x: x - size / 2, y: y - size / 2, width: size, height: size } });
+        };
+        const patch = (ops, floatBuffers) => page.evaluate(([ops, bufs]) => {
+            const views = bufs.map(arr => new DataView(new Float64Array(arr).buffer));
+            window.__model.emit("msg:custom", { kind: "swiftmap_patch", ops }, views);
+        }, [ops, floatBuffers]).then(() => page.waitForTimeout(900));
+        const config = () => page.evaluate(() =>
+            window.__model.get("layers").find(l => l.id === "pts"));
+
+        // What "nothing from Sites" looks like at the old and the new spot.
+        const oldOn = await shotAt(36.00, -5.30, 10);
+        const newBefore = await shotAt(36.03, -5.31, 10);
+        await patch([{ op: "set", id: "pts", fields: { visible: false } }], []);
+        const oldHidden = await shotAt(36.00, -5.30, 10);
+        const newHidden = await shotAt(36.03, -5.31, 10);
+        await patch([{ op: "set", id: "pts", fields: { visible: true } }], []);
+        assert.notEqual(Buffer.compare(oldOn, oldHidden), 0, "Alpha paints before the update");
+        assert.equal(Buffer.compare(newBefore, newHidden), 0, "the new spot is empty before");
+
+        // The update: same point count, new positions -- a same-length buffer.
+        const cfg = await config();
+        await patch([
+            { op: "buffer", id: "pts", buffer_index: 0 },
+            { op: "replace", id: "pts", layer: { ...cfg,
+                properties: { site: ["Alpha2", "Bravo2"] },
+                bounds: [[36.03, -5.31], [36.11, -5.19]] } },
+        ], [[36.03, -5.31, 36.11, -5.19]]);
+        const oldAfter = await shotAt(36.00, -5.30, 10);
+        const newAfter = await shotAt(36.03, -5.31, 10);
+        assert.equal(Buffer.compare(oldAfter, oldHidden), 0,
+            "the old position is no longer painted by Sites");
+        assert.notEqual(Buffer.compare(newAfter, newHidden), 0,
+            "the new position is painted");
+
+        // Visibility off stays off across an update: the replace carries
+        // visible:false, as Python preserves it, and nothing paints.
+        await patch([{ op: "set", id: "pts", fields: { visible: false } }], []);
+        // The stub's trait never sees patch ops (only the widget's own state does),
+        // so build the replace the way Python sends it: the config as it stands,
+        // visibility preserved.
+        const cfgHidden = { ...cfg, visible: false };
+        await patch([
+            { op: "buffer", id: "pts", buffer_index: 0 },
+            { op: "replace", id: "pts", layer: { ...cfgHidden,
+                bounds: [[36.03, -5.31], [36.11, -5.19]] } },
+        ], [[36.03, -5.31, 36.11, -5.19]]);
+        const stillHidden = await shotAt(36.03, -5.31, 10);
+        assert.equal(Buffer.compare(stillHidden, newHidden), 0,
+            "a hidden layer stays unpainted through a data update");
+        const checked = await page.evaluate(() =>
+            [...document.querySelectorAll(".swiftmap-sidebar input")]
+                .find(i => i.parentElement.textContent.includes("Sites")).checked);
+        assert.equal(checked, false, "and its sidebar box stays unchecked");
+        assert.deepEqual(errors, [], "no errors through the updates");
+    }, "widget.html");
+});
+
+suite("a timed layer keeps animating after an append extends its range", async () => {
+    // Append under a GPU-time bucket: the coordinate buffer and ::times grow by one
+    // observation on a later day. The slider's range must extend, the new point
+    // must animate in at its own tick, and the GPU time path must stay engaged
+    // (the per-vertex attributes are rebuilt with the bucket, never kept stale).
+    await withPage(async (page, errors) => {
+        const gpuMessages = [];
+        page.on("console", (m) => {
+            if (/GPU time/.test(m.text())) gpuMessages.push(m.text());
+        });
+        const box = await page.locator(".leaflet-container").boundingBox();
+        const at = async (lat, lng) => {
+            const off = await page.evaluate(([la, ln]) => {
+                const z = window.__model.get("zoom");
+                const c = window.__model.get("center");
+                const p = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(la, ln), z);
+                const pc = window.L.CRS.EPSG3857.latLngToPoint(
+                    window.L.latLng(c[0], c[1]), z);
+                return [p.x - pc.x, p.y - pc.y];
+            }, [lat, lng]);
+            return [box.x + box.width / 2 + off[0], box.y + box.height / 2 + off[1]];
+        };
+        const shotAt = async (lat, lng, size) => {
+            const [x, y] = await at(lat, lng);
+            return page.screenshot({ clip: {
+                x: x - size / 2, y: y - size / 2, width: size, height: size } });
+        };
+        const seek = (v) => page.evaluate((val) => {
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = String(val); s.dispatchEvent(new Event("input"));
+        }, v).then(() => page.waitForTimeout(900));
+        const probe = () => page.evaluate(() => {
+            const a = window.L.glify.pointsInstances;
+            return { max: parseInt(document.querySelector(".swiftmap-time-slider").max, 10),
+                     fed: a[a.length - 1].settings.data.length };
+        });
+
+        const before = await probe();
+        const cfg = await page.evaluate(() =>
+            window.__model.get("layers").find(l => l.id === "pts"));
+        const day = (d) => Date.UTC(2026, 0, d);
+        await page.evaluate(([cfg, coords, times]) => {
+            const views = [new DataView(new Float64Array(coords).buffer),
+                           new DataView(new Float64Array(times).buffer)];
+            window.__model.emit("msg:custom", { kind: "swiftmap_patch", ops: [
+                { op: "buffer", id: "pts", buffer_index: 0 },
+                { op: "buffer", id: "pts::times", buffer_index: 1 },
+                { op: "replace", id: "pts", layer: { ...cfg,
+                    properties: { site: ["Alpha", "Bravo", "Charlie", "Echo"] },
+                    bounds: [[35.98, -5.32], [36.12, -5.18]] } },
+            ] }, views);
+        }, [cfg,
+            [36.00, -5.30, 36.10, -5.20, 36.05, -5.25, 36.08, -5.29],
+            [day(1), day(1), day(2) + 43200000, day(2) + 43200000,
+             day(3) + 43200000, day(3) + 43200000, day(6), day(6)]]);
+        await page.waitForTimeout(900);
+
+        const after = await probe();
+        assert.ok(after.max > before.max, "the slider's range extended to the new day");
+        assert.equal(after.fed, before.fed + 1, "the bucket holds the appended point");
+
+        await seek(0);
+        const echoEarly = await shotAt(36.08, -5.29, 10);
+        await seek(after.max);
+        const echoLate = await shotAt(36.08, -5.29, 10);
+        assert.notEqual(Buffer.compare(echoEarly, echoLate), 0,
+            "the appended point animates in at its own tick");
+        assert.deepEqual(gpuMessages, [], "GPU time stayed engaged through the append");
+        assert.deepEqual(errors, [], "no errors through the append");
+    }, "widget-time.html");
+});
+
 suite("imagery renders from a URL and from the binary transport", async () => {
     // The image layer type is pure data -- {type:"image", bounds, opacity,
     // url | bytes under the layer id} -- so a plain-JS consumer needs only a

@@ -5,6 +5,7 @@ group configuration.
 from typing import Any, Dict, List, Optional, Union
 
 from .._infra import LayerConfig
+from .._warnings import warn
 from ..layers._targeting import find_layers as _find_layers
 
 
@@ -200,9 +201,41 @@ def remove_layer(self, name_or_id: Any) -> "Map":
     return self.remove_layers([name_or_id])
 
 
-def update_layer(self, identifier: Union[str, Any], name: Optional[str] = None, **kwargs) -> "Map":
+def _single_top_level(self, identifier: Any, name: Optional[str]) -> Optional[Any]:
     """
-    Updates attributes of an existing layer (e.g. `visible`, `color`, `weight`) and triggers a sync.
+    The one top-level layer update_layer(data=...) targets, or None after an honest
+    warning: a part inside a collection cannot be swapped in place (v1), and no
+    match at all is worth naming.
+    """
+    target_id = getattr(identifier, "id", identifier)
+    target_name = getattr(identifier, "name", identifier)
+    for l in self.layers:
+        if name is not None:
+            if l.get("layer_group") == identifier and l.get("name") == name:
+                return l
+        elif l.get("id") == target_id or l.get("name") == target_name:
+            return l
+    if self.find_layers(identifier):
+        warn(f"update_layer: {identifier!r} is a part inside a collection. Updating a "
+             f"collection's parts in place is not supported yet -- remove and re-add "
+             f"the collection. Nothing changed.")
+    else:
+        warn(f"update_layer: no layer named {identifier!r}. Nothing changed.")
+    return None
+
+
+def update_layer(self, identifier: Union[str, Any], name: Optional[str] = None, *,
+                 data: Any = None, append: bool = False, **kwargs) -> "Map":
+    """
+    Updates an existing layer in place: its attributes, or with `data=`, its data.
+
+    With `data=`, the layer keeps its identity -- id, name, group, visibility, time
+    animation, highlights -- while its data changes: the new data is parsed through
+    the same parser family the layer was built with, and every data-derived piece
+    (coordinate buffers, `color_col`/`radius_col` colours and sizes, the legend
+    block, labels, bounds) re-derives from it. `append=True` grows a point layer
+    instead of replacing it -- the live-feed primitive. Without `data=`, the given
+    attributes are set, as before.
 
     Parameters
     ----------
@@ -210,14 +243,52 @@ def update_layer(self, identifier: Union[str, Any], name: Optional[str] = None, 
         Layer ID, layer name, or layer_group folder string.
     name : str, optional
         If specified, matches layer by `(layer_group, name)`.
+    data : Any, optional
+        New data for the layer, in any form the layer's add_* method accepts.
+    append : bool, default False
+        With `data=`, add the new features after the existing ones rather than
+        replacing them. Point layers only: a single line or polygon has nothing to
+        append to. Existing feature indices stay valid under append, so per-feature
+        style overrides survive it; a replace clears them (with a warning), since
+        the indices no longer correspond. Auto-ranged colormaps and radii rescale
+        over the whole appended data.
     **kwargs
-        Key-value attribute pairs to update on the target layer (e.g. `visible=False`, `color="blue"`).
+        Attribute updates (`visible=False`, `color="blue"`); with `data=`, the parser
+        options `lat_col`, `lon_col`, `coord_order`, `line_id_col`, `order_col`,
+        `shape_id_col` are forwarded to the parser instead.
 
     Returns
     -------
     Map
         Self reference for method chaining.
+
+    Warns
+    -----
+    SwiftMapWarning
+        If the target is a collection or was fanned out from a column (one of several
+        sibling layers -- not updatable in place yet), the data holds no geometry of
+        the layer's kind, or a time property the layer animates on is missing from
+        the new data (the layer stops animating).
+
+    Notes
+    -----
+    A data update never moves a chosen viewport. The auto-fit union extends only
+    while the map is still following its data.
+
+    Examples
+    --------
+    >>> m.update_layer("Feed", data=new_df)                  # replace the data
+    >>> m.update_layer("Feed", data=new_rows, append=True)   # grow it
+    >>> m.update_layer("Feed", data=df, lat_col="y", lon_col="x")
     """
+    if data is not None:
+        from ..layers._update import PARSER_KEYS, update_layer_data
+        parser_kwargs = {k: kwargs.pop(k) for k in PARSER_KEYS if k in kwargs}
+        target = _single_top_level(self, identifier, name)
+        if target is None:
+            return self
+        return update_layer_data(self, target, data, append, parser_kwargs, kwargs)
+
     target_id = getattr(identifier, "id", identifier)
     target_name = getattr(identifier, "name", identifier)
 

@@ -102,6 +102,23 @@ export function collectPointLayersAll(layers, groupConfigs) {
     return out;
 }
 
+// Buffer identity for the GL meta key. A new DataView under a layer id -- a
+// buffer op from update_layer(data=...), or the trait reseeded -- must rebuild
+// the bucket even when the byte length is unchanged (points moved, colours
+// recomputed). The serial is per object, so an untouched buffer keeps its number
+// and costs no rebuild. Works for any consumer that swaps a buffer, Python or not.
+const bufferSerials = new WeakMap();
+let nextBufferSerial = 1;
+function bufferSerial(buf) {
+    if (!buf || typeof buf !== "object") return 0;
+    let serial = bufferSerials.get(buf);
+    if (!serial) {
+        serial = nextBufferSerial++;
+        bufferSerials.set(buf, serial);
+    }
+    return serial;
+}
+
 export function applySwiftmapPatch(state, ops, buffers) {
     let layers = state.layers || [];
     let bufferMap = state.buffers || {};
@@ -717,6 +734,10 @@ export default {
                     per: l.time && gpuPoints && timeState
                         ? JSON.stringify(timeState.period) : null,
                     bufLen: coordinateBuffers[l.id]?.byteLength || 0,
+                    // Identity of every buffer the bucket reads for this layer:
+                    // same-length replacements must rebuild too.
+                    bufSerial: [l.id, `${l.id}::colors`, `${l.id}::radii`, `${l.id}::times`]
+                        .map(k => bufferSerial(coordinateBuffers[k])),
                     locLen: l.locations?.length || 0
                 })));
 

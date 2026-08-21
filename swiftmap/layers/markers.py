@@ -6,6 +6,7 @@ from ._style import pop_style_options, pop_data_options, resolve_styles
 from .._colormaps import (data_driven_colors, data_driven_radii, data_driven_legend,
                           data_driven_size_legend)
 from ._batching import batched
+from ._update import record_added_with
 from ._grouping import (build_group_specs, resolve_group_path, is_column,
                         static_group_path, resolve_feature_labels)
 from .._warnings import warn, EmptyLayerWarning
@@ -203,6 +204,14 @@ def add_markers(
             "layer_group": str(g_val) if g_val is not None else "Markers Group",
             "group_multi_select": group_multi_select,
             "visible": True,
+            # See add_circle_markers: recorded for update_layer(data=...).
+            "added_with": record_added_with(
+                "add_markers",
+                parser={"lat_col": lat_col, "lon_col": lon_col, "coord_order": coord_order},
+                data_opts=data_opts, explicit_style=explicit_style,
+                static_style=static_style, label=label,
+                fanned=name_is_col or static_path is None,
+                popup=popup, tooltip=tooltip),
             "properties": sub_props_copy,
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),

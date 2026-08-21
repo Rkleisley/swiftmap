@@ -4,6 +4,8 @@ from ._display import extract_display_config
 from ._style import pop_style_options, pop_data_options, resolve_styles
 from .._colormaps import data_driven_colors, data_driven_legend, rgb_hex
 from ._batching import batched
+from ._update import record_added_with
+from ._grouping import is_column
 from ._grouping import (build_group_specs, resolve_group_path, resolve_layer_name,
                         resolve_feature_label)
 from .._warnings import warn, EmptyLayerWarning
@@ -190,6 +192,16 @@ def add_polygon(
             "visible": True,
             **({"rings": rings} if rings else {}),
             "bounds": bounds_of_coords(flat),
+            # Recorded for update_layer(data=...); see add_line.
+            "added_with": record_added_with(
+                "add_polygon",
+                parser={"lat_col": lat_col, "lon_col": lon_col, "shape_id_col": shape_id_col,
+                        "order_col": order_col, "coord_order": coord_order},
+                data_opts=data_opts, explicit_style=explicit_style,
+                static_style=static_style, label=label,
+                fanned=is_multi or is_column(name, props)
+                       or any(is_col for _, is_col in group_specs),
+                popup=popup, tooltip=tooltip, properties=properties),
             **(feature_styles[i] if feature_styles else layer_style),
             "properties": poly_props,
             "autobind_popup": bool(popup),
