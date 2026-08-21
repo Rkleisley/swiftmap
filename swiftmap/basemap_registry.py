@@ -118,3 +118,9 @@ DEFAULT_BASEMAPS = {
     "EPSG:3857": [("Open Street Map", True), ("Dark Matter", False)],
     "EPSG:4326": [("Esri WGS84", True)],
 }
+
+# Fixed branding for every map on this network, applied by Map() through
+# configure_logo -- the same keywords: company, parent_company (URL, data URI or
+# local file path), position, height, show. None ships no branding; an app can
+# still call configure_logo to change or clear it.
+DEFAULT_LOGO = None

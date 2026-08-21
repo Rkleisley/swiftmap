@@ -28,8 +28,8 @@ from .mapops.transport import (
     _merge_lookup, _layers_append, _layers_replace, _layers_set,
     _layers_update_many, _set_layer_buffer, _remove_layer_buffers)
 from .mapops.marginalia import (
-    _DRAW_TOOLS, _DRAW_POSITIONS, _SCALE_UNITS, _SCALE_POSITIONS,
-    configure_draw, clear_drawings, configure_scale)
+    _DRAW_TOOLS, _DRAW_POSITIONS, _SCALE_UNITS, _SCALE_POSITIONS, _LOGO_POSITIONS,
+    configure_draw, clear_drawings, configure_scale, configure_logo)
 from .mapops.legend import (
     _LEGEND_POSITIONS, configure_legend, legend_add, legend_remove,
     legend_clear, legend_html)
@@ -73,8 +73,11 @@ class Map(anywidget.AnyWidget):
         per geometry, ramps/categories/bins from `color_col`) with `legend_add` /
         `legend_remove` overrides on top. See `configure_legend` for position, scope
         and title.
-    show_logo : bool, default True
-        If True, displays branding logos on the map viewport.
+    show_logo : bool, default False
+        If True, shows the logo card -- your branding, set with `configure_logo`
+        (two slots, each a URL, data URI or local file). Nothing is shipped by
+        default; with the card on and no slots set, a generic swiftmap mark
+        stands in.
     show_click_coordinates : bool, default False
         If True, clicking open map (not a feature) opens a small popup with the
         clicked coordinates. Either way the click reaches Python: `clicked_latlng`
@@ -145,6 +148,8 @@ class Map(anywidget.AnyWidget):
     configure_draw = configure_draw
     clear_drawings = clear_drawings
     configure_scale = configure_scale
+    _LOGO_POSITIONS = _LOGO_POSITIONS
+    configure_logo = configure_logo
 
     # Legend (mapops/legend.py)
     _LEGEND_POSITIONS = _LEGEND_POSITIONS
@@ -196,6 +201,11 @@ class Map(anywidget.AnyWidget):
     )
     coordinate_buffers = traitlets.Dict({}).tag(sync=True)
     show_logo = traitlets.Bool(False).tag(sync=True)
+    # The logo card's content and placement: {"company": {url, alt},
+    # "parent_company": {url, alt}, "position", "height"} -- see configure_logo.
+    # Empty means no branding; the frontend shows a generic mark only while the
+    # card is on with neither slot set.
+    logo_config = traitlets.Dict({}).tag(sync=True)
     # Undeclared, this was a plain Python attribute: __init__ assigned it happily,
     # export read it happily, and the frontend's model.get("show_legend") was
     # undefined forever -- the legend could never switch on under a real widget.
@@ -252,7 +262,7 @@ class Map(anywidget.AnyWidget):
         center: Optional[List[float]] = None,
         zoom: Optional[int] = None,
         show_legend: bool = False,
-        show_logo: bool = True,
+        show_logo: bool = False,
         show_click_coordinates: bool = False,
         show_scale: bool = False,
         height: Optional[str] = None,
@@ -300,6 +310,11 @@ class Map(anywidget.AnyWidget):
 
         # Internal layer list counter
         self._layer_counter = 0
+
+        # Fixed branding across an office's apps seeds from the registry file,
+        # exactly like the default basemaps, so no app repeats it.
+        if _basemap_registry.DEFAULT_LOGO:
+            self.configure_logo(**_basemap_registry.DEFAULT_LOGO)
 
         # Default basemaps come from the network's registry file, per CRS --
         # the other network defaults a bare Map() to its own services.

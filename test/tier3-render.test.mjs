@@ -1096,6 +1096,74 @@ suite("a timed layer keeps animating after an append extends its range", async (
     }, "widget-time.html");
 });
 
+suite("the logo card is app-supplied, off by default, and carries data URIs", async () => {
+    // The card used to hardcode two placeholder URLs that never resolved -- two
+    // broken-image icons on every map -- and show_logo defaulted True through the
+    // constructor. Now: off by default, content from logo_config (URL, data URI,
+    // or a file embedded Python-side), a generic inline mark only when the card is
+    // on with neither slot set, and never a request to a non-resolving host.
+    await withPage(async (page, errors) => {
+        const stray = [];
+        page.on("request", r => { if (/repo\/assets/.test(r.url())) stray.push(r.url()); });
+        const card = () => page.evaluate(() => {
+            const div = document.querySelector(".swiftmap-logo");
+            const imgs = div ? [...div.querySelectorAll("img")] : [];
+            return {
+                shown: Boolean(div) && getComputedStyle(div).display !== "none",
+                imgs: imgs.map(i => ({ scheme: i.src.split(";")[0], alt: i.alt,
+                                       height: i.style.height,
+                                       ok: i.complete && i.naturalWidth > 0 })),
+                pos: div ? { top: div.style.top, bottom: div.style.bottom,
+                             left: div.style.left, right: div.style.right } : null,
+            };
+        });
+        const set = (k, v) => page.evaluate(([key, val]) =>
+            window.__model.set(key, val), [k, v]).then(() => page.waitForTimeout(300));
+        const decoded = () => page.waitForFunction(() => {
+            const imgs = [...document.querySelectorAll(".swiftmap-logo img")];
+            return imgs.length > 0 && imgs.every(i => i.complete && i.naturalWidth > 0);
+        }, null, { timeout: 10000 });
+
+        let state = await card();
+        assert.equal(state.shown, false, "off by default");
+        assert.equal(state.imgs.length, 0, "and holds no images while off");
+
+        // A data-URI logo in the configured corner at the configured height.
+        const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        await set("logo_config", { company: { url: PNG, alt: "Acme" },
+                                   position: "top-left", height: 40 });
+        await set("show_logo", true);
+        await decoded();
+        state = await card();
+        assert.equal(state.shown, true, "the card shows");
+        assert.equal(state.imgs.length, 1, "one slot set, one image -- the other slot renders nothing");
+        assert.equal(state.imgs[0].scheme, "data:image/png", "the data URI is the source");
+        assert.equal(state.imgs[0].alt, "Acme");
+        assert.equal(state.imgs[0].height, "40px", "height is the configured pixels");
+        assert.ok(state.imgs[0].ok, "the image decoded");
+        assert.deepEqual([state.pos.top, state.pos.left, state.pos.bottom, state.pos.right],
+            ["10px", "10px", "", ""], "anchored top-left");
+
+        // Live toggle, both ways.
+        await set("show_logo", false);
+        assert.equal((await card()).shown, false, "toggling off hides it live");
+        await set("show_logo", true);
+        assert.equal((await card()).shown, true, "and back on shows it");
+
+        // On with neither slot set: the generic mark stands in -- never a broken image.
+        await set("logo_config", {});
+        await decoded();
+        state = await card();
+        assert.equal(state.imgs.length, 1);
+        assert.equal(state.imgs[0].scheme, "data:image/svg+xml", "the built-in mark is inline SVG");
+        assert.ok(state.imgs[0].ok, "and it decodes");
+        assert.deepEqual([state.pos.bottom, state.pos.right], ["10px", "10px"],
+            "default corner is bottom-right");
+        assert.deepEqual(stray, [], "no request ever went to the old placeholder host");
+        assert.deepEqual(errors, [], "no errors through the logo states");
+    }, "widget.html");
+});
+
 suite("imagery renders from a URL and from the binary transport", async () => {
     // The image layer type is pure data -- {type:"image", bounds, opacity,
     // url | bytes under the layer id} -- so a plain-JS consumer needs only a

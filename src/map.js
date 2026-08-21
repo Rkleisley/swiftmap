@@ -564,23 +564,56 @@ export default {
         container.appendChild(legendDiv);
 
         // Logo
+        // The logo card: two app-supplied slots from logo_config, no branding of
+        // its own. With the card on and neither slot set, a generic mark stands in
+        // -- inline SVG, so it needs no network and survives a static export.
+        // Built with elements, not innerHTML, so an alt text cannot inject markup.
+        const LOGO_POSITIONS = new Set(["top-left", "top-right", "bottom-left", "bottom-right"]);
+        const DEFAULT_LOGO = "data:image/svg+xml;utf8," + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 40">'
+            + '<rect width="140" height="40" rx="8" fill="#1f6feb"/>'
+            + '<text x="70" y="26" font-family="Segoe UI, Helvetica, Arial, sans-serif" '
+            + 'font-size="18" font-weight="600" fill="#fff" text-anchor="middle">swiftmap</text>'
+            + '</svg>');
         const logoDiv = document.createElement("div");
+        logoDiv.className = "swiftmap-logo";
         logoDiv.style.position = "absolute";
-        logoDiv.style.bottom = "10px";
-        logoDiv.style.right = "10px";
         logoDiv.style.zIndex = "1000";
         logoDiv.style.background = "white";
         logoDiv.style.padding = "5px";
         logoDiv.style.borderRadius = "4px";
         logoDiv.style.boxShadow = "0 1px 5px rgba(0,0,0,0.4)";
         logoDiv.style.display = "none";
-        logoDiv.innerHTML = `
-            <div style="display: flex; align-items: center;">
-                <img src="https://repo/assets/image.png" alt="Company" style="height: 35px; margin-right: 5px;">
-                <img src="https://repo/assets/image2.png" alt="Parent Company" style="height: 35px;">
-            </div>
-        `;
         container.appendChild(logoDiv);
+
+        function syncLogo() {
+            const show = Boolean(model.get("show_logo"));
+            logoDiv.style.display = show ? "block" : "none";
+            logoDiv.replaceChildren();
+            if (!show) return;
+            const cfg = model.get("logo_config") || {};
+            const height = Number(cfg.height) > 0 ? Number(cfg.height) : 35;
+            const position = LOGO_POSITIONS.has(cfg.position) ? cfg.position : "bottom-right";
+            for (const side of ["top", "bottom", "left", "right"]) logoDiv.style[side] = "";
+            logoDiv.style[position.startsWith("top") ? "top" : "bottom"] = "10px";
+            logoDiv.style[position.endsWith("left") ? "left" : "right"] = "10px";
+            const slots = [cfg.company, cfg.parent_company].filter(s => s && s.url);
+            const images = slots.length ? slots : [{ url: DEFAULT_LOGO, alt: "swiftmap" }];
+            const row = document.createElement("div");
+            row.style.display = "flex";
+            row.style.alignItems = "center";
+            row.style.gap = "5px";
+            for (const image of images) {
+                const img = document.createElement("img");
+                img.src = image.url;
+                img.alt = image.alt || "";
+                img.style.height = `${height}px`;
+                row.appendChild(img);
+            }
+            logoDiv.appendChild(row);
+        }
+        syncLogo();
+        model.on("change:logo_config", syncLogo);
 
 
 
@@ -624,7 +657,7 @@ export default {
                 model.save_changes();
             }
 
-            logoDiv.style.display = model.get("show_logo") ? "block" : "none";
+            syncLogo();
 
             // Group visible layers (including sub-layers inside groups) to always use WebGL
             const {

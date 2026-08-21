@@ -14,7 +14,7 @@ def test_map_initialization():
     m = Map(center=[34.05, -118.24], zoom=10)
     assert m.center == [34.05, -118.24]
     assert m.zoom == 10
-    assert m.show_logo is True
+    assert m.show_logo is False
     assert m.show_legend is False
 
 def test_height_reaches_both_the_trait_and_the_widget_layout():

@@ -91,6 +91,8 @@ def to_html(self, title: str = "SwiftMap") -> str:
         "auto_sync": True,
         "sync_trigger": 0,
         "show_logo": self.show_logo,
+        # Data-URI logos are embedded here, so a branded export opens offline.
+        "logo_config": self.logo_config,
         "show_legend": self.show_legend,
         "show_click_coordinates": self.show_click_coordinates,
         "show_scale": self.show_scale,
