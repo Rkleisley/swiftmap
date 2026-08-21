@@ -13,8 +13,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import swiftmap
 from swiftmap import Map
-from swiftmap._colormaps import COLORMAPS, map_colors, map_radii
+from swiftmap._colormaps import (COLORMAPS, CATEGORICAL_PALETTES, map_colors, map_radii,
+                                 resolve_colormap, register_colormap, data_driven_legend)
 from swiftmap._warnings import SwiftMapWarning
 
 
@@ -167,3 +169,125 @@ def test_data_options_are_not_mistaken_for_typos(recwarn):
                          colormap="plasma", vmin=0, vmax=10,
                          radius_col="speed", radius_range=(2, 12))
     assert [w for w in recwarn if issubclass(w.category, SwiftMapWarning)] == []
+
+
+# --- explicit category mappings ---------------------------------------------------------
+RISK = {"high": "#ff0000", "medium": "#ffaa00", "low": "#00ff00"}
+
+
+def test_a_category_mapping_colours_by_value_not_by_sort_order():
+    # Alphabetically high < low < medium; the mapping must win regardless.
+    out = map_colors(["low", "high", "medium", "high"], RISK)
+    assert out[0].tolist() == rgba("#00ff00")
+    assert out[1].tolist() == rgba("#ff0000")
+    assert out[2].tolist() == rgba("#ffaa00")
+    assert out[3].tolist() == rgba("#ff0000")
+
+
+def test_an_unmapped_category_takes_the_fallback_and_is_named():
+    with pytest.warns(SwiftMapWarning, match="'unknown'"):
+        out = map_colors(["high", "unknown"], RISK, fallback="#123456")
+    assert out[1].tolist() == rgba("#123456")
+
+
+def test_the_mapping_reaches_the_layer_and_orders_its_legend():
+    df = pd.DataFrame({"lat": [36.0, 36.1, 36.2, 36.3], "lon": [-5.3, -5.2, -5.1, -5.0],
+                       "risk": ["low", "high", "medium", "high"]})
+    m = Map()
+    m.add_circle_markers(df, name="Sites", color_col="risk", colormap=RISK)
+    layer = m.find_layers("Sites")[0]
+    colors = np.frombuffer(m.coordinate_buffers[f"{layer['id']}::colors"], np.uint8).reshape(-1, 4)
+    assert colors[1].tolist() == rgba("#ff0000") and colors[0].tolist() == rgba("#00ff00")
+    items = layer["legend"]["items"]
+    assert [i["value"] for i in items] == ["high", "medium", "low"], "the mapping's order, not alphabetical"
+    assert [i["color"] for i in items] == ["#ff0000", "#ffaa00", "#00ff00"]
+    assert layer["added_with"]["data_opts"]["colormap"] == RISK, "recorded for update_layer"
+
+
+def test_a_mapping_survives_update_layer():
+    df = pd.DataFrame({"lat": [36.0, 36.1], "lon": [-5.3, -5.2], "risk": ["low", "high"]})
+    m = Map()
+    m.add_circle_markers(df, name="Sites", color_col="risk", colormap=RISK)
+    m.update_layer("Sites", data=pd.DataFrame({"lat": [36.5], "lon": [-5.5], "risk": ["medium"]}))
+    layer = m.find_layers("Sites")[0]
+    colors = np.frombuffer(m.coordinate_buffers[f"{layer['id']}::colors"], np.uint8).reshape(-1, 4)
+    assert colors[0].tolist() == rgba("#ffaa00")
+
+
+def test_a_mapping_on_numeric_values_warns_and_uses_the_default_ramp():
+    with pytest.warns(SwiftMapWarning, match="numeric"):
+        out = map_colors([0.0, 10.0], RISK)
+    assert out[0].tolist() == rgba(COLORMAPS["viridis"][0])
+
+
+# --- colormaps from elsewhere ------------------------------------------------------------
+def test_a_list_of_colours_is_a_ramp_for_numbers():
+    out = map_colors([0.0, 10.0], ["#000000", "#ffffff"])
+    assert out[0].tolist() == rgba("#000000") and out[1].tolist() == rgba("#ffffff")
+    legend = data_driven_legend({"v": [0.0, 10.0]}, {"color_col": "v",
+                                                     "colormap": ["#000000", "#ffffff"]})
+    assert legend["anchors"] == ["#000000", "#ffffff"], "the legend shows the same ramp"
+
+
+def test_a_list_of_colours_is_a_palette_for_categories():
+    out = map_colors(["a", "b", "c"], ["#111111", "#222222", "#333333"])
+    assert [row.tolist() for row in out] == [rgba("#111111"), rgba("#222222"), rgba("#333333")]
+
+
+def test_a_callable_is_sampled_into_anchors():
+    spec = resolve_colormap(lambda t: (t, 0.0, 1.0 - t, 1.0))
+    assert isinstance(spec, list) and len(spec) == 16
+    assert spec[0] == "#0000ff" and spec[-1] == "#ff0000"
+    out = map_colors([0.0, 10.0], spec)
+    assert out[0].tolist() == rgba("#0000ff") and out[1].tolist() == rgba("#ff0000")
+
+
+def test_rgb_tuples_in_0_255_are_read_too():
+    assert resolve_colormap([(255, 0, 0), (0, 0, 255)]) == ["#ff0000", "#0000ff"]
+    assert resolve_colormap({"x": (0, 255, 0)}) == {"x": "#00ff00"}
+
+
+def test_a_matplotlib_colormap_object_and_name_both_work():
+    mpl = pytest.importorskip("matplotlib")
+    cmap = mpl.colormaps["viridis"]
+    spec = resolve_colormap(cmap)
+    assert spec[0] == "#440154" and spec[-1] == "#fde725", "matplotlib's own endpoints"
+    by_name = resolve_colormap("matplotlib:viridis")
+    assert by_name == spec
+    with pytest.warns(SwiftMapWarning, match="no colormap named"):
+        assert resolve_colormap("matplotlib:not-a-map") is None
+
+
+def test_an_unknown_source_prefix_warns():
+    with pytest.warns(SwiftMapWarning, match="Unknown colormap source"):
+        assert resolve_colormap("bokeh:viridis") is None
+
+
+def test_register_colormap_makes_a_name_of_it():
+    register_colormap("corp", ["#000000", "#ffffff"])
+    assert "corp" in COLORMAPS
+    out = map_colors([0.0, 10.0], "corp")
+    assert out[1].tolist() == rgba("#ffffff")
+    register_colormap("corp-cats", ["#111111", "#222222"], kind="palette")
+    assert "corp-cats" in CATEGORICAL_PALETTES
+    assert map_colors(["a", "b", "c"], "corp-cats")[2].tolist() == rgba("#111111"), "palettes cycle"
+    assert swiftmap.register_colormap is register_colormap
+    # Two honest warnings: the spec is unreadable, so nothing is registered.
+    with pytest.warns(SwiftMapWarning, match="colormap must be|nothing was registered"):
+        register_colormap("bad", object())
+    assert "bad" not in COLORMAPS and "bad" not in CATEGORICAL_PALETTES
+
+
+def test_a_callable_records_as_anchors_not_as_a_callable():
+    df = pd.DataFrame({"lat": [36.0, 36.1], "lon": [-5.3, -5.2], "v": [0, 1]})
+    m = Map()
+    m.add_circle_markers(df, name="S", color_col="v", colormap=lambda t: (t, t, t))
+    recorded = m.find_layers("S")[0]["added_with"]["data_opts"]["colormap"]
+    assert isinstance(recorded, list) and recorded[0] == "#000000" and recorded[-1] == "#ffffff"
+
+
+def test_legend_add_accepts_a_list_ramp():
+    m = Map()
+    m.legend_add("Depth", colormap=["#ffffff", "#000000"], vmin=0, vmax=50)
+    entry = m.legend_config["add"][0]
+    assert entry["kind"] == "ramp" and entry["anchors"] == ["#ffffff", "#000000"]

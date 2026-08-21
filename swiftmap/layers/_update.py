@@ -222,7 +222,7 @@ def _update_points(self, layer, data, append, parser, field_kwargs, rec) -> "Map
                                    layer.get("color", _STYLE_DEFAULTS[ltype]["color"]),
                                    "update_layer")
     radii_f32 = data_driven_radii(props, data_opts, "update_layer")
-    legend_block = data_driven_legend(props, data_opts)
+    legend_block = data_driven_legend(props, data_opts, layer.get("color", _STYLE_DEFAULTS[ltype]["color"]))
     size_legend = data_driven_size_legend(props, data_opts)
     labels = (resolve_feature_labels(rec["label"], props, n)
               if rec.get("label") is not None else None)
@@ -380,7 +380,7 @@ def _update_single(self, layer, data, parser, field_kwargs, rec) -> "Map":
     colors_u8 = data_driven_colors(props, data_opts,
                                    layer.get("color", _STYLE_DEFAULTS[ltype]["color"]),
                                    "update_layer")
-    legend_block = data_driven_legend(props, data_opts)
+    legend_block = data_driven_legend(props, data_opts, layer.get("color", _STYLE_DEFAULTS[ltype]["color"]))
     label = (resolve_feature_label(rec["label"], props, 0)
              if rec.get("label") is not None else None)
     times_payload, drop_time = _retime(layer, feature_props)

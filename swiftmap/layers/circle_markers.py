@@ -64,9 +64,15 @@ def add_circle_markers(
           from its own value, anything else is the literal text. DOM elements, so
           meant for site-scale layers -- a warning fires past 1000.
         - color_col : str - Column whose values colour each point through a colormap.
-        - colormap : str - 'viridis' (default), 'plasma', 'inferno', 'magma', 'turbo',
-          'coolwarm', 'blues', 'reds', 'greens', 'greys', or the categorical 'swift10'.
-          A non-numeric column takes categorical colours automatically.
+        - colormap : str, list, callable or dict - A built-in name: 'viridis'
+          (default), 'plasma', 'inferno', 'magma', 'turbo', 'coolwarm', 'blues', 'reds',
+          'greens', 'greys', or the categorical 'swift10'; a name registered with
+          `swiftmap.register_colormap`; 'matplotlib:<name>'; a list of colours (a ramp
+          for numbers, a palette for categories); a callable t -> colour, such as a
+          matplotlib Colormap object; or, for a categorical column, a {value: colour}
+          mapping -- each value keeps its colour wherever it sorts, the legend reads in
+          the mapping's order, and an unmapped value takes the layer colour. A
+          non-numeric column takes categorical colours automatically.
         - vmin / vmax : float - Fix the colour ramp's extremes instead of the data's.
         - color_bins : list of float - Bin edges: discrete classes instead of a ramp.
         - radius_col : str - Column whose values size each point. Area-proportional
@@ -141,7 +147,7 @@ def add_circle_markers(
                                    layer_style.get("color", "#3388ff"),
                                    "add_circle_markers")
     radii_f32 = data_driven_radii(props, data_opts, "add_circle_markers")
-    legend_block = data_driven_legend(props, data_opts)
+    legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#3388ff"))
     size_legend = data_driven_size_legend(props, data_opts)
 
     feature_labels = resolve_feature_labels(label, props, num_points)

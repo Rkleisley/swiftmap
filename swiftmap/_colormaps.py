@@ -9,7 +9,7 @@ for colours, f32 for radii -- shipped on the same transport as coordinates, neve
 as per-feature style dicts in the layers JSON: at millions of points, style dicts
 are exactly the payload that killed sessions before coordinates moved to buffers.
 """
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -50,17 +50,173 @@ DEFAULT_COLORMAP = "viridis"
 DEFAULT_PALETTE = "swift10"
 
 
+# --- colormap specs ----------------------------------------------------------------
+# What `colormap=` accepts, canonicalised ONCE when the option is popped into a
+# JSON-safe spec that records into the layer config and so survives
+# update_layer(data=...):
+#   a registered name       -> that name ("viridis", "swift10", or one you registered)
+#   "matplotlib:<name>"     -> that map sampled into anchors; the import happens only
+#                              when asked, so matplotlib is never a dependency
+#   a list of colours       -> anchors: a ramp for numeric values, a palette for
+#                              categories (the first sorted category takes the first)
+#   a callable t -> colour  -> sampled into anchors; a matplotlib Colormap object is one
+#   {value: colour}         -> an explicit category mapping; the legend follows the
+#                              dict's order, and an unmapped value takes the fallback
+SAMPLE_ANCHORS = 16
+
+
+def _to_hex(color: Any) -> Optional[str]:
+    """#rrggbb from '#rgb'/'#rrggbb'/'#rrggbbaa' or an RGB(A) tuple in 0..1 or 0..255."""
+    if isinstance(color, str):
+        v = color.strip().lstrip("#")
+        if len(v) == 3:
+            v = "".join(ch * 2 for ch in v)
+        if len(v) in (6, 8) and all(ch in "0123456789abcdefABCDEF" for ch in v[:6]):
+            return "#" + v[:6].lower()
+        return None
+    try:
+        parts = [float(c) for c in list(color)[:3]]
+    except (TypeError, ValueError):
+        return None
+    if len(parts) != 3:
+        return None
+    if all(0.0 <= c <= 1.0 for c in parts):
+        parts = [c * 255.0 for c in parts]
+    return "#%02x%02x%02x" % tuple(int(round(min(max(c, 0.0), 255.0))) for c in parts)
+
+
+def _sample_callable(fn: Any) -> Optional[List[str]]:
+    anchors = []
+    for t in np.linspace(0.0, 1.0, SAMPLE_ANCHORS):
+        try:
+            hexcode = _to_hex(fn(float(t)))
+        except Exception:
+            return None
+        if hexcode is None:
+            return None
+        anchors.append(hexcode)
+    return anchors
+
+
+def _from_matplotlib(name: str) -> Optional[List[str]]:
+    try:
+        import matplotlib
+        cmap = matplotlib.colormaps[name]
+    except ImportError:
+        warn(f"colormap 'matplotlib:{name}' needs matplotlib, which is not installed; "
+             f"using {DEFAULT_COLORMAP!r}.")
+        return None
+    except KeyError:
+        warn(f"matplotlib has no colormap named {name!r}; using {DEFAULT_COLORMAP!r}.")
+        return None
+    return _sample_callable(cmap)
+
+
+def resolve_colormap(spec: Any) -> Any:
+    """
+    Canonicalises a `colormap=` value into its JSON-safe spec: a registered name,
+    a list of hex anchors, or a {value: hex} mapping. None means "the default".
+    Anything that cannot be read warns honestly and falls back to the default.
+    """
+    if spec is None:
+        return None
+    if isinstance(spec, str):
+        text = spec.strip()
+        low = text.lower()
+        if low in COLORMAPS or low in CATEGORICAL_PALETTES:
+            return low
+        if ":" in text:
+            source, _, name = text.partition(":")
+            if source.strip().lower() in ("matplotlib", "mpl"):
+                return _from_matplotlib(name.strip())
+            warn(f"Unknown colormap source {source.strip()!r} in {spec!r}; only "
+                 f"'matplotlib:<name>' is understood. Using {DEFAULT_COLORMAP!r}.")
+            return None
+        return text          # an unknown name: the mapping warns "Unknown colormap"
+    if isinstance(spec, dict):
+        mapping: Dict[str, str] = {}
+        bad = []
+        for key, value in spec.items():
+            hexcode = _to_hex(value)
+            if hexcode is None:
+                bad.append(key)
+            else:
+                mapping[str(key)] = hexcode
+        if bad:
+            warn(f"colormap mapping: {len(bad)} value(s) are not colours "
+                 f"({', '.join(repr(b) for b in bad[:5])}); those categories take the "
+                 f"fallback colour.")
+        return mapping
+    if isinstance(spec, (list, tuple)):
+        anchors = [_to_hex(c) for c in spec]
+        if not anchors or any(a is None for a in anchors):
+            warn(f"A colormap list must hold colours (#rrggbb or RGB tuples); got "
+                 f"{spec!r}. Using {DEFAULT_COLORMAP!r}.")
+            return None
+        return anchors if len(anchors) > 1 else anchors * 2
+    if callable(spec):
+        anchors = _sample_callable(spec)
+        if anchors is None:
+            warn(f"A colormap callable must map t in [0, 1] to a colour; {spec!r} did "
+                 f"not. Using {DEFAULT_COLORMAP!r}.")
+        return anchors
+    warn(f"colormap must be a name, 'matplotlib:<name>', a list of colours, a callable, "
+         f"or a {{value: colour}} mapping; got {type(spec).__name__}. Using "
+         f"{DEFAULT_COLORMAP!r}.")
+    return None
+
+
+def register_colormap(name: str, source: Any, kind: str = "ramp") -> None:
+    """
+    Registers a colormap under a name, from any form `colormap=` accepts -- a list of
+    colours, a callable or matplotlib Colormap, 'matplotlib:<name>'. `kind='ramp'`
+    (default) interpolates for numeric values and spreads over categories;
+    `kind='palette'` cycles discrete colours over categories. The name then works
+    everywhere a built-in does, and records into layer configs as a name.
+    """
+    spec = resolve_colormap(source)
+    if isinstance(spec, str):
+        spec = COLORMAPS.get(spec) or CATEGORICAL_PALETTES.get(spec)
+    if not isinstance(spec, list):
+        warn(f"register_colormap({name!r}): the source must resolve to a list of "
+             f"colours; nothing was registered.")
+        return
+    key = str(name).strip().lower()
+    if kind == "palette":
+        CATEGORICAL_PALETTES[key] = list(spec)
+        COLORMAPS.pop(key, None)
+    elif kind == "ramp":
+        COLORMAPS[key] = list(spec)
+        CATEGORICAL_PALETTES.pop(key, None)
+    else:
+        warn(f"register_colormap({name!r}): kind must be 'ramp' or 'palette', got "
+             f"{kind!r}; nothing was registered.")
+
+
+def _anchors_of(spec: Any) -> Optional[List[str]]:
+    """The anchor list behind a ramp spec -- a registered name or a colour list."""
+    if isinstance(spec, (list, tuple)):
+        return [str(c) for c in spec]
+    if isinstance(spec, str):
+        return COLORMAPS.get(spec.lower())
+    return None
+
+
 def _hex_to_rgb(value: str) -> Tuple[int, int, int]:
     v = value.lstrip("#")
     return int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16)
 
 
-def _ramp(name: str) -> np.ndarray:
-    """The anchor table as an (n, 3) float array, warning-and-viridis on a bad name."""
-    anchors = COLORMAPS.get(str(name).lower())
+def _ramp(spec: Any) -> np.ndarray:
+    """The anchor table as an (n, 3) float array, warning-and-viridis on a bad spec."""
+    anchors = _anchors_of(spec)
     if anchors is None:
-        warn(f"Unknown colormap {name!r}; using {DEFAULT_COLORMAP!r}. "
-             f"Available: {', '.join(sorted(COLORMAPS))}.")
+        if isinstance(spec, dict):
+            warn(f"A {{value: colour}} mapping colours categories, but the values are "
+                 f"numeric; using the {DEFAULT_COLORMAP!r} ramp.")
+        else:
+            warn(f"Unknown colormap {spec!r}; using {DEFAULT_COLORMAP!r}. "
+                 f"Available: {', '.join(sorted(COLORMAPS))}.")
         anchors = COLORMAPS[DEFAULT_COLORMAP]
     return np.array([_hex_to_rgb(a) for a in anchors], dtype=np.float64)
 
@@ -122,19 +278,54 @@ def map_colors(
 
     # Categorical: distinct value -> colour, in sorted order for determinism.
     cats, inverse = np.unique(arr.astype(str), return_inverse=True)
-    table = _category_table(len(cats), colormap, quiet=False)
+    table = _category_assignments(cats, colormap, fallback, quiet=False)
     out[:, :3] = table[inverse]
     return out
 
 
-def _category_table(count: int, colormap: Optional[str], quiet: bool) -> np.ndarray:
+def _category_assignments(cats: Sequence[str], colormap: Any, fallback: str,
+                          quiet: bool) -> np.ndarray:
+    """
+    (len(cats), 3) uint8 colours aligned with `cats`. A {value: colour} mapping
+    assigns by value -- high stays red wherever it sorts -- and a category the
+    mapping does not name takes the fallback, with a warning naming it (once, from
+    the buffer mapping; the legend derivation stays quiet). Anything else is a
+    palette or a spread ramp through _category_table.
+    """
+    if isinstance(colormap, dict):
+        mapping = {str(k): v for k, v in colormap.items()}
+        fb = _hex_to_rgb(fallback)
+        rows, missing = [], []
+        for cat in cats:
+            hexcode = mapping.get(str(cat))
+            if hexcode is None:
+                missing.append(str(cat))
+                rows.append(fb)
+            else:
+                rows.append(_hex_to_rgb(hexcode))
+        if missing and not quiet:
+            shown = ", ".join(repr(m) for m in missing[:5])
+            more = "..." if len(missing) > 5 else ""
+            warn(f"color_col: {len(missing)} categor{'y is' if len(missing) == 1 else 'ies are'} "
+                 f"not in the colormap mapping ({shown}{more}); painted with the "
+                 f"fallback colour.")
+        return np.array(rows, dtype=np.uint8)
+    return _category_table(len(cats), colormap, quiet)
+
+
+def _category_table(count: int, colormap: Any, quiet: bool) -> np.ndarray:
     """
     (count, 3) uint8 colours for that many categories.
 
-    A named sequential map spreads evenly across the categories; otherwise a
-    categorical palette cycles. Shared by the buffer mapping and the legend block so
-    the swatches in the legend are byte-identical to the points on the map.
+    A named sequential map spreads evenly across the categories; a list of colours
+    is a palette (the first sorted category takes the first colour, cycling);
+    otherwise a categorical palette cycles. Shared by the buffer mapping and the
+    legend block so the swatches in the legend are byte-identical to the points on
+    the map.
     """
+    if isinstance(colormap, (list, tuple)):
+        table = np.array([_hex_to_rgb(c) for c in colormap], dtype=np.uint8)
+        return table[np.arange(count) % len(table)]
     name = str(colormap).lower() if colormap else DEFAULT_PALETTE
     if name in COLORMAPS and count > 1:
         ramp = _ramp(name)
@@ -197,12 +388,11 @@ def _label_num(value: float) -> Any:
 MAX_LEGEND_CATEGORIES = 50
 
 
-def bins_block(colormap: Optional[str], edges: Sequence[float]) -> dict:
+def bins_block(colormap: Any, edges: Sequence[float]) -> dict:
     """Bin edges plus per-class colours sampled from the colormap, frontend-ready."""
     edges = [float(e) for e in edges]
     classes = len(edges) + 1
-    anchors = (COLORMAPS.get(str(colormap or DEFAULT_COLORMAP).lower())
-               or COLORMAPS[DEFAULT_COLORMAP])
+    anchors = _anchors_of(colormap) or COLORMAPS[DEFAULT_COLORMAP]
     ramp = np.array([_hex_to_rgb(a) for a in anchors], dtype=np.float64)
     t = np.arange(classes) / max(classes - 1, 1)
     table = np.round(_sample(ramp, t)).astype(np.uint8)
@@ -210,7 +400,8 @@ def bins_block(colormap: Optional[str], edges: Sequence[float]) -> dict:
             "colors": [rgb_hex(row) for row in table]}
 
 
-def data_driven_legend(props: Optional[dict], opts: dict) -> Optional[dict]:
+def data_driven_legend(props: Optional[dict], opts: dict,
+                       fallback: str = "#3388ff") -> Optional[dict]:
     """
     The resolved legend block for a color_col mapping, or None.
 
@@ -225,15 +416,15 @@ def data_driven_legend(props: Optional[dict], opts: dict) -> Optional[dict]:
     if values is None:
         return None
     arr = np.asarray(values)
-    name = str(opts.get("colormap") or DEFAULT_COLORMAP).lower()
+    spec = opts.get("colormap")
 
     if _is_numeric(arr) and not np.issubdtype(arr.dtype, np.bool_):
         v = arr.astype(np.float64)
         finite = np.isfinite(v)
-        anchors = COLORMAPS.get(name) or COLORMAPS[DEFAULT_COLORMAP]
+        anchors = _anchors_of(spec) or COLORMAPS[DEFAULT_COLORMAP]
         bins = opts.get("color_bins")
         if bins is not None:
-            return {**bins_block(name, bins), "field": col}
+            return {**bins_block(spec, bins), "field": col}
         lo = float(opts["vmin"]) if opts.get("vmin") is not None else (
             float(np.min(v[finite])) if finite.any() else 0.0)
         hi = float(opts["vmax"]) if opts.get("vmax") is not None else (
@@ -241,11 +432,19 @@ def data_driven_legend(props: Optional[dict], opts: dict) -> Optional[dict]:
         return {"kind": "ramp", "field": col, "anchors": list(anchors),
                 "vmin": _label_num(lo), "vmax": _label_num(hi)}
 
-    cats = np.unique(arr.astype(str))
-    table = _category_table(len(cats), opts.get("colormap"), quiet=True)
-    kept = cats[:MAX_LEGEND_CATEGORIES]
-    items = [{"value": str(value), "color": rgb_hex(table[i])}
-             for i, value in enumerate(kept)]
+    cats = [str(c) for c in np.unique(arr.astype(str))]
+    table = _category_assignments(cats, spec, fallback, quiet=True)
+    # A {value: colour} mapping also states the ORDER the legend should read in
+    # (high, medium, low -- not alphabetical); unmapped values follow, sorted.
+    if isinstance(spec, dict):
+        present = set(cats)
+        order = [str(k) for k in spec if str(k) in present]
+        order += [c for c in cats if c not in spec]
+    else:
+        order = cats
+    index = {c: i for i, c in enumerate(cats)}
+    kept = order[:MAX_LEGEND_CATEGORIES]
+    items = [{"value": value, "color": rgb_hex(table[index[value]])} for value in kept]
     block = {"kind": "categories", "field": col, "items": items}
     if len(cats) > len(kept):
         block["truncated"] = int(len(cats) - len(kept))

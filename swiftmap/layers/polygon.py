@@ -155,7 +155,7 @@ def add_polygon(
     # polygon is its own config entry, so this is a per-feature fillColor override.
     colors_u8 = data_driven_colors(props, data_opts,
                                    layer_style.get("color", "#3388ff"), "add_polygon")
-    legend_block = data_driven_legend(props, data_opts)
+    legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#3388ff"))
 
     for i, coords in enumerate(polygons_coords):
         poly_props = {k: v[i] for k, v in props.items()} if props else {}

@@ -118,8 +118,9 @@ def legend_add(self, label: str, *, group: Optional[str] = None,
     >>> m.legend_add("Threat score", colormap="turbo", vmin=0, vmax=100)
     >>> m.legend_add("Sightings", categories=["confirmed", "probable"])
     """
-    from .._colormaps import (COLORMAPS, DEFAULT_COLORMAP, _category_table,
-                              _label_num, rgb_hex, bins_block)
+    from .._colormaps import (COLORMAPS, DEFAULT_COLORMAP, _anchors_of, _category_table,
+                              _label_num, rgb_hex, bins_block, resolve_colormap)
+    colormap = resolve_colormap(colormap)
     entry: Dict[str, Any] = {"label": str(label)}
     if group is not None:
         entry["group"] = str(group)
@@ -138,7 +139,7 @@ def legend_add(self, label: str, *, group: Optional[str] = None,
     elif colormap is not None and color_bins is not None:
         entry.update(bins_block(colormap, color_bins))
     elif colormap is not None:
-        anchors = COLORMAPS.get(str(colormap).lower())
+        anchors = _anchors_of(colormap)
         if anchors is None:
             warn(f"legend_add: unknown colormap {colormap!r}; using "
                  f"{DEFAULT_COLORMAP!r}.")

@@ -165,7 +165,7 @@ def add_line(
     # per-feature `color` override -- no new transport, feature counts are small here.
     colors_u8 = data_driven_colors(props, data_opts,
                                    layer_style.get("color", "#3388ff"), "add_line")
-    legend_block = data_driven_legend(props, data_opts)
+    legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#3388ff"))
 
     for i, coords in enumerate(lines_coords):
         line_props = {k: v[i] for k, v in props.items()} if props else {}

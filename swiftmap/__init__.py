@@ -1,4 +1,5 @@
 from .map import Map
+from ._colormaps import register_colormap
 
 # Read from the installed package's own metadata, so this can never disagree with
 # the wheel it shipped in; the fallback covers a source tree that was never
@@ -11,5 +12,6 @@ except Exception:
 
 __all__ = [
     "Map",
+    "register_colormap",
     "__version__",
 ]

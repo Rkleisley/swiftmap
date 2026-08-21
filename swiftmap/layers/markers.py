@@ -119,7 +119,7 @@ def add_markers(
     colors_u8 = data_driven_colors(props, data_opts,
                                    layer_style.get("color", "#e61a26"), "add_markers")
     radii_f32 = data_driven_radii(props, data_opts, "add_markers")
-    legend_block = data_driven_legend(props, data_opts)
+    legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#e61a26"))
     size_legend = data_driven_size_legend(props, data_opts)
 
     feature_labels = resolve_feature_labels(label, props, num_points)

@@ -1,6 +1,7 @@
 import difflib
 from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
+from .._colormaps import resolve_colormap
 from .._warnings import warn
 from ._display import DISPLAY_KEYS
 
@@ -169,6 +170,10 @@ def pop_data_options(kwargs: Dict[str, Any], method: str,
     `vmin`/`vmax`/`color_bins`/`colormap` shape the colour ramp only.
     """
     opts = {name: kwargs.pop(name, None) for name in DATA_OPTIONS}
+    # Canonicalised here, once: a callable or matplotlib object becomes its anchor
+    # list, a mapping its {value: hex} -- JSON-safe, so the recorded options can
+    # re-colour new data in update_layer exactly as the add did.
+    opts["colormap"] = resolve_colormap(opts["colormap"])
     if opts["radius_range"] is None:
         opts["radius_range"] = (3.0, 18.0)
     if layer_type:
