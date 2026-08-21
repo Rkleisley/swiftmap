@@ -8,19 +8,11 @@
 // Imagery overlays, one layer per source path. The URL layer is exactly what a
 // plain-JS consumer writes -- config only, no Python anywhere; the buffer layer
 // is the widget path, bytes under the layer id on the binary transport.
-import widget from "/dist/anywidget.js";
+import widget, { createHostStub } from "/dist/anywidget.js";
 
-function makeModel(state) {
-  const listeners = {};
-  const model = {
-    comm: { comm_id: "test" },
-    get: k => state[k],
-    set(k, v) { state[k] = v; (listeners["change:" + k] || []).forEach(f => f()); },
-    on(e, f) { (listeners[e] = listeners[e] || []).push(f); },
-    send() {}, save_changes() {},
-  };
-  return model;
-}
+// The host: the bundle's own reference stub (src/host.js) -- the same five
+// methods the export and every embedding drive the core with.
+const makeModel = (state) => createHostStub(state, { comm: { comm_id: "test" } });
 
 // A 1x1 red PNG; stretched over its bounds box it paints a solid rectangle.
 const PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

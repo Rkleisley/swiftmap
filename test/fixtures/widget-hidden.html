@@ -9,21 +9,11 @@
 <link rel="stylesheet" href="/swiftmap/static/widget.css">
 <div id="host"></div>
 <script type="module">
-import widget from "/dist/anywidget.js";
+import widget, { createHostStub } from "/dist/anywidget.js";
 
-function makeModel(state) {
-  const listeners = {};
-  const model = {
-    comm: { comm_id: "test" },
-    sent: [],
-    get: k => state[k],
-    set(k, v) { state[k] = v; (listeners["change:" + k] || []).forEach(f => f()); },
-    on(e, f) { (listeners[e] = listeners[e] || []).push(f); },
-    send(content, buffers) { model.sent.push({ content, buffers }); },
-    save_changes() {},
-  };
-  return model;
-}
+// The host: the bundle's own reference stub (src/host.js) -- the same five
+// methods the export and every embedding drive the core with.
+const makeModel = (state) => createHostStub(state, { comm: { comm_id: "test" } });
 
 const model = makeModel({
   layers: [],

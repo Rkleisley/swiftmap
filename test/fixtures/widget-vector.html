@@ -9,19 +9,11 @@
 // The main fixture's visible-pixels test hides a whole group, so a blank line could hide
 // behind the points' contribution forever -- which is exactly how "no swiftmap polyline
 // has ever rendered" shipped unnoticed until a plain-JS consumer had no points on screen.
-import widget from "/dist/anywidget.js";
+import widget, { createHostStub } from "/dist/anywidget.js";
 
-function makeModel(state) {
-  const listeners = {};
-  const model = {
-    comm: { comm_id: "test" },
-    get: k => state[k],
-    set(k, v) { state[k] = v; (listeners["change:" + k] || []).forEach(f => f()); },
-    on(e, f) { (listeners[e] = listeners[e] || []).push(f); },
-    send() {}, save_changes() {},
-  };
-  return model;
-}
+// The host: the bundle's own reference stub (src/host.js) -- the same five
+// methods the export and every embedding drive the core with.
+const makeModel = (state) => createHostStub(state, { comm: { comm_id: "test" } });
 
 const model = makeModel({
   layers: [

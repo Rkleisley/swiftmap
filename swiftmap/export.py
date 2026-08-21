@@ -45,21 +45,15 @@ for (const [key, b64] of Object.entries(BUFFERS)) {{
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     state.coordinate_buffers[key] = new DataView(bytes.buffer);
 }}
-// The anywidget model surface the bundle needs, going nowhere: reads come from the
-// baked state, writes update it locally, sends vanish. Exactly the stub the test
-// fixtures render with.
-const listeners = {{}};
-const model = {{
-    get: k => state[k],
-    set(k, v) {{ state[k] = v; (listeners["change:" + k] || []).forEach(f => f()); }},
-    on(e, f) {{ (listeners[e] = listeners[e] || []).push(f); }},
-    send() {{}},
-    save_changes() {{}},
-}};
-window.__model = model;   // console access for whoever opens the file
 const widgetSrc = {widget_src_json};
 const url = URL.createObjectURL(new Blob([widgetSrc], {{ type: "text/javascript" }}));
-const widget = (await import(url)).default;
+const {{ default: widget, createHostStub }} = await import(url);
+// The host: the bundle's own reference stub (src/host.js), going nowhere -- reads
+// come from the baked state, writes update it locally, sends vanish. The same
+// five methods every embedding drives the core with; an export is one with no
+// kernel behind it.
+const model = createHostStub(state);
+window.__model = model;   // console access for whoever opens the file
 await widget.render({{ model, el: document.getElementById("swiftmap") }});
 window.__ready = true;
 </script>

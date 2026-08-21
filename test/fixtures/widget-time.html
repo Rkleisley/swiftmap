@@ -8,27 +8,13 @@
 <script type="module">
 // Drives the real anywidget entry point with a stubbed model, so the widget renders
 // exactly as it does under Shiny or Jupyter with no Python, kernel or comm involved.
-import widget from "/dist/anywidget.js";
+import widget, { createHostStub } from "/dist/anywidget.js";
 
-function makeModel(state) {
-  const listeners = {};
-  const model = {
-    // Deliberately no comm: shinywidgets' model exposes none, and gating writebacks on
-    // it silently killed them all under Shiny -- the drag test below fails against any
-    // code that checks model.comm before writing.
-    comm: null,
-    sent: [],
-    get: k => state[k],
-    set(k, v) { state[k] = v; (listeners["change:" + k] || []).forEach(f => f()); },
-    on(e, f) { (listeners[e] = listeners[e] || []).push(f); },
-    send(content, buffers) { model.sent.push({ content, buffers }); },
-    save_changes() {},
-    // Test hook: fire a registered listener, so a suite can push a real
-    // swiftmap_patch through msg:custom exactly as Python does.
-    emit(e, ...args) { (listeners[e] || []).forEach(f => f(...args)); },
-  };
-  return model;
-}
+// The host: the bundle's own reference stub (src/host.js). Deliberately no
+// comm: shinywidgets' model exposes none, and gating writebacks on it silently
+// killed them all under Shiny -- the drag test below fails against any code
+// that checks model.comm before writing.
+const makeModel = (state) => createHostStub(state, { comm: null });
 
 // Points are shipped as a raw float64 buffer, exactly as the Python side sends them.
 function buffer(pairs) {
