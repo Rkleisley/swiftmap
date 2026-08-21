@@ -51,9 +51,13 @@ def _iter_shapes(data: Any, inherited: Optional[Dict[str, Any]] = None,
     MultiGeoPolygon does not lose the feature's metadata for popups.
 
     `keep(shape)` names shapes to yield WHOLE instead of expanding: a
-    MultiGeoLineString is one feature with parts, so the line parser keeps it.
+    MultiGeoLineString is one feature with parts, so the line parser keeps it. It is
+    consulted for the top-level value too -- a bare MultiGeoPolygon handed straight to
+    the adder exposes `.geoshapes` like a collection and used to be split by it.
     """
-    if isinstance(data, (list, tuple)):
+    if keep is not None and keep(data):
+        items = [data]
+    elif isinstance(data, (list, tuple)):
         items = list(data)
     elif hasattr(data, "geoshapes"):
         items = list(data.geoshapes)

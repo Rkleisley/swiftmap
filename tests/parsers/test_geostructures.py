@@ -187,6 +187,21 @@ def test_multigeopolygon_is_one_feature_keeping_its_metadata():
     assert props["zone"] == ["Z1"], "the feature's metadata rides the one feature"
 
 
+def test_a_bare_multigeopolygon_is_the_same_one_feature():
+    # Handed straight to the adder, not inside a list or collection: the shape
+    # exposes `.geoshapes` like a collection, and used to be expanded by it into
+    # a feature per part before the polygon parser could keep it whole.
+    multi = MultiGeoPolygon(
+        [GeoPolygon([coord(A), coord(C), coord(B), coord(A)]),
+         GeoPolygon([coord(B), coord(C), coord(A), coord(B)])],
+        properties={"zone": "Z1"},
+    )
+    polygons, props = parse_polygons(multi)
+    assert len(polygons) == 1, "bare or listed, one MultiGeoPolygon is one feature"
+    assert polygons[0].ring_lengths() == [[4], [4]]
+    assert props["zone"] == ["Z1"]
+
+
 def test_shapes_with_differing_property_keys_are_unioned():
     shapes = [GeoPoint(coord(A), properties={"a": 1}), GeoPoint(coord(B), properties={"b": 2})]
     _, _, props = parse_points(shapes)
