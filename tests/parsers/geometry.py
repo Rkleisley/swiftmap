@@ -43,6 +43,12 @@ def wkt_multiline(parts):
         "(" + ", ".join(f"{p[1]} {p[0]}" for p in part) + ")" for part in parts) + ")"
 
 
+def wkt_multipolygon(rings):
+    """One hole-free part per ring."""
+    return "MULTIPOLYGON (" + ", ".join(
+        "((" + ", ".join(f"{p[1]} {p[0]}" for p in ring) + "))" for ring in rings) + ")"
+
+
 def wkt_polygon(ring):
     return "POLYGON ((" + ", ".join(f"{p[1]} {p[0]}" for p in ring) + "))"
 
@@ -93,6 +99,23 @@ def assert_points(lats, lons, expected, tol=TOL):
         assert lons[i] == pytest.approx(want[1], abs=tol), (
             f"point[{i}] longitude: got {lons[i]}, expected {want[1]}"
         )
+
+
+def assert_same_ring(actual, expected, label="ring"):
+    """
+    The same closed ring regardless of start vertex or winding direction.
+
+    Some sources normalise winding (geostructures enforces the right-hand rule and
+    reverses a clockwise ring), which is their prerogative: the geometry is identical,
+    only the traversal differs, so an exact-order comparison would fail for no fault.
+    """
+    assert_closed(actual)
+    a = [tuple(round(v, 6) for v in p) for p in actual[:-1]]
+    e = [tuple(round(v, 6) for v in p) for p in expected[:-1]]
+    assert len(a) == len(e), f"{label}: {len(a)} vertices, expected {len(e)}"
+    cycles = [e[i:] + e[:i] for i in range(len(e))]
+    cycles += [list(reversed(c)) for c in cycles]
+    assert a in cycles, f"{label}: {actual} is not the ring {expected} in any winding"
 
 
 def assert_closed(ring, tol=TOL):

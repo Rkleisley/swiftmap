@@ -8,9 +8,10 @@ from its peers here, and it catches those faults in a new source before anyone r
 import pytest
 
 from geometry import (
-    A, B, C, LINE, RING, RING_OPEN, SECOND_LINE,
-    assert_coords, assert_points, assert_closed,
-    wkt_point, wkt_line, wkt_multiline, wkt_polygon, gj_feature, gj_collection, lonlat,
+    A, B, C, LINE, RING, RING_OPEN, SECOND_LINE, SECOND_RING,
+    assert_coords, assert_points, assert_closed, assert_same_ring,
+    wkt_point, wkt_line, wkt_multiline, wkt_polygon, wkt_multipolygon,
+    gj_feature, gj_collection, lonlat,
 )
 from swiftmap.parsers import parse_points, parse_lines, parse_polygons
 
@@ -19,9 +20,11 @@ pl = pytest.importorskip("polars")
 gpd = pytest.importorskip("geopandas")
 pytest.importorskip("geostructures")
 
-from shapely.geometry import Point, LineString, MultiLineString, Polygon  # noqa: E402
+from shapely.geometry import (  # noqa: E402
+    Point, LineString, MultiLineString, Polygon, MultiPolygon,
+)
 from geostructures import (  # noqa: E402
-    Coordinate, GeoPoint, GeoLineString, GeoPolygon, MultiGeoLineString,
+    Coordinate, GeoPoint, GeoLineString, GeoPolygon, MultiGeoLineString, MultiGeoPolygon,
 )
 from geostructures.collections import FeatureCollection  # noqa: E402
 
@@ -94,6 +97,19 @@ POLYGON_SOURCES = {
     "coordinate_list": lambda: [list(p) for p in RING_OPEN],
 }
 
+# Every representation of the same two-part polygon.
+MULTIPOLYGON_SOURCES = {
+    "geojson": lambda: gj_collection(
+        gj_feature("MultiPolygon", [[lonlat(RING)], [lonlat(SECOND_RING)]])),
+    "geostructures": lambda: [MultiGeoPolygon([
+        GeoPolygon([gs(p) for p in RING]),
+        GeoPolygon([gs(p) for p in SECOND_RING])])],
+    "geopandas": lambda: gpd.GeoDataFrame({"n": ["a"]}, geometry=[MultiPolygon([
+        Polygon([xy(p) for p in RING]), Polygon([xy(p) for p in SECOND_RING])])]),
+    "pandas_wkt": lambda: pd.DataFrame({"wkt": [wkt_multipolygon([RING, SECOND_RING])]}),
+    "polars_wkt": lambda: pl.DataFrame({"wkt": [wkt_multipolygon([RING, SECOND_RING])]}),
+}
+
 
 @pytest.mark.parametrize("source", POINT_SOURCES, ids=list(POINT_SOURCES))
 def test_every_source_yields_the_same_point(source):
@@ -118,6 +134,20 @@ def test_every_source_yields_the_same_multi_part_line(source):
     assert geom.part_lengths() == [len(LINE), len(SECOND_LINE)], source
     assert_coords(geom.parts[0], LINE, label=f"{source} part 1")
     assert_coords(geom.parts[1], SECOND_LINE, label=f"{source} part 2")
+
+
+@pytest.mark.parametrize("source", MULTIPOLYGON_SOURCES, ids=list(MULTIPOLYGON_SOURCES))
+def test_every_source_yields_the_same_multi_part_polygon(source):
+    # ONE feature with two parts on every source -- geostructures used to split a
+    # MultiGeoPolygon into a polygon per part after the others had stopped.
+    polygons, _ = parse_polygons(MULTIPOLYGON_SOURCES[source]())
+    assert len(polygons) == 1, f"{source} produced {len(polygons)} polygons, expected 1"
+    geom = polygons[0]
+    assert geom.ring_lengths() == [[len(RING)], [len(SECOND_RING)]], source
+    # Winding-agnostic: geostructures re-winds a clockwise ring to the right-hand
+    # rule, which changes traversal order and nothing else.
+    assert_same_ring(geom.parts[0][0], RING, label=f"{source} part 1")
+    assert_same_ring(geom.parts[1][0], SECOND_RING, label=f"{source} part 2")
 
 
 @pytest.mark.parametrize("source", POLYGON_SOURCES, ids=list(POLYGON_SOURCES))

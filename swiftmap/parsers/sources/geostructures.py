@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple, Iterator
-from ._utils import LineGeom, _ensure_closed_ring
+from ._utils import LineGeom, PolygonGeom, _ensure_closed_ring
 
 
 def is_geostructures(data: Any) -> bool:
@@ -130,19 +130,42 @@ def parse_geostructures_lines(data: Any, **kwargs) -> Tuple[List[List[List[float
 
 def parse_geostructures_polygons(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
     _, _, PolygonLikeMixin = _mixins()
+    from geostructures import MultiGeoPolygon
+
+    def is_multi_polygon(shape):
+        return isinstance(shape, MultiGeoPolygon)
+
+    def rings_to_part(rings):
+        part = []
+        for ring in rings:
+            coords = [[float(p.latitude), float(p.longitude)] for p in ring]
+            if len(coords) >= 3:
+                part.append(_ensure_closed_ring(coords))
+        return part
 
     polygons, props_list = [], []
-    for shape, props in _iter_shapes(data):
+    for shape, props in _iter_shapes(data, keep=is_multi_polygon):
         if not isinstance(shape, PolygonLikeMixin):
             continue
         # linear_rings() is declared by the mixin and works on every polygon-like shape,
-        # unlike to_polygon() which MultiGeoPolygon does not implement. A GeoRing returns
-        # its outer boundary and its hole as separate rings; the renderer draws one ring
-        # per polygon, so each becomes its own outline.
-        for ring in shape.linear_rings():
-            coords = [[float(p.latitude), float(p.longitude)] for p in ring]
-            if len(coords) >= 3:
-                polygons.append(_ensure_closed_ring(coords))
-                props_list.append(props)
+        # unlike to_polygon() which MultiGeoPolygon does not implement. Ring 0 is the
+        # outer boundary and the rest are holes (a GeoRing's inner circle, a
+        # GeoPolygon's `holes`); a MultiGeoPolygon returns parts -> rings. Holes used
+        # to come out as separate filled polygons and parts as a feature each --
+        # every other source had moved to one feature with structure in 17ae972.
+        if is_multi_polygon(shape):
+            parts = [part for part in map(rings_to_part, shape.linear_rings()) if part]
+        else:
+            part = rings_to_part(shape.linear_rings())
+            parts = [part] if part else []
+        if not parts:
+            continue
+        # The bare hole-free ring stays a plain list, the common case on every
+        # source; holes and multiple parts ride a PolygonGeom.
+        if len(parts) == 1 and len(parts[0]) == 1:
+            polygons.append(parts[0][0])
+        else:
+            polygons.append(PolygonGeom(parts))
+        props_list.append(props)
 
     return polygons, _collect_props(props_list)

@@ -69,11 +69,19 @@ def test_derived_polygon_shapes_parse_as_polygons(shape_factory):
     assert not len(parse_lines([shape])[0]), "a polygon-like shape is not a line"
 
 
-def test_georing_yields_outer_boundary_and_hole():
+def test_georing_is_one_polygon_with_a_hole():
+    # The inner circle is a HOLE in one feature. It used to come out as a second,
+    # separate polygon -- a filled disc drawn over the annulus, not a hole at all.
     polygons, _ = parse_polygons([GeoRing(coord(A), inner_radius=200, outer_radius=500)])
-    assert len(polygons) == 2, "a ring contributes its outer boundary and its hole"
-    for ring in polygons:
-        assert_closed(ring)
+    assert len(polygons) == 1, "one annulus, one feature"
+    geom = polygons[0]
+    assert len(geom.ring_lengths()) == 1 and len(geom.ring_lengths()[0]) == 2, \
+        "one part: outer boundary plus one hole"
+    outer, hole = geom.parts[0]
+    assert_closed(outer)
+    assert_closed(hole)
+    span = lambda ring: max(p[0] for p in ring) - min(p[0] for p in ring)
+    assert span(outer) > span(hole), "ring 0 is the outer boundary"
 
 
 # --- collections ------------------------------------------------------------------
@@ -167,15 +175,16 @@ def test_properties_are_collected(point):
     assert props["active"] == [True]
 
 
-def test_properties_propagate_through_multi_expansion():
+def test_multigeopolygon_is_one_feature_keeping_its_metadata():
     multi = MultiGeoPolygon(
         [GeoPolygon([coord(A), coord(C), coord(B), coord(A)]),
          GeoPolygon([coord(B), coord(C), coord(A), coord(B)])],
         properties={"zone": "Z1"},
     )
     polygons, props = parse_polygons([multi])
-    assert len(polygons) == 2
-    assert props["zone"] == ["Z1", "Z1"], "each expanded part keeps the feature's metadata"
+    assert len(polygons) == 1, "one MultiGeoPolygon is one feature with parts"
+    assert polygons[0].ring_lengths() == [[4], [4]]
+    assert props["zone"] == ["Z1"], "the feature's metadata rides the one feature"
 
 
 def test_shapes_with_differing_property_keys_are_unioned():
@@ -229,9 +238,10 @@ def test_multigeopolygon_parses_without_error():
         GeoPolygon([coord(B), coord(C), coord(A), coord(B)]),
     ])
     polygons, _ = parse_polygons([multi])
-    assert len(polygons) == 2
-    for ring in polygons:
-        assert_closed(ring)
+    assert len(polygons) == 1
+    for part in polygons[0].parts:
+        for ring in part:
+            assert_closed(ring)
 
 
 # --- source detection ---------------------------------------------------------------
