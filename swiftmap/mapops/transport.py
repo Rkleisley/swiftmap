@@ -106,7 +106,16 @@ def _layers_append(self, config: Any) -> None:
     self._emit({"op": "add", "layer": _layer_to_dict(config)})
 
 
-def _layers_replace(self, existing: Any, config: Any) -> None:
+def _layers_replace(self, existing: Any, config: Any,
+                    emit_ops: Optional[List[Dict[str, Any]]] = None) -> None:
+    """
+    Swaps one layer's config for a new instance (new list, merge index kept in
+    step) and tells the client. By default that is one `replace` carrying the
+    whole config; `emit_ops` substitutes smaller ops when the caller can describe
+    the change in less -- an append sends only its new rows this way, since a
+    message that scales with accumulated data instead of with the change is what
+    closes the websocket (see the toggle write-back, 6de6d5a).
+    """
     new_layers = [config if l is existing else l for l in self.layers]
     self._set_trait_quietly("layers", new_layers)
     cache = getattr(self, "_merge_cache", None)
@@ -116,7 +125,10 @@ def _layers_replace(self, existing: Any, config: Any) -> None:
             del cache[1][old_key]
         cache[1][(config.get("layer_group"), config.get("name"))] = config
         self._merge_cache = (new_layers, cache[1])
-    self._emit({"op": "replace", "id": config.get("id"), "layer": _layer_to_dict(config)})
+    if emit_ops is None:
+        emit_ops = [{"op": "replace", "id": config.get("id"), "layer": _layer_to_dict(config)}]
+    for op in emit_ops:
+        self._emit(op)
 
 
 def _layers_set(self, new_layers: List[Any], removed_ids: List[Any]) -> None:
@@ -142,6 +154,16 @@ def _set_layer_buffer(self, layer_id: str, payload: bytes) -> None:
     """
     self.coordinate_buffers[layer_id] = payload
     self._emit({"op": "buffer", "id": layer_id}, buffer=payload)
+
+
+def _append_layer_buffer(self, layer_id: str, tail: bytes) -> None:
+    """
+    Grows one buffer by `tail` and sends ONLY the tail; the client concatenates
+    onto what it holds. The feed primitive's wire cost: proportional to the
+    batch, flat across the life of the layer.
+    """
+    self.coordinate_buffers[layer_id] = self.coordinate_buffers.get(layer_id, b"") + tail
+    self._emit({"op": "buffer_append", "id": layer_id}, buffer=tail)
 
 
 def _remove_layer_buffers(self, layer_ids: Any) -> None:

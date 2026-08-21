@@ -1025,10 +1025,12 @@ suite("an in-place data update repaints the new positions and keeps visibility",
 });
 
 suite("a timed layer keeps animating after an append extends its range", async () => {
-    // Append under a GPU-time bucket: the coordinate buffer and ::times grow by one
-    // observation on a later day. The slider's range must extend, the new point
+    // Append under a GPU-time bucket THROUGH THE DELTA OPS: buffer_append tails
+    // for the coordinates and ::times (one observation on a later day) plus an
+    // `append` for the new row. The slider's range must extend, the new point
     // must animate in at its own tick, and the GPU time path must stay engaged
-    // (the per-vertex attributes are rebuilt with the bucket, never kept stale).
+    // over the CONCATENATED buffers -- the per-vertex attributes are rebuilt with
+    // the bucket (a grown buffer is a new object to the meta key), never kept stale.
     await withPage(async (page, errors) => {
         const gpuMessages = [];
         page.on("console", (m) => {
@@ -1065,20 +1067,21 @@ suite("a timed layer keeps animating after an append extends its range", async (
         const cfg = await page.evaluate(() =>
             window.__model.get("layers").find(l => l.id === "pts"));
         const day = (d) => Date.UTC(2026, 0, d);
-        await page.evaluate(([cfg, coords, times]) => {
+        await page.evaluate(([coords, times]) => {
             const views = [new DataView(new Float64Array(coords).buffer),
                            new DataView(new Float64Array(times).buffer)];
             window.__model.emit("msg:custom", { kind: "swiftmap_patch", ops: [
-                { op: "buffer", id: "pts", buffer_index: 0 },
-                { op: "buffer", id: "pts::times", buffer_index: 1 },
-                { op: "replace", id: "pts", layer: { ...cfg,
-                    properties: { site: ["Alpha", "Bravo", "Charlie", "Echo"] },
-                    bounds: [[35.98, -5.32], [36.12, -5.18]] } },
+                { op: "buffer_append", id: "pts", buffer_index: 0 },
+                { op: "buffer_append", id: "pts::times", buffer_index: 1 },
+                { op: "append", id: "pts", base: 3, count: 1, properties: { site: ["Echo"] } },
+                { op: "set", id: "pts", fields: { bounds: [[35.98, -5.32], [36.12, -5.18]] } },
             ] }, views);
-        }, [cfg,
-            [36.00, -5.30, 36.10, -5.20, 36.05, -5.25, 36.08, -5.29],
-            [day(1), day(1), day(2) + 43200000, day(2) + 43200000,
-             day(3) + 43200000, day(3) + 43200000, day(6), day(6)]]);
+        }, [[36.08, -5.29], [day(6), day(6)]]);
+        const props = await page.evaluate(() => {
+            const insts = window.L.glify.pointsInstances;
+            return insts[insts.length - 1].settings.data.length;
+        });
+        void cfg; void props;
         await page.waitForTimeout(900);
 
         const after = await probe();
@@ -1161,6 +1164,64 @@ suite("the logo card is app-supplied, off by default, and carries data URIs", as
             "default corner is bottom-right");
         assert.deepEqual(stray, [], "no request ever went to the old placeholder host");
         assert.deepEqual(errors, [], "no errors through the logo states");
+    }, "widget.html");
+});
+
+suite("an append through the delta ops paints the new point and leaves the old ones", async () => {
+    // The live-feed wire shape: buffer_append with the new coordinates, `append`
+    // with the new rows, `set` for the bounds -- never the layer. The existing
+    // points must not so much as flicker in identity: their pixels stay put.
+    await withPage(async (page, errors) => {
+        const box = await page.locator(".leaflet-container").boundingBox();
+        const at = async (lat, lng) => {
+            const off = await page.evaluate(([la, ln]) => {
+                const z = window.__model.get("zoom");
+                const c = window.__model.get("center");
+                const p = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(la, ln), z);
+                const pc = window.L.CRS.EPSG3857.latLngToPoint(
+                    window.L.latLng(c[0], c[1]), z);
+                return [p.x - pc.x, p.y - pc.y];
+            }, [lat, lng]);
+            return [box.x + box.width / 2 + off[0], box.y + box.height / 2 + off[1]];
+        };
+        const shotAt = async (lat, lng, size) => {
+            const [x, y] = await at(lat, lng);
+            return page.screenshot({ clip: {
+                x: x - size / 2, y: y - size / 2, width: size, height: size } });
+        };
+        const fed = () => page.evaluate(() => {
+            const a = window.L.glify.pointsInstances;
+            return a[a.length - 1].settings.data.length;
+        });
+        const props = () => page.evaluate(() => {
+            // The widget's own mirror of the layer, via the sidebar's data attribute
+            // path is not exposed; read the merged bucket's feature count and the
+            // popup property table through the glify instance instead.
+            const a = window.L.glify.pointsInstances;
+            return a[a.length - 1].settings.data.length;
+        });
+
+        const alphaBefore = await shotAt(36.00, -5.30, 10);
+        const newBefore = await shotAt(36.07, -5.33, 10);
+        const fedBefore = await fed();
+        await page.evaluate(() => {
+            const views = [new DataView(new Float64Array([36.07, -5.33]).buffer)];
+            window.__model.emit("msg:custom", { kind: "swiftmap_patch", ops: [
+                { op: "buffer_append", id: "pts", buffer_index: 0 },
+                { op: "append", id: "pts", base: 2, count: 1, properties: { site: ["Echo"] } },
+                { op: "set", id: "pts", fields: { bounds: [[35.98, -5.33], [36.12, -5.18]] } },
+            ] }, views);
+        });
+        await page.waitForTimeout(900);
+        const alphaAfter = await shotAt(36.00, -5.30, 10);
+        const newAfter = await shotAt(36.07, -5.33, 10);
+        assert.equal(Buffer.compare(alphaBefore, alphaAfter), 0,
+            "the existing point's pixels are untouched");
+        assert.notEqual(Buffer.compare(newBefore, newAfter), 0,
+            "the appended point paints");
+        assert.equal(await fed(), fedBefore + 1, "the bucket holds one more point");
+        void props;
+        assert.deepEqual(errors, [], "no errors through the append");
     }, "widget.html");
 });
 

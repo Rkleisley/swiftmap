@@ -192,13 +192,15 @@ def _update_points(self, layer, data, append, parser, field_kwargs, rec) -> "Map
              f"{name!r}. Nothing changed.")
         return self
 
+    n_new = int(lats.size)
+    n_old = 0
     if append:
         # New features land AFTER the existing ones, so existing feature indices
         # -- and any per-feature overrides keyed on them -- stay valid.
         old = np.frombuffer(self.coordinate_buffers.get(layer_id, b""),
                             dtype=np.float64).reshape(-1, 2)
         old_props = layer.get("properties") or {}
-        n_old, n_new = old.shape[0], lats.size
+        n_old = old.shape[0]
         lats = np.concatenate([old[:, 0], lats])
         lons = np.concatenate([old[:, 1], lons])
         merged = {}
@@ -230,6 +232,18 @@ def _update_points(self, layer, data, append, parser, field_kwargs, rec) -> "Map
     coords = np.column_stack((lats, lons)).flatten().astype(np.float64)
     bounds = [[float(lats.min()), float(lons.min())], [float(lats.max()), float(lons.max())]]
 
+    # An append sends the delta: the new tail of every buffer and only the new
+    # rows of the property lists. A per-feature `style` column resolves over the
+    # whole set (its uniform-collapse rule spans every feature), so that shape,
+    # and a lost time property, take the full path instead.
+    incremental = (append and n_old > 0 and feature_styles is None
+                   and not layer.get("feature_styles") and not drop_time)
+    if incremental:
+        _emit_points_append(self, layer, n_old, n_new, coords, colors_u8, radii_f32,
+                            legend_block, size_legend, labels, times_payload, props,
+                            bounds, field_kwargs)
+        return self
+
     with self.batch():
         self._set_layer_buffer(layer_id, coords.tobytes())
         _set_or_remove_buffer(self, f"{layer_id}::colors",
@@ -257,6 +271,71 @@ def _update_points(self, layer, data, append, parser, field_kwargs, rec) -> "Map
         # a feed refresh must never yank the viewport.
         self._auto_fit_extend(config)
     return self
+
+
+def _grow_or_reset(self, key: str, payload: Optional[bytes], bytes_per_point: int,
+                   n_old: int) -> None:
+    """
+    Ships a recomputed per-point buffer as a TAIL when the existing points' values
+    are unchanged, in full when they moved, gone when there is nothing to ship.
+
+    The decision is a byte comparison of the recomputed head against what the
+    client already holds -- never an inference. For ::colors and ::radii that is
+    where the range rule lands: an explicit vmin/vmax (or a category mapping with
+    no new category) leaves every existing value unchanged, so the head matches
+    and only the tail goes; an auto range that actually moved changes every value,
+    so the head differs and the whole buffer goes. After warm-up an auto range
+    rarely moves, so the common tick is tail-only. ::times and coordinates are
+    absolute and always append.
+    """
+    if payload is None:
+        if key in self.coordinate_buffers:
+            self._remove_layer_buffers([key])
+        return
+    split = n_old * bytes_per_point
+    existing = self.coordinate_buffers.get(key)
+    if existing is not None and len(existing) == split and payload[:split] == existing:
+        self._append_layer_buffer(key, payload[split:])
+    else:
+        self._set_layer_buffer(key, payload)
+
+
+def _emit_points_append(self, layer, n_old, n_new, coords, colors_u8, radii_f32,
+                        legend_block, size_legend, labels, times_payload, props,
+                        bounds, field_kwargs) -> None:
+    """The append's wire shape: tails for the buffers, the new rows for the
+    property lists, and one `set` for the small fields. Never the layer."""
+    layer_id = layer.get("id")
+    with self.batch():
+        self._append_layer_buffer(layer_id, coords[n_old * 2:].tobytes())
+        _grow_or_reset(self, f"{layer_id}::colors",
+                       colors_u8.tobytes() if colors_u8 is not None else None, 4, n_old)
+        _grow_or_reset(self, f"{layer_id}::radii",
+                       radii_f32.tobytes() if radii_f32 is not None else None, 4, n_old)
+        if layer.get("time") and times_payload is not None:
+            _grow_or_reset(self, f"{layer_id}::times", times_payload, 16, n_old)
+
+        new = dict(layer.to_dict())
+        new["properties"] = {str(k): _json_safe(v) for k, v in props.items()}
+        new["bounds"] = bounds
+        _put(new, "legend", legend_block)
+        _put(new, "legend_size", size_legend)
+        _put(new, "labels", labels)
+        new.update(field_kwargs)
+
+        fields = {"bounds": bounds, **field_kwargs}
+        for key, value in (("legend", legend_block), ("legend_size", size_legend)):
+            if (value or None) != (layer.get(key) or None):
+                fields[key] = value
+        append_op = {"op": "append", "id": layer_id, "base": n_old, "count": n_new,
+                     "properties": {str(k): _json_safe(list(v)[n_old:])
+                                    for k, v in props.items()}}
+        if labels:
+            append_op["lists"] = {"labels": labels[n_old:]}
+        config = LayerConfig(**new)
+        self._layers_replace(layer, config, emit_ops=[
+            append_op, {"op": "set", "id": layer_id, "fields": fields}])
+        self._auto_fit_extend(config)
 
 
 # --- one line / one polygon ------------------------------------------------------------

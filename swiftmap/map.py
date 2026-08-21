@@ -26,7 +26,7 @@ from .export import to_html, save
 from .mapops.transport import (
     _layer_to_dict, _handle_client_msg, _set_trait_quietly, _emit, _flush_ops,
     _merge_lookup, _layers_append, _layers_replace, _layers_set,
-    _layers_update_many, _set_layer_buffer, _remove_layer_buffers)
+    _layers_update_many, _set_layer_buffer, _append_layer_buffer, _remove_layer_buffers)
 from .mapops.marginalia import (
     _DRAW_TOOLS, _DRAW_POSITIONS, _SCALE_UNITS, _SCALE_POSITIONS, _LOGO_POSITIONS,
     configure_draw, clear_drawings, configure_scale, configure_logo)
@@ -138,6 +138,7 @@ class Map(anywidget.AnyWidget):
     _layers_set = _layers_set
     _layers_update_many = _layers_update_many
     _set_layer_buffer = _set_layer_buffer
+    _append_layer_buffer = _append_layer_buffer
     _remove_layer_buffers = _remove_layer_buffers
 
     # Marginalia (mapops/marginalia.py)

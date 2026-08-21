@@ -119,6 +119,31 @@ function bufferSerial(buf) {
     return serial;
 }
 
+function concatViews(head, tail) {
+    const out = new Uint8Array(head.byteLength + tail.byteLength);
+    out.set(new Uint8Array(head.buffer, head.byteOffset, head.byteLength), 0);
+    out.set(new Uint8Array(tail.buffer, tail.byteOffset, tail.byteLength), head.byteLength);
+    return new DataView(out.buffer);
+}
+
+function appendRows(layer, op) {
+    const base = op.base || 0;
+    const count = op.count || 0;
+    const incoming = op.properties || {};
+    const props = { ...(layer.properties || {}) };
+    for (const key of new Set([...Object.keys(props), ...Object.keys(incoming)])) {
+        const head = Array.isArray(props[key]) ? props[key]
+            : new Array(base).fill(props[key] === undefined ? null : props[key]);
+        const tail = Array.isArray(incoming[key]) ? incoming[key] : new Array(count).fill(null);
+        props[key] = head.concat(tail);
+    }
+    const next = { ...layer, properties: props };
+    for (const [field, tail] of Object.entries(op.lists || {})) {
+        next[field] = (Array.isArray(layer[field]) ? layer[field] : []).concat(tail);
+    }
+    return next;
+}
+
 export function applySwiftmapPatch(state, ops, buffers) {
     let layers = state.layers || [];
     let bufferMap = state.buffers || {};
@@ -156,6 +181,20 @@ export function applySwiftmapPatch(state, ops, buffers) {
         } else if (op.op === "buffer") {
             const buf = buffers && buffers[op.buffer_index];
             if (buf) bufferMap = { ...bufferMap, [op.id]: buf };
+        } else if (op.op === "buffer_append") {
+            // A tail for an existing buffer -- the feed primitive's wire shape,
+            // proportional to the batch. Concatenation yields a NEW DataView, and
+            // the GL meta key keys on buffer identity, so the bucket rebuilds.
+            const tail = buffers && buffers[op.buffer_index];
+            if (tail) {
+                const head = bufferMap[op.id];
+                bufferMap = { ...bufferMap, [op.id]: head ? concatViews(head, tail) : tail };
+            }
+        } else if (op.op === "append") {
+            // New rows for the property lists (and other per-feature lists), after
+            // the existing ones. Columns missing on either side fill null, exactly
+            // as the Python side does, so a later popup reads the same table.
+            layers = updateLayerById(layers, op.id, l => appendRows(l, op));
         } else if (op.op === "buffer_remove") {
             bufferMap = { ...bufferMap };
             delete bufferMap[op.id];

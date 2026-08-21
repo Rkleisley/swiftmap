@@ -353,3 +353,32 @@ test("clearing a highlight restores the layer's own style", () => {
         [{ op: "set", id: "a", fields: { highlight_style: {} } }], []);
     assert.equal(styleFor(layers[0], 0).color, "#111", "nothing had to be remembered");
 });
+
+
+test("buffer_append concatenates onto the existing buffer and yields a new object", () => {
+    const head = new DataView(new Float64Array([1, 2]).buffer);
+    const tail = new DataView(new Float64Array([3, 4]).buffer);
+    let s = { layers: [], buffers: { p: head } };
+    s = applySwiftmapPatch(s, [{ op: "buffer_append", id: "p", buffer_index: 0 }], [tail]);
+    const grown = s.buffers.p;
+    assert.notEqual(grown, head, "a grown buffer is a new object -- the GL meta key keys on identity");
+    assert.deepEqual([...new Float64Array(grown.buffer, grown.byteOffset, 4)], [1, 2, 3, 4]);
+    s = applySwiftmapPatch({ layers: [], buffers: {} },
+        [{ op: "buffer_append", id: "q", buffer_index: 0 }], [tail]);
+    assert.equal(s.buffers.q.byteLength, 16, "with nothing to grow, the tail is the buffer");
+});
+
+test("append extends property lists with null-fill and named list fields", () => {
+    let s = { layers: [{ id: "p", type: "circle_markers",
+                         properties: { v: [1, 2], name: ["a", "b"] }, labels: ["a", "b"] }],
+              buffers: {} };
+    s = applySwiftmapPatch(s, [{ op: "append", id: "p", base: 2, count: 2,
+        properties: { v: [3, 4], extra: ["x", "y"] }, lists: { labels: ["c", "d"] } }]);
+    const l = s.layers[0];
+    assert.deepEqual(l.properties.v, [1, 2, 3, 4]);
+    assert.deepEqual(l.properties.name, ["a", "b", null, null],
+        "a column missing from the new rows fills null");
+    assert.deepEqual(l.properties.extra, [null, null, "x", "y"],
+        "a new column back-fills the existing rows");
+    assert.deepEqual(l.labels, ["a", "b", "c", "d"]);
+});

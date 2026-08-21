@@ -252,6 +252,17 @@ def update_layer(self, identifier: Union[str, Any], name: Optional[str] = None, 
         style overrides survive it; a replace clears them (with a warning), since
         the indices no longer correspond. Auto-ranged colormaps and radii rescale
         over the whole appended data.
+
+        An append sends the delta, never the layer: the new tail of the
+        coordinate and ::times buffers, only the new rows of the property lists,
+        and the small fields (bounds, legend) -- so a tick's frame is proportional
+        to the batch and flat across the life of the feed. ::colors and ::radii
+        follow the range: with an explicit vmin/vmax, or an auto range that did
+        not move, the existing values are unchanged and only the tail goes; an
+        auto range that moved changes every value and the buffer goes in full
+        (decided by comparing the recomputed values against what the client
+        holds, not by guessing). A per-feature `style` column takes the full
+        path, since its styles resolve over the whole set.
     **kwargs
         Attribute updates (`visible=False`, `color="blue"`); with `data=`, the parser
         options `lat_col`, `lon_col`, `coord_order`, `line_id_col`, `order_col`,

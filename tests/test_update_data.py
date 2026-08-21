@@ -6,6 +6,7 @@ and highlights while every data-derived piece (buffers, colours, radii, legend,
 labels, bounds) re-derives from the new data; append grows the layer with the new
 rows after the old ones.
 """
+import json
 import warnings
 
 import numpy as np
@@ -313,3 +314,110 @@ def test_added_with_is_recorded_on_every_builder():
         rec = m.find_layers(name)[0]["added_with"]
         assert rec["method"] == method and rec["fanned"] is False
     assert m.find_layers("P")[0]["added_with"]["data_opts"]["color_col"] == "v"
+
+
+# --- the wire: an append is a delta -----------------------------------------------------
+def _payload_bytes(comm):
+    return sum(len(json.dumps(content, default=str)) + sum(len(b) for b in buffers)
+               for content, buffers in comm.msgs)
+
+
+def _ops_by_kind(comm):
+    out = {}
+    for content, buffers in comm.msgs:
+        for op in (content.get("content") or {}).get("ops", []):
+            key = op["op"] + (":" + op["id"].split("::")[-1] if "::" in op.get("id", "") else "")
+            out.setdefault(key, []).append(
+                len(buffers[op["buffer_index"]]) if "buffer_index" in op else op)
+    return out
+
+
+def _big_frame(n):
+    rng = np.random.default_rng(1)
+    return pd.DataFrame({
+        "lat": 35.0 + rng.random(n), "lon": -6.0 + rng.random(n),
+        "v": rng.integers(0, 100, n), "name": ["x"] * n,
+        "timestamp": 1767225600000 + rng.integers(0, 86400000 * 3, n),
+    })
+
+
+def test_an_append_frame_scales_with_the_batch_not_the_layer():
+    # The regression guard for the live feed: the same 5-row batch appended to a
+    # 3-point layer and a 20,000-point layer must cost the same on the wire.
+    # Re-sending the layer crosses uvicorn's 16 MB frame cap around 270k points,
+    # which closes the websocket and kills the session -- the toggle write-back
+    # failure (6de6d5a) by another route.
+    sizes = {}
+    for label, frame in (("small", DF1), ("big", _big_frame(20_000))):
+        m = quiet_map(center=[36.0, -5.3], zoom=9)
+        m.add_circle_markers(frame, name="Feed", color_col="v", vmin=0, vmax=100,
+                             radius_col="v")
+        m.make_time_layer("Feed")
+        m.comm = Comm()
+        m.comm.msgs.clear()
+        m.update_layer("Feed", data=DF2, append=True)
+        sizes[label] = _payload_bytes(m.comm)
+        kinds = _ops_by_kind(m.comm)
+        assert "replace" not in kinds, f"{label}: an append never re-sends the layer"
+        assert "buffer_append" in kinds and "append" in kinds
+    assert sizes["big"] <= sizes["small"] * 1.25 + 512, sizes
+
+
+def test_append_ships_the_tails_and_only_the_new_rows():
+    m = quiet_map(center=[36.0, -5.3], zoom=9)
+    m.add_circle_markers(DF1, name="Feed", color_col="v", vmin=0, vmax=100,
+                         radius_col="v", label="name")
+    m.make_time_layer("Feed")
+    m.comm = Comm()
+    m.comm.msgs.clear()
+    m.update_layer("Feed", data=DF2, append=True)
+    kinds = _ops_by_kind(m.comm)
+    assert kinds["buffer_append"] == [5 * 16], "coordinate tail: 5 points x 2 float64"
+    assert kinds["buffer_append:colors"] == [5 * 4], "fixed range: the colour tail only"
+    assert kinds["buffer_append:times"] == [5 * 16]
+    (append_op,) = kinds["append"]
+    assert append_op["base"] == 3 and append_op["count"] == 5
+    assert append_op["properties"]["v"] == [10, 20, 30, 40, 50]
+    assert append_op["lists"]["labels"] == ["p", "q", "r", "s", "t"]
+    (set_op,) = kinds["set"]
+    assert set_op["fields"]["bounds"] == [[35.5, -5.9], [36.2, -5.1]]
+    # And the server-side mirror agrees with what the client will hold.
+    layer = feed(m)
+    assert coords_of(m, layer).shape == (8, 2)
+    assert layer["properties"]["v"] == [1, 2, 3, 10, 20, 30, 40, 50]
+
+
+def test_a_moved_auto_range_resends_colours_in_full_but_coordinates_still_append():
+    m = quiet_map(center=[36.0, -5.3], zoom=9)
+    m.add_circle_markers(DF1, name="Feed", color_col="v")      # auto range 1..3
+    m.comm = Comm()
+    m.comm.msgs.clear()
+    m.update_layer("Feed", data=DF2, append=True)              # up to 50: every value moves
+    kinds = _ops_by_kind(m.comm)
+    assert kinds["buffer_append"] == [5 * 16]
+    assert kinds["buffer:colors"] == [8 * 4], "the range moved, so the whole colour buffer goes"
+    assert "buffer_append:colors" not in kinds
+
+
+def test_an_unmoved_auto_range_appends_colours():
+    m = quiet_map(center=[36.0, -5.3], zoom=9)
+    m.add_circle_markers(DF1, name="Feed", color_col="v")      # auto range 1..3
+    m.comm = Comm()
+    m.comm.msgs.clear()
+    inside = pd.DataFrame({"lat": [35.9, 35.8], "lon": [-5.5, -5.6], "v": [2, 3]})
+    m.update_layer("Feed", data=inside, append=True)
+    kinds = _ops_by_kind(m.comm)
+    assert kinds["buffer_append:colors"] == [2 * 4], "range unchanged: tail only"
+    assert "buffer:colors" not in kinds
+
+
+def test_a_style_column_takes_the_full_path():
+    m = quiet_map(center=[36.0, -5.3], zoom=9)
+    styled = DF1.assign(style=[{"color": "#f00"}, {"color": "#0f0"}, {"color": "#00f"}])
+    m.add_circle_markers(styled, name="Feed")
+    m.comm = Comm()
+    m.comm.msgs.clear()
+    m.update_layer("Feed", data=DF2.assign(style=[{"color": "#fff"}] * 5), append=True)
+    kinds = _ops_by_kind(m.comm)
+    assert "replace" in kinds, "per-feature styles resolve over the whole set"
+    assert len(feed(m)["feature_styles"]) == 8
