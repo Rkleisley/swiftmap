@@ -181,18 +181,31 @@ export function buildVectorTimeMeta(layersList, coordinateBuffers, periodMs) {
         const nVerts = vertexCountOf(layer, coordinateBuffers);
         if (layer.type === "polyline" && times.length > 2
                 && times.length === nVerts * 2) {
-            const segs = nVerts - 1;
+            // Segments never cross a part boundary: a multi-part line draws
+            // nVerts - parts segments, and a span built from one part's last
+            // vertex to the next part's first would be the phantom segment
+            // reappearing in the time path -- one extra span, and every attribute
+            // after it shears (the length check then drops the whole feature to
+            // its overall span). Walk the parts the way the renderer draws them.
+            const lengths = Array.isArray(layer.parts) && layer.parts.length > 1
+                ? layer.parts : [nVerts];
+            const segs = lengths.reduce((a, n) => a + Math.max(0, n - 1), 0);
             const seg = new Float64Array(segs * 2);
-            for (let k = 0; k < segs; k++) {
-                const s = times[k * 2];
-                const e = times[(k + 1) * 2 + 1];
-                if (Number.isNaN(s) || Number.isNaN(e)) {
-                    seg[k * 2] = -ALWAYS;      // an unreadable time never hides data
-                    seg[k * 2 + 1] = ALWAYS;
-                } else {
-                    seg[k * 2] = (s - base) / 1000;
-                    seg[k * 2 + 1] = (e - base) / 1000;
+            let k = 0, offset = 0;
+            for (const n of lengths) {
+                for (let j = 0; j + 1 < n; j++) {
+                    const s = times[(offset + j) * 2];
+                    const e = times[(offset + j + 1) * 2 + 1];
+                    if (Number.isNaN(s) || Number.isNaN(e)) {
+                        seg[k * 2] = -ALWAYS;      // an unreadable time never hides data
+                        seg[k * 2 + 1] = ALWAYS;
+                    } else {
+                        seg[k * 2] = (s - base) / 1000;
+                        seg[k * 2 + 1] = (e - base) / 1000;
+                    }
+                    k++;
                 }
+                offset += n;
             }
             // Overall span rides along as the fallback if counts ever misalign.
             return { seg, start: seg[0], end: seg[seg.length - 1],

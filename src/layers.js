@@ -165,6 +165,24 @@ export function vectorCoords(layer, coordinateBuffers) {
     return out;
 }
 
+// A line layer's coordinates as parts: the flat run sliced by the config's `parts`
+// length table, or one part without it. A multi-part line -- MULTILINESTRING,
+// MultiLineString -- is ONE layer drawn as disjoint runs; nothing may ever draw a
+// segment from one part's last vertex to the next part's first.
+export function lineParts(layer, coordinateBuffers) {
+    const locs = vectorCoords(layer, coordinateBuffers) || [];
+    const lengths = Array.isArray(layer.parts) && layer.parts.length > 1 ? layer.parts : null;
+    if (!lengths) return locs.length ? [locs] : [];
+    const parts = [];
+    let offset = 0;
+    for (const n of lengths) {
+        const part = locs.slice(offset, offset + n);
+        offset += n;
+        if (part.length >= 2) parts.push(part);
+    }
+    return parts;
+}
+
 function closeRing(ring) {
     if (ring.length > 0) {
         const first = ring[0];
@@ -295,21 +313,29 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 continue;
             }
 
-            const locs = vectorCoords(layer, coordinateBuffers) || [];
-            const geojsonCoords = locs.map(c => [c[1], c[0]]);
-            vertexCounts.push(Math.max(0, 2 * (geojsonCoords.length - 1)));
-            features.push({
-                type: "Feature",
-                geometry: {
-                    type: "LineString",
-                    coordinates: geojsonCoords
-                },
-                properties: {
-                    layer: layer,
-                    colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: style.opacity || 1.0 },
-                    weight: style.weight || 3
-                }
-            });
+            // One LineString feature PER PART, every part carrying the layer -- never
+            // a MultiLineString: glify's MultiLineString path hit-tests the connector
+            // between parts, which is the phantom segment by another route. The GL
+            // vertex stream stays consecutive, so the per-layer count still aligns
+            // the time attributes; a strokeless or degenerate layer keeps its slot.
+            let count = 0;
+            for (const part of lineParts(layer, coordinateBuffers)) {
+                const geojsonCoords = part.map(c => [c[1], c[0]]);
+                count += Math.max(0, 2 * (geojsonCoords.length - 1));
+                features.push({
+                    type: "Feature",
+                    geometry: {
+                        type: "LineString",
+                        coordinates: geojsonCoords
+                    },
+                    properties: {
+                        layer: layer,
+                        colorRGB: { r: rgb.r, g: rgb.g, b: rgb.b, a: style.opacity || 1.0 },
+                        weight: style.weight || 3
+                    }
+                });
+            }
+            vertexCounts.push(count);
         }
 
         if (features.length === 0) return null;

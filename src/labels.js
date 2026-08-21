@@ -6,7 +6,7 @@
 // without touching the GL buckets or their meta keys.
 
 import { isLayerEffectiveVisible } from "./map.js";
-import { vectorCoords } from "./layers.js";
+import { vectorCoords, lineParts } from "./layers.js";
 import { windowFor, featureInWindow, effectiveDuration, timesFor } from "./timecontrol.js";
 
 // Whether a whole labelled feature is inside the current time window. NaN times
@@ -30,6 +30,18 @@ function timeVisible(layer, buffers, timeState) {
 // middle vertex (on the line, not floating in its bounding box); a polygon or
 // circle labels at its bounds centre. With a timeState, labels follow the window:
 // points drop per point, vectors as a whole.
+// Degree-space length of a [lat, lng] run -- only ever compared against another
+// part of the same line, so no projection is needed to pick the longer one.
+function planarLength(part) {
+    let total = 0;
+    for (let i = 1; i < part.length; i++) {
+        const dLat = part[i][0] - part[i - 1][0];
+        const dLng = part[i][1] - part[i - 1][1];
+        total += Math.sqrt(dLat * dLat + dLng * dLng);
+    }
+    return total;
+}
+
 export function collectLabels(layers, buffers, groupConfigs, timeState = null) {
     const out = [];
     for (const layer of layers || []) {
@@ -61,9 +73,14 @@ export function collectLabels(layers, buffers, groupConfigs, timeState = null) {
         } else if (layer.label) {
             if (!timeVisible(layer, buffers, timeState)) continue;
             if (layer.type === "polyline") {
-                const locs = vectorCoords(layer, buffers || {}) || [];
-                if (locs.length === 0) continue;
-                const mid = locs[Math.floor((locs.length - 1) / 2)];
+                // Anchor ON a part -- the middle vertex of the longest part. The
+                // middle of a multi-part line's whole vertex run can sit in the gap
+                // between parts, where there is nothing to label.
+                const parts = lineParts(layer, buffers || {});
+                if (parts.length === 0) continue;
+                const longest = parts.reduce((best, part) =>
+                    planarLength(part) > planarLength(best) ? part : best, parts[0]);
+                const mid = longest[Math.floor((longest.length - 1) / 2)];
                 out.push({ lat: mid[0], lng: mid[1],
                            text: String(layer.label), center: false });
             } else if (layer.bounds) {

@@ -8,10 +8,11 @@ depend on.
 """
 import pytest
 
-from geometry import A, B, C, LINE, RING, assert_coords, wkt_point, wkt_line, wkt_polygon
+from geometry import (A, B, C, LINE, RING, SECOND_LINE, assert_coords, wkt_point,
+                      wkt_line, wkt_multiline, wkt_polygon)
 from swiftmap.parsers.sources._utils import (
     wkt_kind, _parse_point_wkt_string, _parse_coord_string,
-    _parse_polygon_wkt_string, _ensure_closed_ring,
+    _parse_polygon_wkt_string, _ensure_closed_ring, LineGeom,
 )
 
 
@@ -110,3 +111,27 @@ def test_ensure_closed_ring_leaves_a_closed_ring_alone():
 def test_ensure_closed_ring_ignores_degenerate_input():
     assert _ensure_closed_ring([list(A), list(B)]) == [list(A), list(B)]
     assert _ensure_closed_ring([]) == []
+
+
+# --- multi-part lines --------------------------------------------------------------
+def test_multilinestring_is_one_geometry_with_parts_kept_apart():
+    # The number sweep merged the parts into one run, so the renderer drew a segment
+    # from the first part's end to the second's start that exists in no data.
+    geom = _parse_coord_string(wkt_multiline([LINE, SECOND_LINE]))
+    assert isinstance(geom, LineGeom)
+    assert geom.part_lengths() == [len(LINE), len(SECOND_LINE)]
+    assert_coords(geom.parts[0], LINE, label="first part")
+    assert_coords(geom.parts[1], SECOND_LINE, label="second part")
+    assert_coords(geom.flat(), LINE + SECOND_LINE, label="flat run")
+
+
+def test_single_part_multilinestring_stays_a_plain_list():
+    geom = _parse_coord_string(wkt_multiline([LINE]))
+    assert isinstance(geom, list) and not isinstance(geom, LineGeom)
+    assert_coords(geom, LINE)
+
+
+def test_plain_linestring_stays_a_plain_list():
+    geom = _parse_coord_string(wkt_line(LINE))
+    assert isinstance(geom, list) and not isinstance(geom, LineGeom)
+    assert_coords(geom, LINE)

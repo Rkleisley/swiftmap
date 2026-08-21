@@ -858,6 +858,93 @@ suite("a multipolygon fills both parts and area clicks are exact", async () => {
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });
 
+suite("a multi-part line leaves its gap unpainted and keeps GPU time", async () => {
+    // MULTILINESTRING used to parse as one vertex run, and the renderer drew a
+    // segment between the parts that exists in no data. The layer now carries a
+    // `parts` length table, the bucket emits one LineString feature per part, and
+    // the time path builds segment spans within parts only -- a span across the
+    // boundary would be the phantom segment in the shader AND a shear of every
+    // attribute after it, which silently disables vector GPU for all vectors.
+    await withPage(async (page, errors) => {
+        const gpuMessages = [];
+        page.on("console", (m) => {
+            if (/GPU time/.test(m.text())) gpuMessages.push(m.text());
+        });
+        const box = await page.locator(".leaflet-container").boundingBox();
+        const at = async (lat, lng) => {
+            const off = await page.evaluate(([la, ln]) => {
+                const z = window.__model.get("zoom");
+                const c = window.__model.get("center");
+                const p = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(la, ln), z);
+                const pc = window.L.CRS.EPSG3857.latLngToPoint(
+                    window.L.latLng(c[0], c[1]), z);
+                return [p.x - pc.x, p.y - pc.y];
+            }, [lat, lng]);
+            return [box.x + box.width / 2 + off[0], box.y + box.height / 2 + off[1]];
+        };
+        const shotAt = async (lat, lng, size) => {
+            const [x, y] = await at(lat, lng);
+            return page.screenshot({ clip: {
+                x: x - size / 2, y: y - size / 2, width: size, height: size } });
+        };
+        const setVis = (id, v) => page.evaluate(([i, vis]) => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === i ? { ...l, visible: vis } : l));
+        }, [id, v]).then(() => page.waitForTimeout(1200));
+        const seek = (v) => page.evaluate((val) => {
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = String(val); s.dispatchEvent(new Event("input"));
+        }, v).then(() => page.waitForTimeout(1200));
+
+        // The plain two-leg line: both legs paint, the gap between them does not.
+        const leg1On = await shotAt(35.86, -5.32, 12);
+        const gapOn = await shotAt(35.86, -5.26, 12);
+        const leg2On = await shotAt(35.86, -5.20, 12);
+        await setVis("mln", false);
+        const leg1Off = await shotAt(35.86, -5.32, 12);
+        const gapOff = await shotAt(35.86, -5.26, 12);
+        const leg2Off = await shotAt(35.86, -5.20, 12);
+        await setVis("mln", true);
+        assert.notEqual(Buffer.compare(leg1On, leg1Off), 0, "the first leg paints");
+        assert.notEqual(Buffer.compare(leg2On, leg2Off), 0, "the second leg paints");
+        assert.equal(Buffer.compare(gapOn, gapOff), 0,
+            "the gap between the legs stays unpainted -- no phantom segment");
+
+        // The per-vertex timed legs: day one draws leg one only, day three leg
+        // two only. Correct only if segment spans never bridged the boundary.
+        const probe = () => page.evaluate(() => {
+            const li = window.L.glify.linesInstances;
+            window.__li2 = window.__li2 || li[li.length - 1];
+            return li[li.length - 1] === window.__li2;
+        });
+        await probe();
+        await seek(0);
+        const t1Leg1 = await shotAt(36.14, -5.32, 12);
+        const t1Leg2 = await shotAt(36.14, -5.20, 12);
+        const max = await page.evaluate(() =>
+            parseInt(document.querySelector(".swiftmap-time-slider").max, 10));
+        await seek(max);
+        const t3Leg1 = await shotAt(36.14, -5.32, 12);
+        const t3Leg2 = await shotAt(36.14, -5.20, 12);
+        assert.notEqual(Buffer.compare(t1Leg1, t3Leg1), 0,
+            "leg one is on screen on day one and gone on day three");
+        assert.notEqual(Buffer.compare(t1Leg2, t3Leg2), 0,
+            "leg two appears only on day three");
+        await setVis("mln2", false);
+        const hiddenLeg1 = await shotAt(36.14, -5.32, 12);
+        const hiddenLeg2 = await shotAt(36.14, -5.20, 12);
+        assert.equal(Buffer.compare(t3Leg1, hiddenLeg1), 0,
+            "on day three leg one was already unpainted");
+        assert.notEqual(Buffer.compare(t3Leg2, hiddenLeg2), 0,
+            "on day three leg two was the painted one");
+
+        assert.ok(await probe(), "the lines instance survived the seeks: GPU time stayed engaged");
+        assert.deepEqual(gpuMessages, [], "no 'GPU time ... disabled' message was logged");
+        assert.deepEqual(errors, [], "no errors through the legs");
+    }, "widget-vector.html", ".leaflet-polylines-pane canvas");
+});
+
 suite("imagery renders from a URL and from the binary transport", async () => {
     // The image layer type is pure data -- {type:"image", bounds, opacity,
     // url | bytes under the layer id} -- so a plain-JS consumer needs only a

@@ -8,6 +8,7 @@ from ._grouping import (build_group_specs, resolve_group_path, resolve_layer_nam
                         resolve_feature_label)
 from .._warnings import warn, EmptyLayerWarning
 from ._targeting import bounds_of_coords
+from ..parsers.sources._utils import LineGeom
 import numpy as np
 
 @batched
@@ -173,10 +174,20 @@ def add_line(
         # `locations`, 25 tracks of 200k vertices made every sidebar toggle serialise
         # ~187 MB of layers JSON per click, which is what actually crashed large maps
         # after the per-click rebuilds were already gone.
+        #
+        # A multi-part line (MULTILINESTRING, MultiLineString) arrives as a LineGeom.
+        # The buffer stays one flat [lat, lon] run; the part lengths ride the config
+        # as a small `parts` table for the renderer to slice the runs back apart, so
+        # no segment is ever drawn between parts -- the `rings` pattern, line-side.
+        if isinstance(coords, LineGeom):
+            flat, parts = coords.flat(), coords.part_lengths()
+        else:
+            flat, parts = coords, None
+
         layer_id = f"layer_{self._layer_counter}"
         self._layer_counter += 1
         self._set_layer_buffer(
-            layer_id, np.asarray(coords, dtype=np.float64).flatten().tobytes())
+            layer_id, np.asarray(flat, dtype=np.float64).flatten().tobytes())
 
         self.add_child({
             "id": layer_id,
@@ -185,7 +196,8 @@ def add_line(
             "layer_group": resolve_group_path(group_specs, props, i, "Line Group"),
             "group_multi_select": group_multi_select,
             "visible": True,
-            "bounds": bounds_of_coords(coords),
+            **({"parts": parts} if parts else {}),
+            "bounds": bounds_of_coords(flat),
             **(feature_styles[i] if feature_styles else layer_style),
             "properties": line_props,
             "autobind_popup": bool(popup),

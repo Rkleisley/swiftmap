@@ -61,11 +61,17 @@ def test_multipoint_yields_each_point():
     assert_points(lats, lons, [A, B])
 
 
-def test_multilinestring_yields_each_line():
+def test_multilinestring_stays_one_feature_with_parts():
+    # One MultiLineString is one feature -- it used to split into a line per part,
+    # the opposite of what a MultiPolygon does.
     gdf = gpd.GeoDataFrame({"n": ["a"]}, geometry=[
-        MultiLineString([[xy(A), xy(B)], [xy(B), xy(C)]])])
-    lines, _ = parse_lines(gdf)
-    assert len(lines) == 2
+        MultiLineString([[xy(p) for p in LINE], [xy(p) for p in SECOND_LINE]])])
+    lines, props = parse_lines(gdf)
+    assert len(lines) == 1
+    assert lines[0].part_lengths() == [len(LINE), len(SECOND_LINE)]
+    assert_coords(lines[0].parts[0], LINE, label="first part")
+    assert_coords(lines[0].parts[1], SECOND_LINE, label="second part")
+    assert props["n"] == ["a"]
 
 
 def test_multipolygon_stays_one_feature_with_parts():

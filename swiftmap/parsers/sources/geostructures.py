@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple, Iterator
-from ._utils import _ensure_closed_ring
+from ._utils import LineGeom, _ensure_closed_ring
 
 
 def is_geostructures(data: Any) -> bool:
@@ -37,7 +37,8 @@ def _mixins():
     return PointLikeMixin, LineLikeMixin, PolygonLikeMixin
 
 
-def _iter_shapes(data: Any, inherited: Optional[Dict[str, Any]] = None) -> Iterator[Tuple[Any, Dict[str, Any]]]:
+def _iter_shapes(data: Any, inherited: Optional[Dict[str, Any]] = None,
+                 keep=None) -> Iterator[Tuple[Any, Dict[str, Any]]]:
     """
     Yields (shape, properties) for every individual shape, recursively.
 
@@ -48,6 +49,9 @@ def _iter_shapes(data: Any, inherited: Optional[Dict[str, Any]] = None) -> Itera
 
     Properties propagate down to parts that carry none of their own, so expanding a
     MultiGeoPolygon does not lose the feature's metadata for popups.
+
+    `keep(shape)` names shapes to yield WHOLE instead of expanding: a
+    MultiGeoLineString is one feature with parts, so the line parser keeps it.
     """
     if isinstance(data, (list, tuple)):
         items = list(data)
@@ -62,8 +66,8 @@ def _iter_shapes(data: Any, inherited: Optional[Dict[str, Any]] = None) -> Itera
     for shape in items:
         props = getattr(shape, "properties", None) or inherited or {}
         children = getattr(shape, "geoshapes", None)
-        if children:
-            yield from _iter_shapes(children, props)
+        if children and not (keep is not None and keep(shape)):
+            yield from _iter_shapes(children, props, keep)
         else:
             yield shape, props
 
@@ -96,10 +100,25 @@ def parse_geostructures_points(data: Any, lat_col: Optional[str] = None, lon_col
 
 def parse_geostructures_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
     _, LineLikeMixin, _ = _mixins()
+    from geostructures import MultiGeoLineString
+
+    def is_multi_line(shape):
+        return isinstance(shape, MultiGeoLineString)
 
     lines, props_list = [], []
-    for shape, props in _iter_shapes(data):
+    for shape, props in _iter_shapes(data, keep=is_multi_line):
         if not isinstance(shape, LineLikeMixin):
+            continue
+        if is_multi_line(shape):
+            # ONE feature with its parts kept apart -- a MultiGeoLineString has no
+            # `vertices` of its own; each part does. It used to expand into a line
+            # per part like every other Multi, against the polygon precedent.
+            parts = [[[float(v.latitude), float(v.longitude)] for v in part.vertices]
+                     for part in shape.geoshapes]
+            parts = [part for part in parts if len(part) >= 2]
+            if parts:
+                lines.append(parts[0] if len(parts) == 1 else LineGeom(parts))
+                props_list.append(props)
             continue
         coords = [[float(v.latitude), float(v.longitude)] for v in shape.vertices]
         if len(coords) >= 2:

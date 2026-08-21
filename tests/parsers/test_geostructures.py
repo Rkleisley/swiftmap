@@ -8,7 +8,8 @@ on every shape, `to_polygon` exists on lines, `MultiGeoLineString` has no `verti
 """
 import pytest
 
-from geometry import A, B, C, LINE, RING, assert_coords, assert_points, assert_closed
+from geometry import (A, B, C, LINE, RING, SECOND_LINE, assert_coords, assert_points,
+                      assert_closed)
 from swiftmap.parsers import parse_points, parse_lines, parse_polygons
 
 pytest.importorskip("geostructures")
@@ -128,6 +129,30 @@ def test_track_timestamps_reach_properties():
     assert "datetime_start" in props and len(props["datetime_start"]) == 2
 
 
+def test_multigeolinestring_stays_one_feature_with_parts():
+    # One MultiGeoLineString is one feature with its parts kept apart -- it used to
+    # expand into a line per part through the generic Multi expansion.
+    multi = MultiGeoLineString(
+        [GeoLineString([coord(p) for p in LINE]),
+         GeoLineString([coord(p) for p in SECOND_LINE])],
+        properties={"route": "R1"},
+    )
+    lines, props = parse_lines([multi])
+    assert len(lines) == 1
+    assert lines[0].part_lengths() == [len(LINE), len(SECOND_LINE)]
+    assert_coords(lines[0].parts[0], LINE, label="first part")
+    assert_coords(lines[0].parts[1], SECOND_LINE, label="second part")
+    assert props["route"] == ["R1"], "the feature's metadata rides the one feature"
+
+
+def test_multigeolinestring_inside_a_collection_is_still_one_feature(point):
+    multi = MultiGeoLineString([GeoLineString([coord(p) for p in LINE]),
+                                GeoLineString([coord(p) for p in SECOND_LINE])])
+    fc = FeatureCollection([point, multi])
+    lines, _ = parse_lines(fc)
+    assert len(lines) == 1 and lines[0].part_lengths() == [3, 2]
+
+
 def test_collection_containing_a_multi_is_flattened(line):
     fc = FeatureCollection([MultiGeoPoint([GeoPoint(coord(A)), GeoPoint(coord(B))]), line])
     assert len(parse_points(fc)[0]) == 2, "nested Multi shapes expand recursively"
@@ -181,16 +206,20 @@ def test_multigeopoint_yields_every_point_not_one_centroid():
     assert_points(lats, lons, [A, B])
 
 
-def test_multigeolinestring_yields_every_line():
-    """Previously produced nothing: MultiGeoLineString has no `vertices` attribute."""
+def test_multigeolinestring_yields_every_part_not_nothing():
+    """Previously produced nothing: MultiGeoLineString has no `vertices` attribute.
+
+    Both parts must come through -- as ONE feature with parts kept apart, now
+    that multi-part lines follow the MultiPolygon precedent."""
     multi = MultiGeoLineString([
         GeoLineString([coord(A), coord(B)]),
         GeoLineString([coord(B), coord(C)]),
     ])
     lines, _ = parse_lines([multi])
-    assert len(lines) == 2
-    assert_coords(lines[0], [list(A), list(B)], label="first line")
-    assert_coords(lines[1], [list(B), list(C)], label="second line")
+    assert len(lines) == 1
+    assert lines[0].part_lengths() == [2, 2]
+    assert_coords(lines[0].parts[0], [list(A), list(B)], label="first part")
+    assert_coords(lines[0].parts[1], [list(B), list(C)], label="second part")
 
 
 def test_multigeopolygon_parses_without_error():

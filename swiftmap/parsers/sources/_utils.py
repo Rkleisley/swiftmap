@@ -54,6 +54,33 @@ class PolygonGeom:
         return [[len(ring) for ring in part] for part in self.parts]
 
 
+class LineGeom:
+    """
+    A multi-part line: parts -> [lat, lon] pairs, each part drawn on its own.
+
+    The line-side twin of PolygonGeom. A plain list of pairs remains the
+    representation of the common single-part line, so nothing on that path
+    changes; this exists only where there are parts to keep apart. Downstream it
+    flattens into the one coordinate buffer a layer already ships, with the part
+    lengths as a small `parts` table in the layer config for the renderer to slice
+    by -- so no segment is ever drawn from one part's last vertex to the next
+    part's first.
+    """
+    __slots__ = ("parts",)
+
+    def __init__(self, parts: List[List[List[float]]]):
+        self.parts = parts
+
+    def __len__(self) -> int:
+        return sum(len(part) for part in self.parts)
+
+    def flat(self) -> List[List[float]]:
+        return [pair for part in self.parts for pair in part]
+
+    def part_lengths(self) -> List[int]:
+        return [len(part) for part in self.parts]
+
+
 # Innermost paren groups are ring bodies (coordinates never contain parens), and a
 # MULTIPOLYGON's parts are separated by a comma between DOUBLED parens -- rings within
 # one part only ever meet at single parens -- so both structures fall to C-speed regex.
@@ -89,6 +116,25 @@ def _wkt_polygon_structure(val: str) -> List[List[List[List[float]]]]:
         return [rings] if rings else []
     parts = [rings_of(chunk) for chunk in _PART_SPLIT_RE.split(val)]
     return [p for p in parts if p]
+
+
+def _wkt_line_structure(val: str) -> List[List[List[float]]]:
+    """
+    Parts -> [lat, lon] pairs for a LINESTRING or MULTILINESTRING body.
+
+    Each part is one innermost paren group. A flat number sweep merged the parts
+    of a MULTILINESTRING into one vertex run, so the renderer drew a segment from
+    one part's end to the next part's start that exists in no data -- the
+    line-side twin of the polygon ring oversight. Parts shorter than two vertices
+    are dropped; malformed parens yield [], and the caller falls back to the sweep.
+    """
+    parts = []
+    for body in _RING_RE.findall(val):
+        nums = [float(n) for n in FLOAT_REGEX.findall(body)]
+        part = [[nums[i + 1], nums[i]] for i in range(0, len(nums) - 1, 2)]
+        if len(part) >= 2:
+            parts.append(part)
+    return parts
 
 
 def _parse_point_wkt_string(val: Any) -> List[List[float]]:
@@ -215,6 +261,12 @@ def coord_string_parts(val: Any, kind_wanted: str, min_nums: int) -> Tuple[Optio
                 return parts[0][0], None      # the common hole-free ring, as before
             if parts:
                 return PolygonGeom(parts), None
+        elif kind_wanted == "line":
+            parts = _wkt_line_structure(val)
+            if len(parts) == 1:
+                return parts[0], None         # the common single-part line, as before
+            if parts:
+                return LineGeom(parts), None
         return _wkt_coord_pairs(val), None
     if kind is not None:
         # Recognisable WKT of another kind. Falling through would extract its numbers as

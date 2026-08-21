@@ -38,6 +38,11 @@ def wkt_line(pts):
     return "LINESTRING (" + ", ".join(f"{p[1]} {p[0]}" for p in pts) + ")"
 
 
+def wkt_multiline(parts):
+    return "MULTILINESTRING (" + ", ".join(
+        "(" + ", ".join(f"{p[1]} {p[0]}" for p in part) + ")" for part in parts) + ")"
+
+
 def wkt_polygon(ring):
     return "POLYGON ((" + ", ".join(f"{p[1]} {p[0]}" for p in ring) + "))"
 

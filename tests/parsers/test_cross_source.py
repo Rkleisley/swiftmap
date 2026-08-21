@@ -8,9 +8,9 @@ from its peers here, and it catches those faults in a new source before anyone r
 import pytest
 
 from geometry import (
-    A, B, C, LINE, RING, RING_OPEN,
+    A, B, C, LINE, RING, RING_OPEN, SECOND_LINE,
     assert_coords, assert_points, assert_closed,
-    wkt_point, wkt_line, wkt_polygon, gj_feature, gj_collection, lonlat,
+    wkt_point, wkt_line, wkt_multiline, wkt_polygon, gj_feature, gj_collection, lonlat,
 )
 from swiftmap.parsers import parse_points, parse_lines, parse_polygons
 
@@ -19,8 +19,10 @@ pl = pytest.importorskip("polars")
 gpd = pytest.importorskip("geopandas")
 pytest.importorskip("geostructures")
 
-from shapely.geometry import Point, LineString, Polygon  # noqa: E402
-from geostructures import Coordinate, GeoPoint, GeoLineString, GeoPolygon  # noqa: E402
+from shapely.geometry import Point, LineString, MultiLineString, Polygon  # noqa: E402
+from geostructures import (  # noqa: E402
+    Coordinate, GeoPoint, GeoLineString, GeoPolygon, MultiGeoLineString,
+)
 from geostructures.collections import FeatureCollection  # noqa: E402
 
 
@@ -64,6 +66,19 @@ LINE_SOURCES = {
     "coordinate_list": lambda: [list(A), list(B), list(C)],
 }
 
+# Every representation of the same two-part line.
+MULTILINE_SOURCES = {
+    "geojson": lambda: gj_collection(
+        gj_feature("MultiLineString", [lonlat(LINE), lonlat(SECOND_LINE)])),
+    "geostructures": lambda: [MultiGeoLineString([
+        GeoLineString([gs(p) for p in LINE]),
+        GeoLineString([gs(p) for p in SECOND_LINE])])],
+    "geopandas": lambda: gpd.GeoDataFrame({"n": ["a"]}, geometry=[
+        MultiLineString([[xy(p) for p in LINE], [xy(p) for p in SECOND_LINE]])]),
+    "pandas_wkt": lambda: pd.DataFrame({"wkt": [wkt_multiline([LINE, SECOND_LINE])]}),
+    "polars_wkt": lambda: pl.DataFrame({"wkt": [wkt_multiline([LINE, SECOND_LINE])]}),
+}
+
 # Every representation of the same triangle.
 POLYGON_SOURCES = {
     "geojson": lambda: gj_collection(gj_feature("Polygon", [lonlat(RING)])),
@@ -91,6 +106,18 @@ def test_every_source_yields_the_same_line(source):
     lines, _ = parse_lines(LINE_SOURCES[source]())
     assert len(lines) == 1, f"{source} produced {len(lines)} lines, expected 1"
     assert_coords(lines[0], LINE, label=source)
+
+
+@pytest.mark.parametrize("source", MULTILINE_SOURCES, ids=list(MULTILINE_SOURCES))
+def test_every_source_yields_the_same_multi_part_line(source):
+    # ONE feature with two parts, never a line per part and never one merged run:
+    # the merged run is how the phantom segment between the parts got drawn.
+    lines, _ = parse_lines(MULTILINE_SOURCES[source]())
+    assert len(lines) == 1, f"{source} produced {len(lines)} lines, expected 1"
+    geom = lines[0]
+    assert geom.part_lengths() == [len(LINE), len(SECOND_LINE)], source
+    assert_coords(geom.parts[0], LINE, label=f"{source} part 1")
+    assert_coords(geom.parts[1], SECOND_LINE, label=f"{source} part 2")
 
 
 @pytest.mark.parametrize("source", POLYGON_SOURCES, ids=list(POLYGON_SOURCES))

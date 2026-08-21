@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
-from ._utils import _ensure_closed_ring, PolygonGeom
+from ._utils import _ensure_closed_ring, PolygonGeom, LineGeom
 
 def is_geojson(data: Any) -> bool:
     if isinstance(data, dict) and "type" in data:
@@ -76,11 +76,17 @@ def parse_geojson_lines(data: Any, **kwargs) -> Tuple[List[List[List[float]]], D
                 lines.append(coords)
                 props_list.append(p)
         elif gtype == 'MultiLineString':
+            # ONE feature with its parts kept apart, as a MultiPolygon is. It used to
+            # split into a line per part -- a sidebar entry each, and the opposite of
+            # the polygon precedent. A single-part multi stays the plain list.
+            parts = []
             for line_coords_raw in geom.get('coordinates', []):
                 coords = [[float(c[1]), float(c[0])] for c in line_coords_raw if len(c) >= 2]
                 if len(coords) >= 2:
-                    lines.append(coords)
-                    props_list.append(p)
+                    parts.append(coords)
+            if parts:
+                lines.append(parts[0] if len(parts) == 1 else LineGeom(parts))
+                props_list.append(p)
 
     props = {}
     if props_list:

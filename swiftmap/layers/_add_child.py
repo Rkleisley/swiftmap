@@ -53,6 +53,9 @@ _SUB_LAYER_ATTRS = (
     "radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity",
     "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations",
     "location", "geojson", "rings", "legend", "legend_size", "label", "labels",
+    # A multi-part line's part-length table. Dropped at merge, the renderer would
+    # read the flat buffer as ONE run and draw the phantom segment between parts.
+    "parts",
     # bounds was missing here for the whole life of the merge, which silently broke
     # everything that anchors or zooms from a collection part's own box: label
     # anchors on merged polygons, bounds_of() over parts, select(zoom=True).

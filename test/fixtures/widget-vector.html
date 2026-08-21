@@ -65,6 +65,21 @@ const model = makeModel({
     // A MULTIPOLYGON: rings = [[5,5],[5]] -- a holed part plus a solid part, the
     // shape that exposed glify's silent zero-triangle handling of MultiPolygon
     // features inside a FeatureCollection. Each part must fill; the hole must not.
+    // A two-part line: `parts` slices the flat run into disjoint legs. The gap
+    // between the legs must stay unpainted -- the WKT number sweep used to merge
+    // the parts and draw a segment across it that exists in no data.
+    { id: "mln", type: "polyline", name: "Two Legs", layer_group: "Vectors",
+      visible: true, color: "#00ff00", weight: 6, opacity: 1, properties: { kind: "legs" },
+      parts: [2, 2],
+      locations: [[35.86, -5.34], [35.86, -5.30], [35.86, -5.22], [35.86, -5.18]] },
+    // The same shape timed PER VERTEX: leg one on day one, leg two on day three.
+    // Segment spans must not bridge the part boundary -- one extra span shears
+    // every GL attribute after it and the vector GPU path silently disables.
+    { id: "mln2", type: "polyline", name: "Timed Legs", layer_group: "Vectors",
+      visible: true, color: "#ff00aa", weight: 6, opacity: 1, properties: { kind: "timed" },
+      time: { field: "kind", duration: "period" },
+      parts: [2, 2],
+      locations: [[36.14, -5.34], [36.14, -5.30], [36.14, -5.22], [36.14, -5.18]] },
     { id: "mpz", type: "polygon", name: "MultiZone", layer_group: "Vectors",
       visible: true, color: "#00ffee", fillColor: "#ff0044", weight: 2,
       fillOpacity: 0.9, properties: { kind: "multi" },
@@ -85,6 +100,11 @@ const model = makeModel({
          Date.UTC(2026, 0, 3), Date.UTC(2026, 0, 3)]).buffer),
     "pg2::times": new DataView(new Float64Array(
         [Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 1)]).buffer),
+    "mln2::times": new DataView(new Float64Array(
+        [Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 1),
+         Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 1),
+         Date.UTC(2026, 0, 3), Date.UTC(2026, 0, 3),
+         Date.UTC(2026, 0, 3), Date.UTC(2026, 0, 3)]).buffer),
   },
   center: [36.03, -5.25], zoom: 11, crs: "EPSG:3857",
   auto_sync: true, sync_trigger: 0, show_logo: false,

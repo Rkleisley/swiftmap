@@ -62,12 +62,24 @@ def test_multipoint_yields_each_point():
     assert_points(lats, lons, [A, B, C])
 
 
-def test_multilinestring_yields_each_line():
-    fc = gj_collection(gj_feature("MultiLineString", [lonlat(LINE), lonlat(SECOND_LINE)]))
+def test_multilinestring_stays_one_feature_with_parts():
+    # One MultiLineString is one feature -- it used to split into a line per part,
+    # the opposite of what a MultiPolygon does.
+    fc = gj_collection(gj_feature("MultiLineString", [lonlat(LINE), lonlat(SECOND_LINE)],
+                                  {"route": "R1"}))
+    lines, props = parse_lines(fc)
+    assert len(lines) == 1
+    assert lines[0].part_lengths() == [len(LINE), len(SECOND_LINE)]
+    assert_coords(lines[0].parts[0], LINE, label="first part")
+    assert_coords(lines[0].parts[1], SECOND_LINE, label="second part")
+    assert props["route"] == ["R1"], "one feature, one property row"
+
+
+def test_single_part_multilinestring_is_a_plain_line():
+    fc = gj_collection(gj_feature("MultiLineString", [lonlat(LINE)]))
     lines, _ = parse_lines(fc)
-    assert len(lines) == 2
-    assert_coords(lines[0], LINE, label="first")
-    assert_coords(lines[1], SECOND_LINE, label="second")
+    assert len(lines) == 1 and isinstance(lines[0], list)
+    assert_coords(lines[0], LINE)
 
 
 def test_multipolygon_stays_one_feature_with_parts():
