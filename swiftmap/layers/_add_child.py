@@ -176,8 +176,14 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
                 if val is not None:
                     sub_layer[attr] = val
             
-            # Update to be a group type
+            # Update to be a group type, with an id of its own. The group used to
+            # keep the first member's id (it was built from that member's config),
+            # so the two shared one: a sidebar toggle of the collection wrote to
+            # whichever of them resolved first, and Python's model diverged from
+            # the screen. Buffers stay keyed by the member's id, which it keeps.
             new_config.type = "group"
+            new_config.id = f"layer_{self._layer_counter}"
+            self._layer_counter += 1
             new_config.layers = [sub_layer]
             # Remove individual layer attributes from group level
             for attr in _SUB_LAYER_ATTRS:

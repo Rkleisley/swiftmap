@@ -132,6 +132,11 @@ def apply_to_layers(layers: List[Any], changes: Dict[Any, Dict[str, Any]],
     Layers whose values already match are left untouched and excluded from the changed
     list, so a no-op call emits nothing. That matters most for the reactive callers this
     exists for, which re-run on any dependency and would otherwise resend a layer per tick.
+
+    A group addressed by its OWN id takes the fields itself -- a collection's `visible`
+    is what the sidebar flips when its checkbox is toggled, and the frontend applies a
+    `set` aimed at a group id to the group -- and its members are still visited for
+    theirs. It used to only recurse, so a field set on a group silently did nothing.
     """
     def rebuild(layer, top=False):
         """
@@ -147,9 +152,11 @@ def apply_to_layers(layers: List[Any], changes: Dict[Any, Dict[str, Any]],
                 new_sub, changed = rebuild(sub)
                 rebuilt.append(new_sub)
                 any_changed = any_changed or changed
-            if not any_changed:
+            own = changes.get(layer.get("id")) or {}
+            own = {k: v for k, v in own.items() if layer.get(k) != v}
+            if not any_changed and not own:
                 return layer, False
-            return wrap({**_to_dict(layer), "layers": rebuilt}), True
+            return wrap({**_to_dict(layer), **own, "layers": rebuilt}), True
 
         wanted = changes.get(layer.get("id"))
         if not wanted:

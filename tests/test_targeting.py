@@ -55,6 +55,53 @@ def test_a_collection_is_found_by_its_parts_not_its_wrapper(m):
     assert kinds(m.find_layers("Survey")) == ["circle_markers", "polygon", "polyline"]
 
 
+def test_a_promoted_group_has_an_id_of_its_own(m):
+    # The group used to be built from its first member's config and kept that
+    # member's id, so find_layers(id) was ambiguous and a write by id landed on
+    # whichever of the two resolved first.
+    group = group_of(m)
+    member_ids = [s["id"] for s in group.get("layers")]
+    assert group.get("id") not in member_ids, "the wrapper's id is nobody else's"
+    assert len(set(member_ids)) == len(member_ids)
+    for mid in member_ids:
+        assert len(m.find_layers(mid, include_groups=True)) == 1, f"{mid} is unambiguous"
+    assert [l.get("type") for l in m.find_layers(group.get("id"), include_groups=True)] == ["group"]
+    # A same-name merge of two plain layers promotes the same way.
+    mp = swiftmap.Map()
+    mp.add_polygon([[36.0, -5.3], [36.0, -5.2], [36.1, -5.2]], name="Dwell 1", layer_group="Dwells")
+    mp.add_circle_markers([[36.05, -5.25]], name="Dwell 1", layer_group="Dwells")
+    dwell = group_of(mp)
+    assert dwell.get("id") not in [s["id"] for s in dwell.get("layers")]
+    assert mp.coordinate_buffers.keys() >= {s["id"] for s in dwell.get("layers")},         "the members keep the ids their buffers are filed under"
+
+
+def test_a_collection_toggle_writes_back_to_the_group(m):
+    # The sidebar flips the collection's own `visible` and writes the collection's
+    # id. Python must land that on the group -- the members' own flags stay, as
+    # they do in the frontend's mirror, where visibility is hierarchical.
+    group = group_of(m)
+    ops = []
+    m._emit = lambda op, buffer=None: ops.append(op)
+    m._handle_client_msg(None, {"kind": "swiftmap_write", "ops": [
+        {"op": "set", "id": group.get("id"), "fields": {"visible": False}}]}, [])
+    group = group_of(m)
+    assert group.get("visible") is False, "the write landed on the collection"
+    assert all(s.get("visible", True) for s in group.get("layers")),         "the members' own flags are untouched, as on the screen"
+    assert ops == [{"op": "set", "id": group.get("id"), "fields": {"visible": False}}],         "re-emitted for other views, aimed at the group"
+    # By name still acts on the parts, as before.
+    m.hide("Survey")
+    assert not any(l.get("visible", True) for l in m.find_layers("Survey"))
+
+
+def test_a_field_set_addressed_to_a_group_takes_effect(m):
+    # Used to recurse into the members and never touch the group itself, so the
+    # set silently did nothing.
+    group = group_of(m)
+    m._set_layer_fields([group], {"visible": False})
+    assert group_of(m).get("visible") is False
+    m._set_layer_fields([group_of(m)], {"visible": False})   # a no-op emits nothing
+
+
 def test_the_wrapper_is_available_when_asked_for(m):
     found = m.find_layers("Survey", include_groups=True)
     assert "group" in kinds(found)
