@@ -6,12 +6,13 @@
 // createSwiftMap mounts the whole map over a host (src/host.js); the rest are the
 // pieces it is built from, for consumers that compose their own.
 
-export { createSwiftMap } from "./core.js";
+export { createSwiftMap, sendLayerWrite } from "./core.js";
 export { createHostStub } from "./host.js";
 export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers,
          collectPointLayersAll } from "./patch.js";
 export { renderLayer, renderMergedGlLayer, styleFor, getIndexedProperties } from "./layers.js";
-export { renderSidebarControls, normalizeRadioLayers, getLayerBounds, sendLayerWrite } from "./sidebar.js";
+export { renderSidebarControls, normalizeRadioLayers, getLayerBounds,
+         sidebarCollapseState } from "./sidebar.js";
 export { deriveLegendSpec, renderLegend } from "./legend.js";
 export { collectLabels, renderLabels } from "./labels.js";
 export { pinShader } from "./shaders.js";

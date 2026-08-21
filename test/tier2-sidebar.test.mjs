@@ -10,7 +10,22 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 
 import { renderSidebarControls } from "../src/sidebar.js";
+import { sendLayerWrite } from "../src/core.js";
 import { makeModel, makeMap, layer } from "./helpers.mjs";
+
+// What the core hands the sidebar, built over the test model so the existing
+// assertions on model.sent / model.sets / model.saves keep reading the wire.
+function contextFor(model) {
+    return {
+        groupConfigs: model.get("group_configs") || {},
+        coordinateBuffers: model.get("coordinate_buffers") || {},
+        onLayerWrite: (changes) => sendLayerWrite(model, changes),
+        onGroupConfigsChange: (cfg) => {
+            model.set("group_configs", { ...cfg });
+            model.save_changes();
+        },
+    };
+}
 
 function mount(layers, groupConfigs = {}) {
     const dom = new JSDOM("<!doctype html><div id='sidebar'></div>");
@@ -22,7 +37,7 @@ function mount(layers, groupConfigs = {}) {
     const map = makeMap();
     const el = dom.window.document.getElementById("sidebar");
     const toggles = [];
-    renderSidebarControls(el, layers, model, map, () => toggles.push(true));
+    renderSidebarControls(el, layers, contextFor(model), map, () => toggles.push(true));
     return { el, model, map, toggles, dom };
 }
 
@@ -213,7 +228,7 @@ function mountDiverged(rendered, inModel, groupConfigs = {}) {
     globalThis.Event = dom.window.Event;
     const model = makeModel({ layers: inModel, group_configs: groupConfigs });
     const el = dom.window.document.getElementById("sidebar");
-    renderSidebarControls(el, rendered, model, makeMap(), () => {});
+    renderSidebarControls(el, rendered, contextFor(model), makeMap(), () => {});
     return { el, model, rendered };
 }
 
@@ -478,4 +493,37 @@ test("a calendar period hides the trail handle rather than lying", () => {
     const { el } = mountTime(trackState({ periodMs: null, gridMs: null }));
     assert.equal(el.querySelector(".swiftmap-time-trail").style.display, "none",
         "months have no fixed width, so there is no honest grid to drag on");
+});
+
+
+// --- collapse state is per sidebar --------------------------------------------------
+test("two sidebars on one page keep separate collapse state", () => {
+    // collapsedPaths lived at module scope, so two maps on one page shared it:
+    // collapsing a folder in one collapsed it in the other. Now keyed per sidebar
+    // element, as the legend keeps its own, and surviving the re-render every sync
+    // performs.
+    const dom = new JSDOM("<!doctype html><div id='a'></div><div id='b'></div>");
+    globalThis.document = dom.window.document;
+    globalThis.Event = dom.window.Event;
+    const layers = [layer({ id: "1", name: "Ping", layer_group: "Feeds/Active" })];
+    const ctx = () => ({ groupConfigs: {}, coordinateBuffers: {},
+                         onLayerWrite() {}, onGroupConfigsChange() {} });
+    const a = dom.window.document.getElementById("a");
+    const b = dom.window.document.getElementById("b");
+    const render = () => {
+        renderSidebarControls(a, layers, ctx(), makeMap(), () => {});
+        renderSidebarControls(b, layers, ctx(), makeMap(), () => {});
+    };
+    const arrowOf = el => [...el.querySelectorAll("span")]
+        .find(s => ["▸", "▾"].includes(s.textContent)).textContent;
+
+    render();
+    assert.equal(arrowOf(a), "▾");
+    assert.equal(arrowOf(b), "▾");
+
+    // Collapse "Feeds" in A by clicking its header row.
+    [...a.querySelectorAll("span")].find(s => s.textContent === "Feeds").parentElement.click();
+    render();                                       // every sync re-renders both
+    assert.equal(arrowOf(a), "▸", "A's folder stays collapsed across a re-render");
+    assert.equal(arrowOf(b), "▾", "B's folder is untouched -- the state is per sidebar");
 });

@@ -1,4 +1,17 @@
-const collapsedPaths = {};  // path -> collapsed?
+// Folder collapse state, PER SIDEBAR. It used to be one module-level object, so
+// two maps on one page shared it -- collapsing a folder in one collapsed it in
+// the other. Keyed by the container element, exactly as the legend keeps its own
+// collapse state (3b9c96c), and surviving the full re-render every sync performs.
+const collapsedByContainer = new WeakMap();
+
+export function sidebarCollapseState(container) {
+    let state = collapsedByContainer.get(container);
+    if (!state) {
+        state = {};
+        collapsedByContainer.set(container, state);
+    }
+    return state;
+}
 
 export function getLayerBounds(l, coordinateBuffers) {
     if (!l) return null;
@@ -97,17 +110,9 @@ export function getLayerBounds(l, coordinateBuffers) {
 // instead of the whole layers trait. Python applies the fields and re-emits them as
 // `set` patch ops, which is how other views of the same map (notebook outputs) stay
 // in step now that the trait no longer carries toggles.
-export function sendLayerWrite(model, changes) {
-    if (!changes.length) return;
-    try {
-        model.send({
-            kind: "swiftmap_write",
-            ops: changes.map(c => ({ op: "set", id: c.id, fields: { visible: c.visible } })),
-        });
-    } catch (err) { /* no live backend; the rendered list already holds the change */ }
-}
-
-export function normalizeRadioLayers(layers, groupConfigs) {
+// `collapsedPaths` is the calling sidebar's own state (sidebarCollapseState), so
+// a radio group's auto-collapse lands on that sidebar alone.
+export function normalizeRadioLayers(layers, groupConfigs, collapsedPaths = {}) {
     const tree = { name: "Root", path: "", children: {}, layers: [], isGroup: true };
     if (!groupConfigs[""]) {
         groupConfigs[""] = { multi_select: true, visible: true };
@@ -181,10 +186,16 @@ export function normalizeRadioLayers(layers, groupConfigs) {
     return { changes, groupsChanged };
 }
 
-export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle) {
+// `ctx` is what the sidebar needs from its host, handed in rather than reached for:
+//   groupConfigs           the folder flags (mutated in place as the tree toggles)
+//   coordinateBuffers      the live buffer map, for fitting a toggled node
+//   onLayerWrite(changes)  targeted visibility flips to send on
+//   onGroupConfigsChange(groupConfigs)  the folder flags to commit
+export function renderSidebarControls(sidebar, layers, ctx, map, onLayerToggle) {
     sidebar.innerHTML = "<b style='font-size: 13px; border-bottom: 2px solid #eee; padding-bottom: 4px; display: block; margin-bottom: 8px;'>Layers Control</b>";
-    
-    const groupConfigs = model.get("group_configs") || {};
+
+    const collapsedPaths = sidebarCollapseState(sidebar);
+    const groupConfigs = (ctx && ctx.groupConfigs) || {};
 
     // 1. Build a nested hierarchical tree from the flat layers list
     const tree = { name: "Root", path: "", children: {}, layers: [], isGroup: true };
@@ -425,14 +436,11 @@ export function renderSidebarControls(sidebar, layers, model, map, onLayerToggle
                     }
                 }
 
-                sendLayerWrite(model, changes);
-                // group_configs stays on the trait: it is a handful of folder flags, and the
-                // spread gives Backbone a fresh reference so the in-place edits register.
-                model.set("group_configs", { ...groupConfigs });
-                model.save_changes();
+                if (ctx && ctx.onLayerWrite) ctx.onLayerWrite(changes);
+                if (ctx && ctx.onGroupConfigsChange) ctx.onGroupConfigsChange(groupConfigs);
 
                 if (isChecked && map) {
-                    const bounds = getLayerBounds(node, model.get("coordinate_buffers") || {});
+                    const bounds = getLayerBounds(node, (ctx && ctx.coordinateBuffers) || {});
                     if (bounds) {
                         map.fitBounds(bounds);
                     }

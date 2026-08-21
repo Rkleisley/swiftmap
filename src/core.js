@@ -1,5 +1,5 @@
 import { loadCSS, loadJS } from "./utils.js";
-import { renderSidebarControls, normalizeRadioLayers, sendLayerWrite } from "./sidebar.js";
+import { renderSidebarControls, normalizeRadioLayers, sidebarCollapseState } from "./sidebar.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
 import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey } from "./layers.js";
@@ -10,6 +10,20 @@ import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
 import { gpuTimeAvailable, vectorGpuAvailable, LAYER_SLOTS } from "./gputime.js";
 import { isLayerEffectiveVisible, collectWebglLayers, collectPointLayersAll,
          applySwiftmapPatch, bufferSerial } from "./patch.js";
+
+// The sidebar's toggle write-back: targeted visibility flips through send(),
+// never the layers trait. The full write scaled with the map instead of the
+// click -- 36 MB at 25 tracks x 200k vertices, past uvicorn's 16 MB default
+// websocket cap, which closes the connection and ends the Shiny session.
+export function sendLayerWrite(host, changes) {
+    if (!changes.length) return;
+    try {
+        host.send({
+            kind: "swiftmap_write",
+            ops: changes.map(c => ({ op: "set", id: c.id, fields: { visible: c.visible } })),
+        });
+    } catch (err) { /* no live backend; the rendered list already holds the change */ }
+}
 
 // Mounts one swiftmap map into `el`, driven by a host -- see src/host.js for the
 // interface. The widget, a static export and a React component are all hosts over
@@ -210,6 +224,23 @@ export async function createSwiftMap({ host, el }) {
         }
         return false;
     }
+
+    // Feature clicks, written to the host BARE -- no gating on a comm property:
+    // shinywidgets' model has none, and gating on it silently killed every
+    // writeback under Shiny. One key always answers "where" (clicked_latlng),
+    // clicked_layer_id answers "on what" ("" for open map), and click_seq bumps
+    // on EVERY click so a repeat click on the same feature still fires.
+    const layerEvents = {
+        onFeatureClick: ({ layer, index, latlng }) => {
+            try {
+                host.set("clicked_layer_id", layer.id);
+                host.set("selected_index", index);
+                host.set("clicked_latlng", latlng);
+                host.set("click_seq", (host.get("click_seq") || 0) + 1);
+                host.save_changes();
+            } catch (err) { /* no live backend */ }
+        },
+    };
 
     const activeTileLayers = {};
     const activeOverlayLayers = {};
@@ -521,7 +552,7 @@ export async function createSwiftMap({ host, el }) {
         // Enforce mutually exclusive radio group visibility before collecting or rendering WebGL layers.
         // Written back as targeted flips, never the layers trait -- the full write was
         // the frame that killed large sessions (see the sidebar's change handler).
-        const radio = normalizeRadioLayers(layers, groupConfigs);
+        const radio = normalizeRadioLayers(layers, groupConfigs, sidebarCollapseState(sidebar));
         if ((radio.changes.length > 0 || radio.groupsChanged) && document.body.contains(el)) {
             sendLayerWrite(host, radio.changes);
             host.set("group_configs", { ...groupConfigs });
@@ -603,7 +634,7 @@ export async function createSwiftMap({ host, el }) {
                 }
             }
 
-            const instance = await renderLayer(map, layer, coordinateBuffers[layer.id], host);
+            const instance = await renderLayer(map, layer, coordinateBuffers[layer.id], coordinateBuffers);
             if (instance) {
                 activeOverlayLayers[layer.id] = instance;
             }
@@ -653,7 +684,7 @@ export async function createSwiftMap({ host, el }) {
                     state.layer.remove();
                 }
                 if (visibleLayers.length > 0) {
-                    state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, host, timeState, vectorGpu, featureVisibleNow);
+                    state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, layerEvents, timeState, vectorGpu, featureVisibleNow);
                     if (state.layer) {
                         state.layer.addTo(map);
                     }
@@ -723,7 +754,17 @@ export async function createSwiftMap({ host, el }) {
             }
         }
 
-        renderSidebarControls(sidebar, layers, host, map, () => {
+        renderSidebarControls(sidebar, layers, {
+            groupConfigs,
+            coordinateBuffers,
+            onLayerWrite: (changes) => sendLayerWrite(host, changes),
+            // group_configs stays on the host: a handful of folder flags, and the
+            // spread gives Backbone a fresh reference so in-place edits register.
+            onGroupConfigsChange: (cfg) => {
+                host.set("group_configs", { ...cfg });
+                host.save_changes();
+            },
+        }, map, () => {
             performSync();
         });
 

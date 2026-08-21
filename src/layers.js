@@ -125,18 +125,19 @@ function renderImageLayer(map, layer, coordBuffer) {
     return overlay;
 }
 
-export async function renderLayer(map, layer, coordBuffer, model) {
+// A non-GL layer (image overlay, or a group of them) as a Leaflet layer. Takes the
+// LIVE buffer map the core keeps -- patches land there, never in a host trait.
+export async function renderLayer(map, layer, coordBuffer, coordinateBuffers = {}) {
     if (layer.type === "image") {
         return renderImageLayer(map, layer, coordBuffer);
     }
     if (layer.type === "group") {
         const group = L.layerGroup();
-        const coordinateBuffers = model.get("coordinate_buffers") || {};
         for (const sub of layer.layers) {
             if (sub.type === "circle_markers" || sub.type === "markers" || sub.type === "polyline" || sub.type === "polygon" || sub.type === "circle") {
                 continue;
             }
-            const instance = await renderLayer(map, sub, coordinateBuffers[sub.id], model);
+            const instance = await renderLayer(map, sub, coordinateBuffers[sub.id], coordinateBuffers);
             if (instance) {
                 group.addLayer(instance);
             }
@@ -250,9 +251,12 @@ function areaParts(layer, coordinateBuffers) {
     return parts;
 }
 
-export async function renderMergedGlLayer(map, type, layersList, coordinateBuffers, model,
+// `events.onFeatureClick({ layer, index, latlng })` is how a click reaches whatever
+// hosts the map; this module never writes state itself.
+export async function renderMergedGlLayer(map, type, layersList, coordinateBuffers, events,
                                            timeState = null, vectorGpu = false,
                                            isFeatureVisible = null) {
+    const onFeatureClick = (events && events.onFeatureClick) || (() => {});
     // Hit-test guard: GPU-path buckets hold hidden layers (and out-of-window
     // features), masked only by shader uniforms glify's hit-tests cannot see. The
     // widget passes a live lookup; the fallback covers plain-JS consumers with the
@@ -398,25 +402,13 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             if (feature && feature.properties && feature.properties.layer) {
                                 const layer = feature.properties.layer;
                                 bindPopup(map, e.latlng, layer.properties, layer);
-                                // Written bare: shinywidgets' model has no `comm`
-                                // property, so gating on it silently killed this
-                                // writeback under Shiny. The sidebar always wrote bare
-                                // and was the one path that worked there.
-                                try {
-                                    model.set("clicked_layer_id", layer.id);
-                                    model.set("selected_index", 0);
-                                    // Where the click landed, feature or not: one
-                                    // trait always answers "where", clicked_layer_id
-                                    // answers "on what" ("" for open map).
-                                    model.set("clicked_latlng",
-                                        [Math.round(e.latlng.wrap().lat * 1e5) / 1e5,
-                                         Math.round(e.latlng.wrap().lng * 1e5) / 1e5]);
-                                    // Bumped on EVERY click: clicking the same feature
-                                    // twice changes neither id nor index, so without
-                                    // this no trait fires and handlers miss the click.
-                                    model.set("click_seq", (model.get("click_seq") || 0) + 1);
-                                    model.save_changes();
-                                } catch (err) { /* no live backend */ }
+                                // Where the click landed: the host records "where"
+                                // and "on what" -- see onFeatureClick in core.js.
+                                onFeatureClick({
+                                    layer, index: 0,
+                                    latlng: [Math.round(e.latlng.wrap().lat * 1e5) / 1e5,
+                                             Math.round(e.latlng.wrap().lng * 1e5) / 1e5],
+                                });
                             }
                         });
                     },
@@ -547,25 +539,13 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             if (feature && feature.properties && feature.properties.layer) {
                                 const layer = feature.properties.layer;
                                 bindPopup(map, e.latlng, layer.properties, layer);
-                                // Written bare: shinywidgets' model has no `comm`
-                                // property, so gating on it silently killed this
-                                // writeback under Shiny. The sidebar always wrote bare
-                                // and was the one path that worked there.
-                                try {
-                                    model.set("clicked_layer_id", layer.id);
-                                    model.set("selected_index", 0);
-                                    // Where the click landed, feature or not: one
-                                    // trait always answers "where", clicked_layer_id
-                                    // answers "on what" ("" for open map).
-                                    model.set("clicked_latlng",
-                                        [Math.round(e.latlng.wrap().lat * 1e5) / 1e5,
-                                         Math.round(e.latlng.wrap().lng * 1e5) / 1e5]);
-                                    // Bumped on EVERY click: clicking the same feature
-                                    // twice changes neither id nor index, so without
-                                    // this no trait fires and handlers miss the click.
-                                    model.set("click_seq", (model.get("click_seq") || 0) + 1);
-                                    model.save_changes();
-                                } catch (err) { /* no live backend */ }
+                                // Where the click landed: the host records "where"
+                                // and "on what" -- see onFeatureClick in core.js.
+                                onFeatureClick({
+                                    layer, index: 0,
+                                    latlng: [Math.round(e.latlng.wrap().lat * 1e5) / 1e5,
+                                             Math.round(e.latlng.wrap().lng * 1e5) / 1e5],
+                                });
                             }
                         });
                     },
@@ -773,16 +753,10 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             const originalIndex = info.originalIndex;
                             const props = getIndexedProperties(layer.properties, originalIndex);
                             bindPopup(map, point, props, layer);
-                            try {
-                                model.set("clicked_layer_id", layer.id);
-                                model.set("selected_index", originalIndex);
-                                // The clicked point's own coordinates -- more
-                                // truthful than the mouse position for a point.
-                                model.set("clicked_latlng", [point[0], point[1]]);
-                                // Bumped on EVERY click; see the vector click handlers.
-                                model.set("click_seq", (model.get("click_seq") || 0) + 1);
-                                model.save_changes();
-                            } catch (err) { /* no live backend */ }
+                            // The clicked point's own coordinates -- more truthful
+                            // than the mouse position for a point.
+                            onFeatureClick({ layer, index: originalIndex,
+                                             latlng: [point[0], point[1]] });
                         }
                     });
                 },
