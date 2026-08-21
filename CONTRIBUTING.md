@@ -65,7 +65,9 @@ npm run build        # or: npm run build:watch
 | --- | --- |
 | `swiftmap/static/widget.js` | the Python widget (committed, so `pip install` never needs Node) |
 | `dist/anywidget.js` | the same bundle for npm consumers |
-| `dist/index.js` | `swiftmap-core` — the framework-agnostic entry point for React/vanilla JS |
+| `dist/index.js` | `swiftmap-core` — the framework-agnostic entry point for vanilla JS |
+| `dist/react.js` | `swiftmap-core/react` — the `<SwiftMap>` component; react and the rendering libraries are peer dependencies |
+| `examples/react/dist/` | the React example app, bundled whole (gitignored); tier 3 drives it |
 
 `swiftmap/static/` is committed deliberately: a Python user installing from source should
 never need a JavaScript toolchain. Commit the rebuilt bundle alongside your `src/` change so

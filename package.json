@@ -8,7 +8,9 @@
   "module": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./anywidget": "./dist/anywidget.js"
+    "./anywidget": "./dist/anywidget.js",
+    "./react": "./dist/react.js",
+    "./swiftmap.css": "./dist/swiftmap.css"
   },
   "files": [
     "dist",
@@ -23,8 +25,24 @@
     "test:unit": "node --test test/tier1-logic.test.mjs test/tier2-sidebar.test.mjs"
   },
   "devDependencies": {
+    "@geoman-io/leaflet-geoman-free": "^2.18.3",
     "esbuild": "^0.25.0",
     "jsdom": "^29.1.1",
-    "playwright": "^1.62.1"
+    "leaflet": "^1.9.4",
+    "leaflet.glify": "^3.3.0",
+    "playwright": "^1.62.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "leaflet": "^1.9.4",
+    "leaflet.glify": "^3.3.0",
+    "@geoman-io/leaflet-geoman-free": "^2.18.3"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

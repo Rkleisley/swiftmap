@@ -175,3 +175,6 @@ examples/*.html
 
 # Python distribution builds (npm run wheel)
 pydist/
+
+# The React example's bundle; `npm run build` produces it.
+examples/react/dist/

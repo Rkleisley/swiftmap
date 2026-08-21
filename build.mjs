@@ -27,6 +27,19 @@ const builds = [
     // anywidget inlines this file as a string, so a sibling .map is never fetchable --
     // inline the sourcemap instead of emitting a dead reference.
     { ...shared, entryPoints: ["src/anywidget.js"], outfile: "swiftmap/static/widget.js", sourcemap: "inline" },
+    // The React component. react and the three rendering libraries are PEERS: the
+    // consumer's bundler owns them, so they stay external here and plain-JS
+    // consumers of dist/index.js never pull React.
+    { ...shared, entryPoints: ["src/react.jsx"], outfile: "dist/react.js", jsx: "automatic",
+      external: ["react", "react-dom", "react/jsx-runtime", "leaflet", "leaflet.glify",
+                 "@geoman-io/leaflet-geoman-free"] },
+    // The example app: everything bundled (React, Leaflet, glify, Geoman, CSS) into
+    // examples/react/dist, which is gitignored -- `npm run build` produces it, and the
+    // tier-3 suite drives it like the static export. NODE_ENV development keeps
+    // StrictMode's double mount, the first thing a React host must survive.
+    { ...shared, entryPoints: ["examples/react/app.jsx"], outfile: "examples/react/dist/app.js",
+      jsx: "automatic", define: { "process.env.NODE_ENV": '"development"' },
+      loader: { ".png": "dataurl", ".svg": "dataurl" } },
 ];
 
 mkdirSync("swiftmap/static", { recursive: true });

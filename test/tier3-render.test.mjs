@@ -56,7 +56,10 @@ async function withPage(fn, fixture = "widget.html",
         const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
         const errors = [];
         page.on("pageerror", e => errors.push(String(e)));
-        await page.goto(`http://127.0.0.1:${port}/test/fixtures/${fixture}`);
+        // A fixture name lives under test/fixtures; an absolute path -- the React
+        // example app, built into examples/react/dist -- is served as-is.
+        const path = fixture.startsWith("/") ? fixture : `/test/fixtures/${fixture}`;
+        await page.goto(`http://127.0.0.1:${port}${path}`);
         await page.waitForFunction("window.__ready === true", { timeout: 30000 });
         // Wait for glify's canvas rather than sleeping: the first WebGL draw happens on a
         // later frame than render() resolving, and a fixed delay is a flaky test waiting
@@ -1297,6 +1300,86 @@ suite("late data leaves the playhead on its moment and prepends ticks", async ()
         assert.ok(later.value < later.max, "well short of the end -- it did not restart");
         await page.click(".swiftmap-time-play");
         assert.deepEqual(errors, [], "no errors through the late data");
+    }, "widget-time.html");
+});
+
+suite("the React example app renders the same map over the same core", async () => {
+    // The second consumer: <SwiftMap> is one more host over the five-method
+    // interface, not another rendering path. Rendered under StrictMode, so the
+    // throwaway mount must leave exactly one map; the core's write-backs must reach
+    // the app's callbacks; and the ref's applyPatch must be the widget's own patch
+    // path, carrying a live-feed append with its binary buffer.
+    await withPage(async (page, errors) => {
+        assert.equal(await page.locator(".leaflet-container").count(), 1,
+            "StrictMode's double mount leaves exactly one map");
+        await page.waitForSelector(".leaflet-polylines-pane canvas");
+        const sidebar = await page.locator(".swiftmap-sidebar").innerText();
+        assert.ok(sidebar.includes("Sites") && sidebar.includes("Track"),
+            "the sidebar lists both layers");
+        const legend = await page.locator(".swiftmap-legend").innerText();
+        assert.ok(legend.includes("Key") && legend.includes("value"),
+            "the legend derives from the layer configs, title from the prop");
+        assert.equal(await page.locator(".swiftmap-time-slider").count(), 1,
+            "the timed track puts up the time slider");
+        assert.ok(await page.locator(".leaflet-control-scale").count() >= 1, "the scale bar shows");
+
+        const log = () => page.locator("#log").innerText();
+
+        // A feature click reaches the app through onFeatureClick: "Bravo" sits at
+        // the map centre.
+        const box = await page.locator(".leaflet-container").boundingBox();
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await page.waitForTimeout(500);
+        assert.match(await log(), /click .*"layerId":"sites"/, "the click names the layer");
+
+        // A sidebar toggle reaches onLayerToggle with the targeted op.
+        await page.evaluate(() => {
+            const input = [...document.querySelectorAll(".swiftmap-sidebar input")]
+                .find(i => i.parentElement.textContent.includes("Track"));
+            input.checked = false;
+            input.dispatchEvent(new Event("change"));
+        });
+        await page.waitForTimeout(500);
+        assert.match(await log(), /toggle .*"id":"track".*"visible":false/,
+            "the toggle arrives as the same targeted op Python receives");
+
+        // A live append through the ref: the widget's own patch path.
+        const fed = () => page.evaluate(() => {
+            const a = window.L.glify.pointsInstances;
+            return a[a.length - 1].settings.data.length;
+        });
+        const before = await fed();
+        await page.click("#append");
+        await page.waitForTimeout(700);
+        assert.equal(await fed(), before + 1, "the appended point reached the GL bucket");
+        assert.equal(await page.locator("#appended").innerText(), " appended: 1");
+        assert.deepEqual(errors, [], "no errors through mount, callbacks and the append");
+    }, "/examples/react/index.html", ".leaflet-points-pane canvas");
+});
+
+suite("destroying a map while its first sync is in flight leaves nothing behind", async () => {
+    // The hazard the React host surfaced: a host may tear the map down (an
+    // unmount, a throwaway mount) before the initial sync has added its GL layers.
+    // The continuation must not touch the removed map, and the glify instance it
+    // built must be retired from glify's module-level list with its GL context.
+    await withPage(async (page, errors) => {
+        const result = await page.evaluate(async () => {
+            const m = await import("/dist/anywidget.js");
+            const count = () => window.L.glify.pointsInstances.length;
+            const before = count();
+            const el = document.createElement("div");
+            el.style.height = "300px";
+            document.body.appendChild(el);
+            const state = { ...window.__model.state };
+            const cleanup = await m.default.render({ model: m.createHostStub(state, { comm: null }), el });
+            const during = count();
+            cleanup();                       // before the sync's continuation runs
+            await new Promise(r => setTimeout(r, 600));
+            return { before, during, after: count(), containers: document.querySelectorAll(".leaflet-container").length };
+        });
+        assert.equal(result.after, result.before, "no glify instance survives the destroyed map");
+        assert.equal(result.containers, 1, "the destroyed map's container is gone");
+        assert.deepEqual(errors, [], "no error from the sync continuation or a pending redraw");
     }, "widget-time.html");
 });
 

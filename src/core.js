@@ -536,6 +536,27 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         return L.tileLayer(layer.url, options);
     }
 
+    // Retire a glify instance the safe way: its canvas overlay never cancels the
+    // redraw frame it schedules, and that frame dereferences the map unguarded --
+    // removing a layer within a frame of its creation would throw from inside
+    // requestAnimationFrame, where no caller can catch it.
+    // Takes either a merged wrapper layer (which keeps its glify instance as
+    // glPoints / glLines / glShapes) or a bare glify instance.
+    function cancelGlFrame(glInstance) {
+        const overlay = glInstance && glInstance.layer;
+        if (overlay && overlay._frame != null) {
+            L.Util.cancelAnimFrame(overlay._frame);
+            overlay._frame = null;
+        }
+    }
+    function retireGl(instance) {
+        if (!instance) return;
+        for (const gl of [instance.glPoints, instance.glLines, instance.glShapes, instance]) {
+            cancelGlFrame(gl);
+        }
+        try { instance.remove(); } catch (err) { /* already gone */ }
+    }
+
     async function syncMapState() {
         console.time("[Performance] syncMapState Total");
         updateTimeDimension();
@@ -629,6 +650,10 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
             }
 
             const instance = await renderLayer(map, layer, coordinateBuffers[layer.id], coordinateBuffers);
+            // A host may destroy the map while a sync is in flight (an unmount, or
+            // React strict mode's throwaway mount): nothing past this point may
+            // touch a map that no longer has panes.
+            if (destroyed) return;
             if (instance) {
                 activeOverlayLayers[layer.id] = instance;
             }
@@ -675,10 +700,18 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
 
             if (stateChanged) {
                 if (state.layer) {
-                    state.layer.remove();
+                    retireGl(state.layer);
                 }
                 if (visibleLayers.length > 0) {
-                    state.layer = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, layerEvents, timeState, vectorGpu, featureVisibleNow);
+                    const built = await renderMergedGlLayer(map, type, visibleLayers, coordinateBuffers, layerEvents, timeState, vectorGpu, featureVisibleNow);
+                    if (destroyed) {
+                        // Destroyed mid-build: retire the instance glify registered
+                        // (its GL context goes with it) instead of adding it to a
+                        // removed map.
+                        retireGl(built);
+                        return;
+                    }
+                    state.layer = built;
                     if (state.layer) {
                         state.layer.addTo(map);
                     }
@@ -719,9 +752,13 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         }
 
         await syncGlLayer("circle_markers", bucket.circle_markers);
+        if (destroyed) return;
         await syncGlLayer("markers", bucket.markers);
+        if (destroyed) return;
         await syncGlLayer("polyline", bucket.polyline, vectorGpuBucket.polyline);
+        if (destroyed) return;
         await syncGlLayer("polygon", bucket.polygon, vectorGpuBucket.polygon);
+        if (destroyed) return;
 
         // Push the current window into the GPU-filtered point buckets: two uniforms
         // and a redraw, which is the entire per-tick cost of the time slider there.
@@ -1218,6 +1255,22 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         console.error = originalError;
         console.warn = originalWarn;
         if (window.onerror === onWindowError) window.onerror = null;
+        // glify keeps every instance in a module-level list; map.remove() alone
+        // would leave each one -- and its GL context -- registered there. The
+        // sweep over those lists also catches an instance a sync built for this
+        // map and had not yet recorded when the host destroyed it.
+        for (const state of Object.values(glStates)) {
+            retireGl(state.layer);
+            state.layer = null;
+        }
+        const glify = L.glify;
+        if (glify) {
+            for (const list of [glify.pointsInstances, glify.linesInstances, glify.shapesInstances]) {
+                for (const instance of [...(list || [])]) {
+                    if (instance.map === map) retireGl(instance);
+                }
+            }
+        }
         try {
             map.remove();
         } catch (err) { /* already torn down */ }
