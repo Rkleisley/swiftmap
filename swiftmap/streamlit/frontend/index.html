@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>swiftmap</title>
+<!-- The Streamlit component's page, served by Streamlit from
+     swiftmap/streamlit/frontend/ inside its iframe. build.mjs copies this file
+     there and writes app.js / app.css beside it: the React host, React, Leaflet,
+     glify, Geoman and every stylesheet bundled -- nothing loads from a CDN. -->
+<link rel="stylesheet" href="app.css">
+<style>html, body, #root { margin: 0; padding: 0; }</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

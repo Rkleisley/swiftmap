@@ -9,8 +9,10 @@ buffer base64-encoded, the bundle and its CSS inlined, and a model stub whose
 write-backs go nowhere. Leaflet and glify still load from unpkg at view time, the
 same way the live widget loads them.
 
-`to_html()` returns the document as a string -- which is also the Streamlit story:
+`to_html()` returns the document as a string -- the static Streamlit embed,
 `st.components.v1.html(m.to_html(), height=600)` -- and `save()` writes it to disk.
+The bidirectional Streamlit component (swiftmap.streamlit) composes its state with
+`compose_state` and `encode_buffers` from here, so the two stacks cannot drift.
 """
 import base64
 import json
@@ -39,15 +41,12 @@ _TEMPLATE = """<!doctype html>
 <script type="module">
 const state = {state_json};
 const BUFFERS = {buffers_json};
-for (const [key, b64] of Object.entries(BUFFERS)) {{
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    state.coordinate_buffers[key] = new DataView(bytes.buffer);
-}}
 const widgetSrc = {widget_src_json};
 const url = URL.createObjectURL(new Blob([widgetSrc], {{ type: "text/javascript" }}));
-const {{ default: widget, createHostStub }} = await import(url);
+const {{ default: widget, createHostStub, decodeBase64Buffers }} = await import(url);
+// The bundle's own decoder (src/transport.js): the Streamlit component decodes
+// the same encoding with the same function.
+Object.assign(state.coordinate_buffers, decodeBase64Buffers(BUFFERS));
 // The host: the bundle's own reference stub (src/host.js), going nowhere -- reads
 // come from the baked state, writes update it locally, sends vanish. The same
 // five methods every embedding drives the core with; an export is one with no
@@ -62,6 +61,34 @@ window.__ready = true;
 """
 
 
+# The state the frontend reads, as the live widget syncs it. One list, so the
+# export, the Streamlit component and the Map's change counter agree on what "the
+# map's state" is. Data-URI logos ride in logo_config (a branded export opens
+# offline); the auto-fit union rides in fit_bounds_request (an export opens on its
+# data exactly like the live widget).
+STATE_KEYS = (
+    "layers", "group_configs", "center", "zoom", "crs", "show_logo", "logo_config",
+    "show_legend", "show_click_coordinates", "show_scale", "scale_config", "show_draw",
+    "draw_config", "drawings", "height", "legend_config", "fit_bounds_request",
+    "time_config", "time_current",
+)
+
+
+def compose_state(m) -> dict:
+    """The map's synced state as the frontend's host reads it, buffers left empty."""
+    state = {key: getattr(m, key) for key in STATE_KEYS}
+    state["layers"] = [l.to_dict() if hasattr(l, "to_dict") else l for l in m.layers]
+    state["coordinate_buffers"] = {}
+    state.update({"auto_sync": True, "sync_trigger": 0, "draw_seq": 0})
+    return state
+
+
+def encode_buffers(m) -> dict:
+    """Every coordinate/time/style buffer as base64 text (roughly 4/3 of its size)."""
+    return {key: base64.b64encode(raw).decode("ascii")
+            for key, raw in m.coordinate_buffers.items()}
+
+
 def to_html(self, title: str = "SwiftMap") -> str:
     """
     Renders the map as one self-contained HTML document, returned as a string.
@@ -73,43 +100,14 @@ def to_html(self, title: str = "SwiftMap") -> str:
     fully client-side. Leaflet and glify load from unpkg when the file is opened,
     so viewing needs internet (or your own vendored bundle).
 
-    For Streamlit: `st.components.v1.html(m.to_html(), height=600)`.
+    For a static Streamlit embed: `st.components.v1.html(m.to_html(), height=600)`;
+    for a bidirectional map in Streamlit, `swiftmap.streamlit.st_swiftmap`.
     """
-    state = {
-        "layers": [l.to_dict() if hasattr(l, "to_dict") else l for l in self.layers],
-        "group_configs": self.group_configs,
-        "coordinate_buffers": {},
-        "center": self.center,
-        "zoom": self.zoom,
-        "crs": self.crs,
-        "auto_sync": True,
-        "sync_trigger": 0,
-        "show_logo": self.show_logo,
-        # Data-URI logos are embedded here, so a branded export opens offline.
-        "logo_config": self.logo_config,
-        "show_legend": self.show_legend,
-        "show_click_coordinates": self.show_click_coordinates,
-        "show_scale": self.show_scale,
-        "scale_config": self.scale_config,
-        "show_draw": self.show_draw,
-        "draw_config": self.draw_config,
-        "drawings": self.drawings,
-        "draw_seq": 0,
-        "height": self.height,
-        "legend_config": self.legend_config,
-        # The auto-fit union (or a pre-display fit_bounds call) rides along, so an
-        # export opens on its data exactly like the live widget.
-        "fit_bounds_request": self.fit_bounds_request,
-        "time_config": self.time_config,
-        "time_current": self.time_current,
-    }
-    buffers = {key: base64.b64encode(raw).decode("ascii")
-               for key, raw in self.coordinate_buffers.items()}
     return _TEMPLATE.format(
         title=title,
         css=_widget_css_path().read_text(encoding="utf-8"),
-        state_json=_script_safe(json.dumps(state, default=str)),
-        buffers_json=_script_safe(json.dumps(buffers)),
+        state_json=_script_safe(json.dumps(compose_state(self), default=str)),
+        buffers_json=_script_safe(json.dumps(encode_buffers(self))),
         widget_src_json=_script_safe(json.dumps(_load_esm())),
     )
 

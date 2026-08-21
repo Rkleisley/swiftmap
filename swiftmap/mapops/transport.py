@@ -50,10 +50,14 @@ def _handle_client_msg(self, widget: Any, content: Any, buffers: Any) -> None:
 def _set_trait_quietly(self, name: str, value: Any) -> None:
     """Updates trait storage without firing a notification (and so without a full send)."""
     self._trait_values[name] = value
+    self._state_seq += 1
 
 
 def _emit(self, op: Dict[str, Any], buffer: Optional[bytes] = None) -> None:
     """Queues a patch op, flushing immediately unless a batch() is open."""
+    # Hosts without a comm (the Streamlit component) never see these ops; the
+    # Map's change counter is how they learn that something changed.
+    self._state_seq += 1
     if buffer is not None:
         op = {**op, "buffer_index": len(self._pending_buffers)}
         self._pending_buffers.append(buffer)

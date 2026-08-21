@@ -35,6 +35,11 @@ dev = [
 imagery = [
     "rasterio",
 ]
+# The bidirectional Streamlit component (swiftmap.streamlit.st_swiftmap). The
+# component's frontend ships in every wheel; only rendering it needs Streamlit.
+streamlit = [
+    "streamlit>=1.30",
+]
 
 # The parser suite covers every supported data source, so running it in full needs
 # them all installed. They stay optional at runtime: each test module skips itself
@@ -51,7 +56,9 @@ test = [
 [tool.setuptools.packages.find]
 include = ["swiftmap*"]
 
-# The built JS bundle. Produced by `npm run build` from src/ and committed, so
-# installing the Python package never requires Node.
+# The built JS bundles. Produced by `npm run build` from src/ and committed, so
+# installing the Python package never requires Node: the anywidget bundle in
+# static/, and the Streamlit component -- React, Leaflet, glify, Geoman and CSS
+# bundled whole, so it works with no network -- in streamlit/frontend/.
 [tool.setuptools.package-data]
-swiftmap = ["static/*"]
+swiftmap = ["static/*", "streamlit/frontend/*"]

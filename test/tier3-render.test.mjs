@@ -1383,6 +1383,97 @@ suite("destroying a map while its first sync is in flight leaves nothing behind"
     }, "widget-time.html");
 });
 
+suite("the Streamlit component renders from JSON args and reports events", async () => {
+    // The fourth stack. The args come from the real Python composition
+    // (scripts/streamlit_demo_args.py -> swiftmap.streamlit.compose_args: the
+    // export's state, base64 buffers, the fingerprint); the page is the SHIPPED
+    // frontend in swiftmap/streamlit/frontend, inside an iframe, driven by a stub
+    // of Streamlit's parent side (test/fixtures/streamlit-host.html).
+    const { execSync } = await import("node:child_process");
+    const args = JSON.parse(execSync(
+        `python "${join(ROOT, "scripts", "streamlit_demo_args.py")}"`,
+        { cwd: ROOT, stdio: "pipe", maxBuffer: 64 * 1024 * 1024 }).toString());
+    const EVENT_KEYS = ["clicked_layer_id", "selected_index", "clicked_latlng", "click_seq",
+                        "drawings", "draw_seq", "center", "zoom", "time_current",
+                        "layer_visibility"];
+    await withPage(async (page, errors) => {
+        const frame = page.frames().find(f => f.url().includes("/swiftmap/streamlit/frontend/"));
+        assert.ok(frame, "the iframe loaded the shipped frontend");
+        const values = () => page.evaluate(() => window.__values);
+        const probe = () => frame.evaluate(() =>
+            document.querySelector(".leaflet-container").dataset.probe || "");
+        const instances = () => frame.evaluate(() => window.L.glify.pointsInstances.length);
+
+        // Render from the args: points from a base64 coordinate buffer, colours from
+        // a base64 colour buffer, the line from its own, the legend from the config.
+        await page.evaluate(a => window.__render(a), args);
+        await frame.waitForSelector(".leaflet-points-pane canvas", { timeout: 20000 });
+        await frame.waitForSelector(".leaflet-polylines-pane canvas", { timeout: 20000 });
+        const fed = await frame.evaluate(() => {
+            const a = window.L.glify.pointsInstances;
+            return a[a.length - 1].settings.data.length;
+        });
+        assert.equal(fed, 3, "the points decoded from base64 reached the GPU");
+        const sidebar = await frame.locator(".swiftmap-sidebar").innerText();
+        assert.ok(sidebar.includes("Sites") && sidebar.includes("Track"), "the sidebar lists both layers");
+        assert.ok((await frame.locator(".swiftmap-legend").innerText()).includes("Key"),
+            "the legend renders from the composed config");
+        const heights = await page.evaluate(() => window.__heights);
+        assert.ok(heights.some(h => Math.abs(h - 600) <= 2),
+            `the frame height follows the map's 600px, reported ${JSON.stringify(heights)}`);
+
+        // A click on Bravo (the map centre) comes back as a setComponentValue with
+        // the full, stable shape.
+        const box = await page.locator("#component").boundingBox();
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await page.waitForFunction(() => window.__values.some(v => v.click_seq > 0),
+                                   null, { timeout: 5000 });
+        const clicked = (await values()).find(v => v.click_seq > 0);
+        assert.deepEqual(Object.keys(clicked).sort(), [...EVENT_KEYS].sort(),
+            "every key the core writes back, with defaults for the rest");
+        const sites = args.state.layers.find(l => l.name === "Sites");
+        assert.equal(clicked.clicked_layer_id, sites.id);
+        assert.equal(clicked.selected_index, 1, "Bravo is the second point");
+
+        // THE NO-OP PATH: the rerun a click causes re-sends the same args. The map
+        // must not be rebuilt -- the container and the GL instances stay.
+        await frame.evaluate(() => { document.querySelector(".leaflet-container").dataset.probe = "kept"; });
+        const before = await instances();
+        await page.evaluate(a => window.__render(a), args);
+        await page.evaluate(a => window.__render(a), args);
+        await page.waitForTimeout(500);
+        assert.equal(await probe(), "kept", "an unchanged fingerprint leaves the map alone");
+        assert.equal(await instances(), before, "no GL layer was rebuilt");
+
+        // A CHANGED fingerprint applies Python's change through the React host's
+        // props -- the same map, the viewer's pan kept since Python did not move it.
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width / 2 + 150, box.y + box.height / 2 + 40, { steps: 8 });
+        await page.mouse.up();
+        await page.waitForTimeout(400);
+        const panned = (await values()).filter(v => v.center).pop();
+        assert.ok(panned, "the pan came back as a view event");
+        const renamed = {
+            ...args, fingerprint: args.fingerprint + ":changed",
+            state: { ...args.state,
+                     layers: args.state.layers.map(l => l.name === "Sites" ? { ...l, name: "Sites (renamed)" } : l) },
+        };
+        await page.evaluate(a => window.__render(a), renamed);
+        await page.waitForTimeout(600);
+        assert.ok((await frame.locator(".swiftmap-sidebar").innerText()).includes("Sites (renamed)"),
+            "Python's change is on the map");
+        assert.equal(await probe(), "kept", "applied to the same map, not a rebuilt one");
+        const now = await frame.evaluate(() => {
+            const c = window.__swiftmap.map.getCenter();
+            return [c.lat, c.lng];
+        });
+        assert.ok(Math.abs(now[0] - panned.center[0]) < 1e-6 && Math.abs(now[1] - panned.center[1]) < 1e-6,
+            `the viewer's pan survived the re-send: ${now} vs ${panned.center}`);
+        assert.deepEqual(errors, [], "no errors across render, click, no-op and change");
+    }, "streamlit-host.html", "#component");
+});
+
 suite("imagery renders from a URL and from the binary transport", async () => {
     // The image layer type is pure data -- {type:"image", bounds, opacity,
     // url | bytes under the layer id} -- so a plain-JS consumer needs only a

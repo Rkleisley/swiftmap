@@ -68,6 +68,7 @@ npm run build        # or: npm run build:watch
 | `dist/index.js` | `swiftmap-core` — the framework-agnostic entry point for vanilla JS |
 | `dist/react.js` | `swiftmap-core/react` — the `<SwiftMap>` component; react and the rendering libraries are peer dependencies |
 | `examples/react/dist/` | the React example app, bundled whole (gitignored); tier 3 drives it |
+| `swiftmap/streamlit/frontend/` | the Streamlit component — the React host under Streamlit's protocol, bundled whole with React, Leaflet, glify, Geoman and CSS; shipped in the wheel and committed like `static/` |
 
 `swiftmap/static/` is committed deliberately: a Python user installing from source should
 never need a JavaScript toolchain. Commit the rebuilt bundle alongside your `src/` change so

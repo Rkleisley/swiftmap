@@ -20,7 +20,7 @@ from .layers.polygon import add_polygon, add_polygons, add_shape, add_shapes
 from .layers.collection import add_collection, add_geojson, add_geostructures
 from .layers.circle import add_circle
 from .layers.imagery import add_imagery
-from .export import to_html, save
+from .export import to_html, save, STATE_KEYS
 
 # Import method families (see mapops/__init__.py)
 from .mapops.transport import (
@@ -308,6 +308,12 @@ class Map(anywidget.AnyWidget):
             # collapses around the absolutely-sized container inside it.
             self.layout.height = height
         self.observe(self._disarm_auto_fit, names=["center", "zoom"])
+        # The change counter behind swiftmap.streamlit's fingerprint: a host with
+        # no comm (Streamlit re-sends args on every rerun) compares it to decide
+        # whether anything changed. Trait assignments count here; the in-place
+        # layer and buffer patches count in mapops.transport._emit.
+        self.observe(self._bump_state_seq,
+                     names=list(STATE_KEYS) + ["coordinate_buffers", "sync_trigger"])
 
         # Internal layer list counter
         self._layer_counter = 0
@@ -382,6 +388,13 @@ class Map(anywidget.AnyWidget):
             buffers=buffers,
         )
         return self
+
+    # Counts every change to the synced state (see __init__); a plain attribute,
+    # not a trait, so counting never itself syncs anything.
+    _state_seq = 0
+
+    def _bump_state_seq(self, change=None) -> None:
+        self._state_seq += 1
 
     def sync(self) -> "Map":
         """

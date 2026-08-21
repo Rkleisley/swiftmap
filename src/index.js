@@ -8,6 +8,7 @@
 
 export { createSwiftMap, sendLayerWrite } from "./core.js";
 export { createHostStub } from "./host.js";
+export { decodeBase64Buffers, decodeBase64BuffersReusing } from "./transport.js";
 export { provideLeaflet, requireLeaflet } from "./libs.js";
 export { loadLibraries, LIBRARY_URLS } from "./loader.js";
 export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers,

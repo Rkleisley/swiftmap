@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>html, body { margin: 0 } iframe { width: 900px; height: 600px; border: 0; display: block }</style>
+<!-- A stand-in for Streamlit's ComponentInstance: the PARENT side of the
+     component protocol. It embeds the shipped frontend exactly as Streamlit
+     does (an iframe over swiftmap/streamlit/frontend/), waits for the
+     component's componentReady, sends streamlit:render messages with the args
+     the test hands it, and records every message the component posts back. -->
+<iframe id="component" src="/swiftmap/streamlit/frontend/index.html"></iframe>
+<script>
+window.__messages = [];
+window.__values = [];      // every setComponentValue payload, in order
+window.__heights = [];     // every setFrameHeight
+window.__ready = false;    // componentReady arrived
+const frame = document.getElementById("component");
+window.__render = (args) => frame.contentWindow.postMessage(
+    { type: "streamlit:render", args, dfs: [], disabled: false, theme: null }, "*");
+window.addEventListener("message", (e) => {
+    const d = e.data;
+    if (!d || !d.isStreamlitMessage) return;
+    window.__messages.push(d);
+    if (d.type === "streamlit:componentReady") window.__ready = true;
+    if (d.type === "streamlit:setComponentValue") window.__values.push(d.value);
+    if (d.type === "streamlit:setFrameHeight") window.__heights.push(d.height);
+});
+</script>

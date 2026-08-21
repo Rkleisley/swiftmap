@@ -32,13 +32,14 @@
     "leaflet.glify": "^3.3.0",
     "playwright": "^1.62.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "streamlit-component-lib": "^2.0.0"
   },
   "peerDependencies": {
-    "react": ">=18",
+    "@geoman-io/leaflet-geoman-free": "^2.18.3",
     "leaflet": "^1.9.4",
     "leaflet.glify": "^3.3.0",
-    "@geoman-io/leaflet-geoman-free": "^2.18.3"
+    "react": ">=18"
   },
   "peerDependenciesMeta": {
     "react": {

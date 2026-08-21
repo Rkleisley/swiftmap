@@ -40,9 +40,20 @@ const builds = [
     { ...shared, entryPoints: ["examples/react/app.jsx"], outfile: "examples/react/dist/app.js",
       jsx: "automatic", define: { "process.env.NODE_ENV": '"development"' },
       loader: { ".png": "dataurl", ".svg": "dataurl" } },
+    // The Streamlit component: the React host under Streamlit's protocol, bundled
+    // WHOLE -- React, Leaflet, glify, Geoman and every stylesheet -- into the
+    // directory the wheel ships (package-data in pyproject.toml). Unlike the widget
+    // and the export, nothing loads from a CDN at view time, so this is the one
+    // stack that works with no network. Minified, no sourcemap: it is a shipped
+    // artifact, committed like swiftmap/static/widget.js.
+    { ...shared, entryPoints: ["src/streamlit.jsx"], outfile: "swiftmap/streamlit/frontend/app.js",
+      jsx: "automatic", minify: true, sourcemap: false,
+      define: { "process.env.NODE_ENV": '"production"' },
+      loader: { ".png": "dataurl", ".svg": "dataurl" } },
 ];
 
 mkdirSync("swiftmap/static", { recursive: true });
+mkdirSync("swiftmap/streamlit/frontend", { recursive: true });
 mkdirSync("dist", { recursive: true });
 
 if (watch) {
@@ -55,5 +66,6 @@ if (watch) {
     await Promise.all(builds.map(cfg => esbuild.build(cfg)));
     copyFileSync("src/map.css", "swiftmap/static/widget.css");
     copyFileSync("src/map.css", "dist/swiftmap.css");
+    copyFileSync("src/streamlit.html", "swiftmap/streamlit/frontend/index.html");
     console.log("build complete");
 }

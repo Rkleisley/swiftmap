@@ -7,6 +7,8 @@ import { createSwiftMap } from "./core.js";
 import { loadLibraries } from "./loader.js";
 
 export { createHostStub } from "./host.js";
+// The static export decodes its base64 buffers with this (see swiftmap/export.py).
+export { decodeBase64Buffers } from "./transport.js";
 
 export default {
     async render({ model, el }) {
