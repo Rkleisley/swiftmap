@@ -204,6 +204,17 @@ def test_the_mapping_reaches_the_layer_and_orders_its_legend():
     assert layer["added_with"]["data_opts"]["colormap"] == RISK, "recorded for update_layer"
 
 
+def test_declared_categories_stay_in_the_legend_before_the_feed_carries_them():
+    # A feed starts with one risk level. The legend must already list all three in
+    # the mapping's order -- and hold still as the rest arrive -- with anything the
+    # mapping does not name sorted after.
+    legend = data_driven_legend({"risk": ["high", "zzz", "high"]},
+                                {"color_col": "risk", "colormap": RISK})
+    assert [i["value"] for i in legend["items"]] == ["high", "medium", "low", "zzz"]
+    assert [i["color"] for i in legend["items"]][:3] == ["#ff0000", "#ffaa00", "#00ff00"]
+    assert "truncated" not in legend
+
+
 def test_a_mapping_survives_update_layer():
     df = pd.DataFrame({"lat": [36.0, 36.1], "lon": [-5.3, -5.2], "risk": ["low", "high"]})
     m = Map()

@@ -434,20 +434,24 @@ def data_driven_legend(props: Optional[dict], opts: dict,
 
     cats = [str(c) for c in np.unique(arr.astype(str))]
     table = _category_assignments(cats, spec, fallback, quiet=True)
+    colour_of = {c: rgb_hex(table[i]) for i, c in enumerate(cats)}
     # A {value: colour} mapping also states the ORDER the legend should read in
-    # (high, medium, low -- not alphabetical); unmapped values follow, sorted.
+    # (high, medium, low -- not alphabetical) and names EVERY value the data may
+    # carry: a declared value the feed has not delivered yet still gets its row, so
+    # the legend holds still as the feed fills in. Unmapped values follow, sorted.
     if isinstance(spec, dict):
-        present = set(cats)
-        order = [str(k) for k in spec if str(k) in present]
-        order += [c for c in cats if c not in spec]
+        order = [str(k) for k in spec]
+        for k, v in spec.items():
+            colour_of.setdefault(str(k), rgb_hex(_hex_to_rgb(v)))
+        declared = set(order)
+        order += [c for c in cats if c not in declared]
     else:
         order = cats
-    index = {c: i for i, c in enumerate(cats)}
     kept = order[:MAX_LEGEND_CATEGORIES]
-    items = [{"value": value, "color": rgb_hex(table[index[value]])} for value in kept]
+    items = [{"value": value, "color": colour_of[value]} for value in kept]
     block = {"kind": "categories", "field": col, "items": items}
-    if len(cats) > len(kept):
-        block["truncated"] = int(len(cats) - len(kept))
+    if len(order) > len(kept):
+        block["truncated"] = int(len(order) - len(kept))
     return block
 
 
