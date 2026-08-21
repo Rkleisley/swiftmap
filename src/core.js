@@ -720,6 +720,12 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 }
                 state.ids = idsString;
                 state.meta = metaString;
+                // The visibility cache described the handle just retired. A rebuilt
+                // bucket is born all-visible, so the next pass must upload the
+                // vector even when it did not change -- otherwise every rebuild
+                // (an append moves bufLen, a highlight moves the style key) drew
+                // hidden layers again until the user re-toggled them.
+                state.visKey = null;
             }
         }
 

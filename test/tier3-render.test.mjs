@@ -1609,6 +1609,76 @@ suite("fading dims aged points", async () => {
     }, "widget-time.html");
 });
 
+suite("a hidden layer stays hidden across a bucket rebuild", async () => {
+    // Regression: the visibility vector is uploaded only when it changes, and the
+    // cache key lived on the bucket slot, which outlives the bucket. Any rebuild
+    // (an append moves bufLen in the meta key; so do highlight and feature
+    // styles) produced a fresh, all-visible handle that never learned a layer
+    // was hidden when the vector was unchanged -- hidden layers drew again
+    // after every feed tick until re-toggled. Sidebar and Python were right all
+    // along; only the uniform was stale.
+    await withPage(async (page, errors) => {
+        const box = await page.locator(".leaflet-container").boundingBox();
+        const shotAt = async (lat, lng, size) => {
+            const off = await page.evaluate(([la, ln]) => {
+                const z = window.__model.get("zoom");
+                const c = window.__model.get("center");
+                const p = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(la, ln), z);
+                const pc = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(c[0], c[1]), z);
+                return [p.x - pc.x, p.y - pc.y];
+            }, [lat, lng]);
+            const [x, y] = [box.x + box.width / 2 + off[0], box.y + box.height / 2 + off[1]];
+            return page.screenshot({ clip: { x: x - size / 2, y: y - size / 2, width: size, height: size } });
+        };
+        const instance = () => page.evaluate(() => {
+            const a = window.L.glify.pointsInstances;
+            const inst = a[a.length - 1];
+            window.__inst = window.__inst || inst;
+            return { fed: inst.settings.data.length, same: inst === window.__inst };
+        });
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("time_config", { ...(m.get("time_config") || {}), window: "PT96H" });
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = s.max; s.dispatchEvent(new Event("input"));
+        });
+        await page.waitForTimeout(800);
+
+        const BEACON = [36.03, -5.26];
+        const shown = await shotAt(...BEACON, 16);
+        await page.evaluate(() => {
+            const input = [...document.querySelectorAll(".swiftmap-sidebar input")]
+                .find(i => i.parentElement.textContent.includes("Beacon"));
+            input.checked = false;
+            input.dispatchEvent(new Event("change"));
+        });
+        await page.waitForTimeout(900);
+        const hidden = await shotAt(...BEACON, 16);
+        assert.notEqual(Buffer.compare(shown, hidden), 0, "the toggle hides Beacon");
+        const before = await instance();
+
+        // A feed tick on the OTHER layer: bufLen moves, the bucket rebuilds.
+        await page.evaluate(() => {
+            const day = Date.UTC(2026, 0, 1);
+            const views = [new DataView(new Float64Array([36.07, -5.33]).buffer),
+                           new DataView(new Float64Array([day, day]).buffer)];
+            window.__model.emit("msg:custom", { kind: "swiftmap_patch", ops: [
+                { op: "buffer_append", id: "pts", buffer_index: 0 },
+                { op: "buffer_append", id: "pts::times", buffer_index: 1 },
+                { op: "append", id: "pts", base: 3, count: 1, properties: { site: ["Echo"] } },
+            ] }, views);
+        });
+        await page.waitForTimeout(900);
+        const after = await instance();
+        assert.ok(!after.same && after.fed === before.fed + 1,
+            "the append rebuilt the bucket (the regression's precondition)");
+        const afterRebuild = await shotAt(...BEACON, 16);
+        assert.equal(Buffer.compare(hidden, afterRebuild), 0,
+            "Beacon is still hidden after the rebuild: the new handle got the vector");
+        assert.deepEqual(errors, [], "no errors through toggle and append");
+    }, "widget-time.html");
+});
+
 suite("a layer toggle is a uniform, not a rebuild", async () => {
     // Regression for the deselection crash: unchecking one of N point layers changed the
     // merged bucket's membership and rebuilt every point -- at 5M points, seconds per
