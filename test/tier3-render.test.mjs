@@ -1225,6 +1225,81 @@ suite("an append through the delta ops paints the new point and leaves the old o
     }, "widget.html");
 });
 
+suite("late data leaves the playhead on its moment and prepends ticks", async () => {
+    // Appending observations EARLIER than the layer's earliest used to re-base the
+    // tick series from the new earliest and drop the playhead to the start -- the
+    // user lost where they were looking, with no warning. Ticks now anchor to period
+    // boundaries (late data only prepends) and the playhead is an absolute moment
+    // that snaps to the nearest tick of the new series, paused or playing. The
+    // trailing-window override survives, and a forward extension is covered too.
+    await withPage(async (page, errors) => {
+        const slider = () => page.evaluate(() => {
+            const s = document.querySelector(".swiftmap-time-slider");
+            return { value: +s.value, max: +s.max,
+                     current: window.__model.get("time_current") };
+        });
+        const seek = (v) => page.evaluate((val) => {
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = String(val); s.dispatchEvent(new Event("input"));
+        }, v).then(() => page.waitForTimeout(700));
+        const appendAt = (lat, lng, dayMs, base, label) => page.evaluate(
+            ([lat, lng, dayMs, base, label]) => {
+                const views = [new DataView(new Float64Array([lat, lng]).buffer),
+                               new DataView(new Float64Array([dayMs, dayMs]).buffer)];
+                window.__model.emit("msg:custom", { kind: "swiftmap_patch", ops: [
+                    { op: "buffer_append", id: "pts", buffer_index: 0 },
+                    { op: "buffer_append", id: "pts::times", buffer_index: 1 },
+                    { op: "append", id: "pts", base, count: 1, properties: { site: [label] } },
+                ] }, views);
+            }, [lat, lng, dayMs, base, label]).then(() => page.waitForTimeout(700));
+
+        // A trailing-window override, to prove it survives the extent changes.
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("time_config", { ...(m.get("time_config") || {}), window: "PT36H" });
+        });
+        await page.waitForTimeout(500);
+        await seek(2);                                   // a mid-timeline tick (Jan 3)
+        const before = await slider();
+        assert.equal(before.value, 2);
+        const moment = before.current;
+
+        // Late data: two days before the earliest observation.
+        await appendAt(36.02, -5.31, Date.UTC(2025, 11, 30), 3, "Late");
+        const after = await slider();
+        assert.equal(after.current, moment, "the playhead stays on the same absolute moment");
+        assert.equal(after.max, before.max + 2, "the slider grew by the two prepended days");
+        assert.equal(after.value, before.value + 2,
+            "the handle moved WITH its moment, not back to the start");
+        const trail = await page.evaluate(() =>
+            document.querySelector(".swiftmap-time-trail")?.getAttribute("aria-valuetext"));
+        assert.equal(trail, "PT36H", "the trailing-window override survived");
+
+        // A forward extension -- the normal append -- leaves the playhead alone too.
+        await appendAt(36.09, -5.19, Date.UTC(2026, 0, 6), 4, "Later");
+        const forward = await slider();
+        assert.equal(forward.current, moment, "forward growth does not move the playhead");
+        assert.equal(forward.value, after.value);
+        assert.equal(forward.max, after.max + 2, "two days appended at the end");
+
+        // Playing: playback continues from where it was, never from the beginning.
+        await page.click(".swiftmap-time-play");
+        await page.waitForTimeout(1100);
+        const playing = await slider();
+        assert.ok(playing.value > forward.value, "playback is advancing");
+        await appendAt(36.01, -5.29, Date.UTC(2025, 11, 27), 5, "Older");   // three more days
+        const shifted = await slider();
+        assert.ok(shifted.value >= playing.value + 3,
+            "the playhead kept its moment through three prepended ticks while playing");
+        await page.waitForTimeout(1100);
+        const later = await slider();
+        assert.ok(later.value > shifted.value, "and playback is still running from there");
+        assert.ok(later.value < later.max, "well short of the end -- it did not restart");
+        await page.click(".swiftmap-time-play");
+        assert.deepEqual(errors, [], "no errors through the late data");
+    }, "widget-time.html");
+});
+
 suite("imagery renders from a URL and from the binary transport", async () => {
     // The image layer type is pure data -- {type:"image", bounds, opacity,
     // url | bytes under the layer id} -- so a plain-JS consumer needs only a

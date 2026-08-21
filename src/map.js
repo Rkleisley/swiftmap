@@ -6,7 +6,7 @@ import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey } fr
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
          collectDurationsMs, POSITIONS, timesFor, windowFor, featureInWindow,
-         effectiveDuration } from "./timecontrol.js";
+         effectiveDuration, nearestTickIndex } from "./timecontrol.js";
 import { gpuTimeAvailable, vectorGpuAvailable, LAYER_SLOTS } from "./gputime.js";
 
 // True if a layer is visible and no folder above it is switched off.
@@ -525,9 +525,19 @@ export default {
 
             const key = `${extent.min}|${extent.max}|${cfg.period || "P1D"}`;
             if (key !== timeUI.key) {
+                // The playhead is a MOMENT, not an index. Late data prepends ticks
+                // and a grown extent appends them; the user's position in time is a
+                // chosen view -- the same rule that keeps a data update from moving
+                // a chosen viewport -- so it snaps to the nearest tick of the new
+                // series and never resets to the start, paused or playing (playback
+                // simply continues from the snapped index).
+                const moment = timeUI.ticks.length ? timeUI.ticks[timeUI.index] : null;
                 timeUI.key = key;
                 timeUI.ticks = generateTicks(extent.min, extent.max, period);
-                timeUI.index = Math.min(timeUI.index, timeUI.ticks.length - 1);
+                timeUI.index = moment === null ? 0 : nearestTickIndex(timeUI.ticks, moment);
+                if (moment !== null && timeUI.ticks[timeUI.index] !== moment) {
+                    writeTimeCurrent(true);   // the series realigned: tell Python where we landed
+                }
             }
 
             // The shared window override, config-driven; a bad string clears rather than

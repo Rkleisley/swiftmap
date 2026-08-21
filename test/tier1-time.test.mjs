@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import {
     parsePeriod, addPeriod, generateTicks, windowFor, featureInWindow,
     timesFor, layerInWindow, collectTimeExtent, hasTimeLayers,
+    alignToPeriod, nearestTickIndex,
 } from "../src/timecontrol.js";
 
 const DAY = 24 * 3600 * 1000;
@@ -52,10 +53,58 @@ test("subtracting a period inverts adding it", () => {
 
 // --- ticks -------------------------------------------------------------------------
 test("ticks cover the data, earliest observation included", () => {
-    // The first tick sits AT the earliest time: with half-open windows, starting one
-    // period later would exclude the earliest point from every window on the bar.
+    // Data starting on a boundary: the first tick sits AT the earliest time, and with
+    // half-open windows the earliest point is inside the first tick's own window.
     const ticks = generateTicks(T0, T0 + 3 * DAY, parsePeriod("P1D"));
     assert.deepEqual(ticks, [T0, T0 + DAY, T0 + 2 * DAY, T0 + 3 * DAY]);
+});
+
+// --- ticks anchor to period boundaries ---------------------------------------------
+test("ticks land on period boundaries, not on the data", () => {
+    const HOUR = 3600 * 1000;
+    const start = T0 + 17 * 60 * 1000;            // 00:17
+    const ticks = generateTicks(start, T0 + 3 * HOUR, parsePeriod("PT1H"));
+    assert.deepEqual(ticks, [T0 + HOUR, T0 + 2 * HOUR, T0 + 3 * HOUR],
+        "01:00, 02:00, 03:00 -- never 00:17, 01:17, 02:17");
+    // The original constraint holds: the earliest observation falls inside the first
+    // tick's half-open window (start, end].
+    const win = windowFor(ticks[0], "period", parsePeriod("PT1H"));
+    assert.ok(start > win.start && start <= win.end, "the earliest point is in the first window");
+});
+
+test("late data prepends boundaries and shifts nothing", () => {
+    const HOUR = 3600 * 1000;
+    const p = parsePeriod("PT1H");
+    const before = generateTicks(T0 + 17 * 60 * 1000, T0 + 6 * HOUR, p);
+    const after = generateTicks(T0 + 17 * 60 * 1000 - 27.8 * HOUR, T0 + 6 * HOUR, p);
+    assert.ok(after.length > before.length, "earlier data adds ticks");
+    assert.deepEqual(after.slice(after.length - before.length), before,
+        "every original tick is still there at the same timestamp -- only earlier ones were added");
+});
+
+test("alignment per period kind", () => {
+    const t = Date.UTC(2026, 0, 15, 10, 7, 30);    // Thursday 15 Jan 2026 10:07:30Z
+    assert.equal(alignToPeriod(t, parsePeriod("PT15M")), Date.UTC(2026, 0, 15, 10, 15));
+    assert.equal(alignToPeriod(t, parsePeriod("PT1H")), Date.UTC(2026, 0, 15, 11));
+    assert.equal(alignToPeriod(t, parsePeriod("P1D")), Date.UTC(2026, 0, 16));
+    assert.equal(alignToPeriod(t, parsePeriod("P1W")), Date.UTC(2026, 0, 19), "weeks start on Monday");
+    assert.equal(alignToPeriod(t, parsePeriod("P1M")), Date.UTC(2026, 1, 1),
+        "month starts, not 30-day multiples");
+    assert.equal(alignToPeriod(t, parsePeriod("P3M")), Date.UTC(2026, 3, 1), "quarters");
+    assert.equal(alignToPeriod(t, parsePeriod("P1Y")), Date.UTC(2027, 0, 1));
+    assert.equal(alignToPeriod(Date.UTC(2026, 1, 1), parsePeriod("P1M")), Date.UTC(2026, 1, 1),
+        "a boundary aligns to itself");
+    assert.equal(alignToPeriod(t, parsePeriod("P1M1D")), t,
+        "calendar plus clock units cannot align sensibly: anchored to the data, as before");
+});
+
+test("the playhead snaps to the nearest tick of a re-generated series", () => {
+    const ticks = [T0, T0 + DAY, T0 + 2 * DAY];
+    assert.equal(nearestTickIndex(ticks, T0 + DAY), 1, "an exact moment keeps its tick");
+    assert.equal(nearestTickIndex(ticks, T0 + DAY + 1000), 1);
+    assert.equal(nearestTickIndex(ticks, T0 + 1.6 * DAY), 2);
+    assert.equal(nearestTickIndex([], T0), 0);
+    assert.equal(nearestTickIndex(ticks, NaN), 0);
 });
 
 test("a single instant is one tick, not a hang", () => {

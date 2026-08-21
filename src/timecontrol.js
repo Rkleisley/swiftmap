@@ -39,12 +39,62 @@ export function addPeriod(ms, p, sign = 1) {
 // would otherwise hang the tab building an array of millions.
 export const MAX_TICKS = 5000;
 
+// --- period boundaries -------------------------------------------------------------
+// Ticks anchor to PERIOD BOUNDARIES, not to the data. The first tick is the first
+// boundary at or after the earliest observation, so the earliest point still falls
+// inside the half-open window (firstTick - P, firstTick] -- the constraint that put
+// the first tick AT the earliest observation holds -- while data arriving EARLIER
+// only prepends boundaries and moves nothing a user noted. (Anchored to the data,
+// a late observation shifted every tick by the remainder and the moment the user
+// was looking at became a different tick.) Round times fall out for free: 03:00,
+// 04:00 for PT1H, never 03:17.
+//
+// Fixed-width periods align to epoch multiples, weeks to Monday 00:00 UTC. Months
+// and years align to month/year starts in the UTC calendar, in multiples of the
+// period counted from year 0 (P3M: quarters). A period mixing calendar and clock
+// units (P1M1D) has no sensible boundary grid, so that one alone keeps the old
+// behaviour: its first tick sits at the earliest observation.
+const MONDAY_EPOCH = Date.UTC(1970, 0, 5);
+
+export function alignToPeriod(ms, p) {
+    const fixed = periodToMs(p);
+    const hasClock = Boolean(p.weeks || p.days || p.hours || p.minutes || p.seconds);
+    if (fixed) {
+        const wholeWeeks = p.weeks && !p.days && !p.hours && !p.minutes && !p.seconds;
+        const origin = wholeWeeks ? MONDAY_EPOCH : 0;
+        return origin + Math.ceil((ms - origin) / fixed) * fixed;
+    }
+    if ((p.years || p.months) && !hasClock) {
+        const span = p.years * 12 + p.months;
+        const d = new Date(ms);
+        let index = d.getUTCFullYear() * 12 + d.getUTCMonth();
+        if (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) < ms) index += 1;
+        index = Math.ceil(index / span) * span;
+        return Date.UTC(Math.floor(index / 12), index % 12, 1);
+    }
+    return ms;
+}
+
+// The tick nearest to an absolute moment -- how the playhead survives a re-generated
+// series: it is a MOMENT the user chose, never an index into a list that just grew.
+export function nearestTickIndex(ticks, moment) {
+    if (!ticks.length || !Number.isFinite(moment)) return 0;
+    let best = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < ticks.length; i++) {
+        const distance = Math.abs(ticks[i] - moment);
+        if (distance < bestDistance) {
+            best = i;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
 export function generateTicks(startMs, endMs, p) {
-    // The first tick sits AT the earliest observation, not one period after it: windows
-    // are half-open (start, end], so a first tick at start+P would exclude the earliest
-    // point from its own window and it would never display at any tick.
-    const ticks = [startMs];
-    let t = startMs;
+    const first = alignToPeriod(startMs, p);
+    const ticks = [first];
+    let t = first;
     if (t >= endMs) return ticks;
     while (ticks.length < MAX_TICKS) {
         t = addPeriod(t, p);
