@@ -1,3 +1,4 @@
+import { L } from "./libs.js";
 export function loadCSS(id, url) {
     if (!document.getElementById(id)) {
         const link = document.createElement("link");

@@ -8,6 +8,8 @@
 
 export { createSwiftMap, sendLayerWrite } from "./core.js";
 export { createHostStub } from "./host.js";
+export { provideLeaflet, requireLeaflet } from "./libs.js";
+export { loadLibraries, LIBRARY_URLS } from "./loader.js";
 export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers,
          collectPointLayersAll } from "./patch.js";
 export { renderLayer, renderMergedGlLayer, styleFor, getIndexedProperties } from "./layers.js";

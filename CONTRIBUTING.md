@@ -81,9 +81,13 @@ For environments where `src/` can be obtained but `node_modules` cannot — an i
 network, or anywhere the 180 KB bundle is impractical to move as a file. It rebuilds
 `swiftmap/static/` from `src/` using only the standard library.
 
-This works because `src/` imports nothing from npm: Leaflet and Leaflet.glify are fetched
-at runtime by `loadJS`/`loadCSS`, so the bundle is only swiftmap's own modules and
-flattening them is a question of ordering, not resolution.
+This works because the widget bundle imports nothing from npm: the core receives Leaflet
+(with glify and Geoman attached) from its host through `provideLeaflet` in `src/libs.js`,
+and the widget and export hosts fetch those three from the CDN at runtime with
+`loadLibraries` (`src/loader.js`) before constructing the map. The bundle is only
+swiftmap's own modules, so flattening them is a question of ordering, not resolution.
+An npm consumer instead imports `leaflet`, `leaflet.glify` and Geoman itself and passes
+the namespace in -- the bundler owns the dependencies there.
 
 Prefer `npm run build` whenever Node is available. The Python script flattens every module
 into one shared scope rather than preserving module boundaries, so it fails the build if

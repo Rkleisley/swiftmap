@@ -1,4 +1,4 @@
-import { loadCSS, loadJS } from "./utils.js";
+import { L, provideLeaflet, requireLeaflet } from "./libs.js";
 import { renderSidebarControls, normalizeRadioLayers, sidebarCollapseState } from "./sidebar.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
@@ -31,7 +31,13 @@ export function sendLayerWrite(host, changes) {
 //
 // Returns a handle: the Leaflet map, the container element, a `sync` to force a
 // re-render, and `destroy` to tear everything down.
-export async function createSwiftMap({ host, el }) {
+export async function createSwiftMap({ host, el, leaflet = null }) {
+    // Leaflet -- with glify and Geoman attached -- comes from the host, and it
+    // must already be here: the map below is built from it, and Geoman's init
+    // hook only reaches maps created after the plugin exists.
+    if (leaflet) provideLeaflet(leaflet);
+    requireLeaflet();
+
     // Every host subscription, so destroy() can unsubscribe from a host that
     // offers `off` (anywidget's model does; a minimal stub may not).
     const subscriptions = [];
@@ -104,18 +110,6 @@ export async function createSwiftMap({ host, el }) {
             appendLog(`WINDOW.ONERROR: ${message} at ${source}:${lineno}:${colno}`));
     };
     window.onerror = onWindowError;
-
-    // Load CSS and Leaflet libraries (including WebGL glify)
-    loadCSS("leaflet-css", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
-    await loadJS("leaflet-js", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js");
-    await loadJS("leaflet-glify", "https://unpkg.com/leaflet.glify@3.3.0/dist/glify-browser.js");
-    // Geoman must load BEFORE the map is constructed: it attaches map.pm through
-    // a Leaflet init hook, which only runs for maps created after the plugin
-    // exists -- lazy-loading it later leaves map.pm undefined forever.
-    loadCSS("leaflet-geoman-css",
-        "https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.css");
-    await loadJS("leaflet-geoman",
-        "https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.min.js");
 
     const container = document.createElement("div");
     container.className = "swiftmap-container";

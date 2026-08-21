@@ -1,4 +1,5 @@
-import { loadJS, bindPopup, bindTooltip, parseColor } from "./utils.js";
+import { bindPopup, bindTooltip, parseColor } from "./utils.js";
+import { L } from "./libs.js";
 import { pinShader } from "./shaders.js";
 import { windowFor, featureInWindow, timesFor, layerInWindow, effectiveDuration,
          periodToMs } from "./timecontrol.js";
