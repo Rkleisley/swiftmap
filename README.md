@@ -26,10 +26,8 @@ network the wheel is the whole story.
 
 ## Installation
 
-Not yet on PyPI; install from a checkout:
-
 ```bash
-pip install -e .
+pip install swiftmap
 ```
 
 Required: `anywidget`, `numpy`, and `xyzservices` (the tile-provider catalogue behind
@@ -178,7 +176,7 @@ map asks in 4326.
 
 Deploying on a network with its own tile and WMS infrastructure — different
 services, a different catalogue, different defaults — is one swappable module:
-see [DEPLOYING.md](DEPLOYING.md).
+see [DEPLOYING.md](https://github.com/Rkleisley/swiftmap/blob/main/DEPLOYING.md).
 
 ---
 
@@ -670,7 +668,7 @@ Full parameter documentation lives in each method's docstring
 ## Contributing
 
 Want to add support for a new data source, fix a bug, or improve the docs? See
-[CONTRIBUTING.md](CONTRIBUTING.md). The JS lives in `src/` and must be rebuilt after
+[CONTRIBUTING.md](https://github.com/Rkleisley/swiftmap/blob/main/CONTRIBUTING.md). The JS lives in `src/` and must be rebuilt after
 changes (`npm run build`); the committed bundle is what ships.
 
 ---
