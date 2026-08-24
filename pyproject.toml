@@ -1,12 +1,33 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+# >=77 for PEP 639 SPDX license expressions.
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "swiftmap"
 version = "0.4.0"
-description = "Enhancing Leaflet maps with high-performance WebGL overlays and hierarchical controls for Shiny"
+description = "WebGL-accelerated Leaflet maps with one core and four stacks -- Jupyter/Shiny widget, React, Streamlit, and self-contained static exports; offline-first for closed networks"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Robert Kleisley", email = "rckleisley@gmail.com" }]
+keywords = ["leaflet", "map", "webgl", "gis", "jupyter", "shiny", "streamlit",
+            "react", "anywidget", "geospatial"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Framework :: Jupyter",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
 requires-python = ">=3.9"
 dependencies = [
     "anywidget>=0.4.0",
