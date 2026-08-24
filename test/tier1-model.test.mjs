@@ -315,6 +315,40 @@ const SCENARIOS = {
         return m;
     },
 
+    mut_merged_visibility: () => {
+        const m = createMapModel();
+        for (const [i, lat] of [[1, 36.0], [2, 36.1], [3, 36.2]]) {
+            m.addPolygon([[lat, -5.3], [lat, -5.2], [lat + 0.05, -5.2]],
+                         { name: `Dwell ${i}`, layerGroup: "Dwells" });
+            m.addCircleMarkers([[lat + 0.02, -5.25]], { name: `Dwell ${i}`,
+                                                        layerGroup: "Dwells" });
+        }
+        m.select("Dwell 2", { scope: "Dwells" });
+        m.hide("Dwell 2");
+        m.show("Dwell 2");
+        return m;
+    },
+
+    select_zoom: () => {
+        const m = createMapModel();
+        m.addCircleMarkers([[36.0, -5.3]], { name: "A", layerGroup: "Fleet" });
+        m.addCircleMarkers([[36.1, -5.2]], { name: "B", layerGroup: "Fleet" });
+        m.select("A", { scope: "Fleet", zoom: true, zoomOffset: -1,
+                        maxZoom: 16, padding: 10 });
+        return m;
+    },
+
+    radio_merge: () => {
+        const m = createMapModel();
+        m.addPolygon([[36.0, -5.3], [36.0, -5.2], [36.1, -5.2]],
+                     { name: "Dwell 1", layerGroup: "Dwells", multiSelect: false });
+        m.addCircleMarkers([[36.05, -5.25]], { name: "Dwell 1", layerGroup: "Dwells" });
+        m.addPolygon([[36.2, -5.3], [36.2, -5.2], [36.3, -5.2]],
+                     { name: "Dwell 2", layerGroup: "Dwells" });
+        m.addCircleMarkers([[36.25, -5.25]], { name: "Dwell 2", layerGroup: "Dwells" });
+        return m;
+    },
+
     mut_hide_show: () => {
         const m = createMapModel();
         m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2] }, { name: "Sites" });
@@ -426,6 +460,25 @@ for (const file of readdirSync(GOLDENS).filter(f => f.endsWith(".json")).sort())
             "the op stream matches Python's, op for op");
     });
 }
+
+test("props identities move when mutations touch them (round-2 gap A)", () => {
+    const m = createMapModel();
+    const before = m.props();
+    m.addCircleMarkers([[36.0, -5.3]], { name: "Late" });
+    const after = m.props();
+    assert.notEqual(after.buffers, before.buffers,
+        "a layer added after mount must reach the host as geometry, not just config");
+    assert.notEqual(after.layers, before.layers);
+    assert.ok(after.buffers[m.findLayers("Late")[0].id], "the new buffer is there");
+});
+
+test("the op log is bounded and clearable (round-2 gap D)", () => {
+    const m = createMapModel({ maxOpLog: 5 });
+    for (let i = 0; i < 20; i++) m.addCircleMarkers([[36 + i * 0.01, -5.3]], { name: `L${i}` });
+    assert.ok(m.opLog.length <= 5, `capped, got ${m.opLog.length}`);
+    m.clearOpLog();
+    assert.equal(m.opLog.length, 0);
+});
 
 test("every golden has a scenario and vice versa", () => {
     const files = readdirSync(GOLDENS).filter(f => f.endsWith(".json"))

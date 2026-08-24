@@ -90,13 +90,23 @@ test("a switched-off group contributes nothing, whatever its children say", () =
     assert.equal(collectWebglLayers([group], {}).markers.length, 0);
 });
 
-test("sub-layers inherit the group's visibility rather than needing their own", () => {
-    // Sub-layers of a merge carry visible:false individually; the group decides.
+test("a merged child draws only when the group and its own flag agree", () => {
+    // The group toggled off wins outright; a child flagged false by the API --
+    // hide("Survey", types="polyline") -- stays off the screen too. Child flags
+    // used to be ignored entirely, a relic of the radio bug that once left
+    // merges with spurious visible:false members (round-2 report, gaps B and G).
     const group = layer({
         type: "group",
-        layers: [layer({ id: "a", type: "markers", visible: false })],
+        layers: [layer({ id: "a", type: "markers", visible: false }),
+                 layer({ id: "b", type: "markers", visible: true })],
     });
-    assert.equal(collectWebglLayers([group], {}).markers.length, 1);
+    const buckets = collectWebglLayers([group], {});
+    assert.deepEqual(buckets.markers.map(l => l.id), ["b"]);
+    const groupOff = collectWebglLayers([layer({
+        type: "group", visible: false,
+        layers: [layer({ id: "c", type: "markers", visible: true })],
+    })], {});
+    assert.equal(groupOff.markers.length, 0, "the group toggled off still wins");
 });
 
 // --- radio (single-select) groups -------------------------------------------------

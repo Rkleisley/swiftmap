@@ -184,7 +184,7 @@ export function createMapModel(options = {}) {
         time_config: {}, time_current: 0,
         fit_bounds_request: {},
     };
-    const buffers = {};
+    let buffers = {};
     let counter = 0;
     let fitSeq = 0;
     let autoFitArmed = options.center === undefined && options.zoom === undefined;
@@ -196,14 +196,24 @@ export function createMapModel(options = {}) {
     // replaces, targeted sets, buffer (re)writes, append deltas -- in the same
     // order. opLog keeps them all; onPatch streams them to a live consumer.
     const opLog = [];
+    // Bounded by default: a feed ticking for hours must not retain every op and
+    // every buffer it ever emitted (round-2 gap D). Raise it, or pass Infinity,
+    // when the full history matters; clearOpLog() empties it on demand.
+    const maxOpLog = options.maxOpLog !== undefined ? options.maxOpLog : 1000;
     const onPatch = options.onPatch || null;
     const subscribers = new Set();
     function subscribe(fn) {
         subscribers.add(fn);
         return () => subscribers.delete(fn);
     }
+    function clearOpLog() {
+        opLog.length = 0;
+    }
     function emit(op, buffer = null) {
         opLog.push({ op, buffer });
+        if (Number.isFinite(maxOpLog) && opLog.length > maxOpLog) {
+            opLog.splice(0, opLog.length - maxOpLog);
+        }
         if (onPatch) onPatch(op, buffer);
         for (const fn of subscribers) fn(op, buffer);
     }
@@ -233,10 +243,19 @@ export function createMapModel(options = {}) {
     }
 
     // A single-select folder shows one layer at a time: a newcomer to a folder
-    // that already shows something starts hidden.
+    // that already shows something starts hidden -- unless it is about to JOIN a
+    // same-named entry, which is one radio unit: the child inherits the entry's
+    // visibility instead of splitting it against itself (round-2 gap G, shared
+    // with Python and fixed there the same way).
     function radioAdjust(layer) {
         const info = state.group_configs[layer.layer_group] || {};
         if (info.multi_select !== false) return;
+        const twin = state.layers.find(l => l.type !== "basemap"
+            && l.name === layer.name && l.layer_group === layer.layer_group);
+        if (twin) {
+            layer.visible = twin.visible !== false;
+            return;
+        }
         const hasVisible = state.layers.some(l =>
             l.layer_group === layer.layer_group && l.visible !== false);
         if (hasVisible) layer.visible = false;
@@ -277,7 +296,10 @@ export function createMapModel(options = {}) {
         } else {
             group = {
                 id: nextId(), type: "group", name: layer.name,
-                layer_group: layer.layer_group, visible: true,
+                layer_group: layer.layer_group,
+                // The group is built FROM the first member, its visibility
+                // included -- a radio-hidden entry promotes to a hidden group.
+                visible: twin.visible !== false,
                 autobind_popup: true, autobind_tooltip: true,
                 layers: [asMember(twin), asMember(layer)],
             };
@@ -367,8 +389,12 @@ export function createMapModel(options = {}) {
         addedWith.set(layer.id, record);
     }
 
+    // Buffer mutators REBUILD the object, as the layers list is rebuilt: props()
+    // promises identities that move exactly when something changed, and an
+    // in-place dict broke that promise -- a layer added after mount reached the
+    // React host as config but never as geometry (round-2 gap A).
     function buffersSet(key, view) {
-        buffers[key] = view;
+        buffers = { ...buffers, [key]: view };
         emit({ op: "buffer", id: key }, view);
     }
 
@@ -377,14 +403,18 @@ export function createMapModel(options = {}) {
         const joined = new Uint8Array((head ? head.byteLength : 0) + tail.byteLength);
         if (head) joined.set(asBytes(head), 0);
         joined.set(asBytes(tail), head ? head.byteLength : 0);
-        buffers[key] = new DataView(joined.buffer);
+        buffers = { ...buffers, [key]: new DataView(joined.buffer) };
         emit({ op: "buffer_append", id: key }, tail);
     }
 
     function buffersRemove(ids) {
         const removed = Object.keys(buffers).filter(key =>
             ids.some(id => id != null && (key === id || key.startsWith(`${id}::`))));
-        for (const key of removed) delete buffers[key];
+        if (removed.length) {
+            const next = { ...buffers };
+            for (const key of removed) delete next[key];
+            buffers = next;
+        }
         for (const key of removed) emit({ op: "buffer_remove", id: key });
     }
 
@@ -1190,13 +1220,21 @@ export function createMapModel(options = {}) {
     // Declarative and total within its scope: each call states the complete
     // selection, select(null, {scope}) restores the scope whole (Python's select).
     function select(target = null, options = {}) {
-        const { scope = null, zoom = false, ...criteria } = options;
+        const { scope = null, zoom = false, ...rest } = options;
+        const zoomOffset = opt(rest, "zoomOffset", "zoom_offset", 0);
+        const maxZoom = opt(rest, "maxZoom", "max_zoom") ?? null;
+        const padding = rest.padding !== undefined ? rest.padding : null;
+        for (const key of ["zoomOffset", "zoom_offset", "maxZoom", "max_zoom", "padding"]) {
+            delete rest[key];
+        }
+        const criteria = rest;
         const clearing = target == null && !Object.keys(criteria).length;
-        const chosen = clearing ? [] : findLayers(target, criteria);
-        if (!clearing && !chosen.length
+        const chosenLeaves = clearing ? [] : findLayers(target, criteria);
+        if (!clearing && !chosenLeaves.length
                 && !(Array.isArray(target) && target.length === 0)) {
             console.warn("swiftmap: select matched nothing; restoring the scope to visible.");
         }
+        const chosen = chosenLeaves;
         const chosenIds = new Set(chosen.map(l => l.id));
         let pool;
         if (scope != null) {
@@ -1213,13 +1251,11 @@ export function createMapModel(options = {}) {
         } else {
             setLayerFields(pool, { visible: true });
         }
-        if (zoom && chosen.length) {
-            const union = layersBoundsUnion(chosen);
-            if (union) {
-                fitSeq += 1;
-                state.fit_bounds_request = { bounds: union, zoom_offset: 0,
-                                             max_zoom: null, padding: null, seq: fitSeq };
-            }
+        // The bounds come from the matched LEAVES: groups carry no bounds of
+        // their own, and the fit rides the same options fitBounds takes.
+        if (zoom && chosenLeaves.length) {
+            const union = layersBoundsUnion(chosenLeaves);
+            if (union) fitBounds(union, { zoomOffset, maxZoom, padding });
         }
         return model;
     }
@@ -1578,7 +1614,7 @@ export function createMapModel(options = {}) {
         hide, show, select, setLayersVisibility, setLayerFields,
         setFeatureStyles, highlight,
         removeLayer, removeLayers, updateLayer,
-        wireState, props,
+        wireState, props, clearOpLog,
         get layers() { return state.layers; },
         get buffers() { return buffers; },
         get opLog() { return opLog; },

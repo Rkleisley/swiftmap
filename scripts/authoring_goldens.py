@@ -567,6 +567,43 @@ def scenario_bare_wkt():
     return m
 
 
+def scenario_mut_merged_visibility():
+    """Visibility on a merged entry lands on the GROUP -- the only flag the
+    renderer draws; matched children promote to their parent (round-2 gap B)."""
+    m = Map(show_logo=False)
+    for i, lat in [(1, 36.0), (2, 36.1), (3, 36.2)]:
+        m.add_polygon([[lat, -5.3], [lat, -5.2], [lat + 0.05, -5.2]],
+                      name=f"Dwell {i}", layer_group="Dwells")
+        m.add_circle_markers([[lat + 0.02, -5.25]], name=f"Dwell {i}",
+                             layer_group="Dwells")
+    m.select("Dwell 2", scope="Dwells")
+    m.hide("Dwell 2")
+    m.show("Dwell 2")
+    return m
+
+
+def scenario_select_zoom():
+    """select(zoom=True) forwards the fit options and fits the matched leaves."""
+    m = Map(show_logo=False)
+    m.add_circle_markers([[36.0, -5.3]], name="A", layer_group="Fleet")
+    m.add_circle_markers([[36.1, -5.2]], name="B", layer_group="Fleet")
+    m.select("A", scope="Fleet", zoom=True, zoom_offset=-1, max_zoom=16, padding=10)
+    return m
+
+
+def scenario_radio_merge():
+    """A merged entry is one radio unit: a joining child inherits the entry's
+    visibility, and a later entry radio-hides whole (round-2 gap G)."""
+    m = Map(show_logo=False)
+    m.add_polygon([[36.0, -5.3], [36.0, -5.2], [36.1, -5.2]], name="Dwell 1",
+                  layer_group="Dwells", group_multi_select=False)
+    m.add_circle_markers([[36.05, -5.25]], name="Dwell 1", layer_group="Dwells")
+    m.add_polygon([[36.2, -5.3], [36.2, -5.2], [36.3, -5.2]], name="Dwell 2",
+                  layer_group="Dwells")
+    m.add_circle_markers([[36.25, -5.25]], name="Dwell 2", layer_group="Dwells")
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -619,6 +656,9 @@ SCENARIOS = [
     scenario_configures,
     scenario_fit_bounds,
     scenario_bare_wkt,
+    scenario_mut_merged_visibility,
+    scenario_select_zoom,
+    scenario_radio_merge,
 ]
 
 

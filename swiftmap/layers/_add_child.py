@@ -132,15 +132,24 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
             new_configs[child_config.layer_group] = group_conf
             self.group_configs = new_configs
             
-    # If the group is single-select, ensure only one layer inside it is visible initially
+    # If the group is single-select, ensure only one layer inside it is visible
+    # initially. A same-named entry is one radio UNIT, though: a child about to
+    # JOIN an existing entry inherits its visibility instead of being radio-
+    # hidden, or the merged entry rendered as half of itself (the React round-2
+    # report, gap G -- shared with the JS model and fixed there the same way).
     group_info = self.group_configs.get(child_config.layer_group, {})
     if group_info.get("multi_select") == False:
-        has_visible = any(
-            l.get("layer_group") == child_config.layer_group and l.get("visible", True)
-            for l in self.layers
-        )
-        if has_visible:
-            child_config.visible = False
+        twin = (self._merge_lookup(child_config.layer_group, child_config.name)
+                if child_config.layer_group != "Basemaps" else None)
+        if twin is not None:
+            child_config.visible = twin.get("visible", True)
+        else:
+            has_visible = any(
+                l.get("layer_group") == child_config.layer_group and l.get("visible", True)
+                for l in self.layers
+            )
+            if has_visible:
+                child_config.visible = False
             
     # Clean up any child-level group configuration attributes so they are not synced on the child
     attr = "group_multi_select"

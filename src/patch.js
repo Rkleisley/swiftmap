@@ -22,26 +22,28 @@ export function isLayerEffectiveVisible(layer, groupConfigs) {
 
 // Sorts the visible layers into one bucket per WebGL draw pass.
 //
-// Sub-layers of a merged group inherit their parent's visibility rather than carrying
-// their own, so a group toggled off contributes nothing even when its children say
-// visible. Circles join the polygon bucket: they are drawn as generated rings.
+// A merged group's sub-layer draws when the group AND its own flag say visible:
+// the group is the sidebar's one entry and toggling it off wins outright, while
+// the child flags are the API's -- hide("Survey", types="polyline") flags one
+// part, and ignoring child flags made that a silent no-op on screen (the React
+// round-2 report, gap B). Circles join the polygon bucket: generated rings.
 export function collectWebglLayers(layers, groupConfigs) {
     const buckets = { circle_markers: [], markers: [], polyline: [], polygon: [] };
 
-    function collect(layer, parentVisible, isSubLayer) {
+    function collect(layer, parentVisible) {
         if (!parentVisible) return;
         if (layer.type === "group" && layer.layers) {
-            layer.layers.forEach(sub => collect(sub, parentVisible, true));
+            layer.layers.forEach(sub => collect(sub, parentVisible));
             return;
         }
-        if (!isSubLayer && layer.visible === false) return;
+        if (layer.visible === false) return;
 
         const bucket = layer.type === "circle" ? "polygon" : layer.type;
         if (buckets[bucket]) buckets[bucket].push(layer);
     }
 
     for (const layer of layers) {
-        collect(layer, isLayerEffectiveVisible(layer, groupConfigs), false);
+        collect(layer, isLayerEffectiveVisible(layer, groupConfigs));
     }
     return buckets;
 }
@@ -89,7 +91,7 @@ export function collectPointLayersAll(layers, groupConfigs) {
         }
         const bucket = layer.type === "circle" ? "polygon" : layer.type;
         if (!out[bucket]) return;
-        const vis = isSub ? parentVisible
+        const vis = isSub ? parentVisible && layer.visible !== false
             : parentVisible && isLayerEffectiveVisible(layer, groupConfigs);
         out[bucket].push({ layer, vis });
     }

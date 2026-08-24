@@ -1,0 +1,709 @@
+{
+ "buffers": {
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMBmZmZmZgZCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA==",
+  "layer_3": "w/UoXI8CQkAAAAAAAAAVwA==",
+  "layer_5": "zczMzMwMQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMAzMzMzMxNCQM3MzMzMzBTAzczMzMwMQkAzMzMzMzMVwA==",
+  "layer_6": "kML1KFwPQkAAAAAAAAAVwA==",
+  "layer_8": "mpmZmZkZQkAzMzMzMzMVwJqZmZmZGUJAzczMzMzMFMAAAAAAACBCQM3MzMzMzBTAmpmZmZkZQkAzMzMzMzMVwA==",
+  "layer_9": "XY/C9SgcQkAAAAAAAAAVwA=="
+ },
+ "doc": "Visibility on a merged entry lands on the GROUP -- the only flag the\n    renderer draws; matched children promote to their parent (round-2 gap B).",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMBmZmZmZgZCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA==",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.05,
+       -5.2
+      ]
+     ],
+     "color": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Dwells",
+     "name": "Dwell 1",
+     "opacity": 1.0,
+     "properties": {},
+     "type": "polygon",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "w/UoXI8CQkAAAAAAAAAVwA==",
+   "op": {
+    "id": "layer_3",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "id": "layer_4",
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "id": "layer_4",
+     "layer_group": "Dwells",
+     "layers": [
+      {
+       "autobind_popup": true,
+       "autobind_tooltip": true,
+       "bounds": [
+        [
+         36.0,
+         -5.3
+        ],
+        [
+         36.05,
+         -5.2
+        ]
+       ],
+       "color": "#3388ff",
+       "fillOpacity": 0.2,
+       "id": "layer_2",
+       "name": "Dwell 1",
+       "opacity": 1.0,
+       "properties": {},
+       "type": "polygon",
+       "visible": true,
+       "weight": 3
+      },
+      {
+       "autobind_popup": true,
+       "autobind_tooltip": true,
+       "bounds": [
+        [
+         36.02,
+         -5.25
+        ],
+        [
+         36.02,
+         -5.25
+        ]
+       ],
+       "color": "#3388ff",
+       "fillColor": "#3388ff",
+       "fillOpacity": 0.2,
+       "id": "layer_3",
+       "name": "Dwell 1",
+       "opacity": 1.0,
+       "properties": {},
+       "radius": 10,
+       "type": "circle_markers",
+       "visible": true,
+       "weight": 3
+      }
+     ],
+     "name": "Dwell 1",
+     "type": "group",
+     "visible": true
+    },
+    "op": "replace"
+   }
+  },
+  {
+   "buffer": "zczMzMwMQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMAzMzMzMxNCQM3MzMzMzBTAzczMzMwMQkAzMzMzMzMVwA==",
+   "op": {
+    "id": "layer_5",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.1,
+       -5.3
+      ],
+      [
+       36.15,
+       -5.2
+      ]
+     ],
+     "color": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_5",
+     "layer_group": "Dwells",
+     "name": "Dwell 2",
+     "opacity": 1.0,
+     "properties": {},
+     "type": "polygon",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "kML1KFwPQkAAAAAAAAAVwA==",
+   "op": {
+    "id": "layer_6",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "id": "layer_7",
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "id": "layer_7",
+     "layer_group": "Dwells",
+     "layers": [
+      {
+       "autobind_popup": true,
+       "autobind_tooltip": true,
+       "bounds": [
+        [
+         36.1,
+         -5.3
+        ],
+        [
+         36.15,
+         -5.2
+        ]
+       ],
+       "color": "#3388ff",
+       "fillOpacity": 0.2,
+       "id": "layer_5",
+       "name": "Dwell 2",
+       "opacity": 1.0,
+       "properties": {},
+       "type": "polygon",
+       "visible": true,
+       "weight": 3
+      },
+      {
+       "autobind_popup": true,
+       "autobind_tooltip": true,
+       "bounds": [
+        [
+         36.120000000000005,
+         -5.25
+        ],
+        [
+         36.120000000000005,
+         -5.25
+        ]
+       ],
+       "color": "#3388ff",
+       "fillColor": "#3388ff",
+       "fillOpacity": 0.2,
+       "id": "layer_6",
+       "name": "Dwell 2",
+       "opacity": 1.0,
+       "properties": {},
+       "radius": 10,
+       "type": "circle_markers",
+       "visible": true,
+       "weight": 3
+      }
+     ],
+     "name": "Dwell 2",
+     "type": "group",
+     "visible": true
+    },
+    "op": "replace"
+   }
+  },
+  {
+   "buffer": "mpmZmZkZQkAzMzMzMzMVwJqZmZmZGUJAzczMzMzMFMAAAAAAACBCQM3MzMzMzBTAmpmZmZkZQkAzMzMzMzMVwA==",
+   "op": {
+    "id": "layer_8",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.2,
+       -5.3
+      ],
+      [
+       36.25,
+       -5.2
+      ]
+     ],
+     "color": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_8",
+     "layer_group": "Dwells",
+     "name": "Dwell 3",
+     "opacity": 1.0,
+     "properties": {},
+     "type": "polygon",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "XY/C9SgcQkAAAAAAAAAVwA==",
+   "op": {
+    "id": "layer_9",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "id": "layer_10",
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "id": "layer_10",
+     "layer_group": "Dwells",
+     "layers": [
+      {
+       "autobind_popup": true,
+       "autobind_tooltip": true,
+       "bounds": [
+        [
+         36.2,
+         -5.3
+        ],
+        [
+         36.25,
+         -5.2
+        ]
+       ],
+       "color": "#3388ff",
+       "fillOpacity": 0.2,
+       "id": "layer_8",
+       "name": "Dwell 3",
+       "opacity": 1.0,
+       "properties": {},
+       "type": "polygon",
+       "visible": true,
+       "weight": 3
+      },
+      {
+       "autobind_popup": true,
+       "autobind_tooltip": true,
+       "bounds": [
+        [
+         36.220000000000006,
+         -5.25
+        ],
+        [
+         36.220000000000006,
+         -5.25
+        ]
+       ],
+       "color": "#3388ff",
+       "fillColor": "#3388ff",
+       "fillOpacity": 0.2,
+       "id": "layer_9",
+       "name": "Dwell 3",
+       "opacity": 1.0,
+       "properties": {},
+       "radius": 10,
+       "type": "circle_markers",
+       "visible": true,
+       "weight": 3
+      }
+     ],
+     "name": "Dwell 3",
+     "type": "group",
+     "visible": true
+    },
+    "op": "replace"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_3",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_8",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_9",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_5",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_6",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": true
+    },
+    "id": "layer_5",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": true
+    },
+    "id": "layer_6",
+    "op": "set"
+   }
+  }
+ ],
+ "scenario": "mut_merged_visibility",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.3
+    ],
+    [
+     36.25,
+     -5.2
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 6,
+   "zoom_offset": 0
+  },
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Dwells": {
+    "multi_select": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 20,
+    "max_zoom": 22,
+    "name": "Dark Matter",
+    "subdomains": "abcd",
+    "type": "basemap",
+    "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "id": "layer_4",
+    "layer_group": "Dwells",
+    "layers": [
+     {
+      "autobind_popup": true,
+      "autobind_tooltip": true,
+      "bounds": [
+       [
+        36.0,
+        -5.3
+       ],
+       [
+        36.05,
+        -5.2
+       ]
+      ],
+      "color": "#3388ff",
+      "fillOpacity": 0.2,
+      "id": "layer_2",
+      "name": "Dwell 1",
+      "opacity": 1.0,
+      "properties": {},
+      "type": "polygon",
+      "visible": false,
+      "weight": 3
+     },
+     {
+      "autobind_popup": true,
+      "autobind_tooltip": true,
+      "bounds": [
+       [
+        36.02,
+        -5.25
+       ],
+       [
+        36.02,
+        -5.25
+       ]
+      ],
+      "color": "#3388ff",
+      "fillColor": "#3388ff",
+      "fillOpacity": 0.2,
+      "id": "layer_3",
+      "name": "Dwell 1",
+      "opacity": 1.0,
+      "properties": {},
+      "radius": 10,
+      "type": "circle_markers",
+      "visible": false,
+      "weight": 3
+     }
+    ],
+    "name": "Dwell 1",
+    "type": "group",
+    "visible": true
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "id": "layer_7",
+    "layer_group": "Dwells",
+    "layers": [
+     {
+      "autobind_popup": true,
+      "autobind_tooltip": true,
+      "bounds": [
+       [
+        36.1,
+        -5.3
+       ],
+       [
+        36.15,
+        -5.2
+       ]
+      ],
+      "color": "#3388ff",
+      "fillOpacity": 0.2,
+      "id": "layer_5",
+      "name": "Dwell 2",
+      "opacity": 1.0,
+      "properties": {},
+      "type": "polygon",
+      "visible": true,
+      "weight": 3
+     },
+     {
+      "autobind_popup": true,
+      "autobind_tooltip": true,
+      "bounds": [
+       [
+        36.120000000000005,
+        -5.25
+       ],
+       [
+        36.120000000000005,
+        -5.25
+       ]
+      ],
+      "color": "#3388ff",
+      "fillColor": "#3388ff",
+      "fillOpacity": 0.2,
+      "id": "layer_6",
+      "name": "Dwell 2",
+      "opacity": 1.0,
+      "properties": {},
+      "radius": 10,
+      "type": "circle_markers",
+      "visible": true,
+      "weight": 3
+     }
+    ],
+    "name": "Dwell 2",
+    "type": "group",
+    "visible": true
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "id": "layer_10",
+    "layer_group": "Dwells",
+    "layers": [
+     {
+      "autobind_popup": true,
+      "autobind_tooltip": true,
+      "bounds": [
+       [
+        36.2,
+        -5.3
+       ],
+       [
+        36.25,
+        -5.2
+       ]
+      ],
+      "color": "#3388ff",
+      "fillOpacity": 0.2,
+      "id": "layer_8",
+      "name": "Dwell 3",
+      "opacity": 1.0,
+      "properties": {},
+      "type": "polygon",
+      "visible": false,
+      "weight": 3
+     },
+     {
+      "autobind_popup": true,
+      "autobind_tooltip": true,
+      "bounds": [
+       [
+        36.220000000000006,
+        -5.25
+       ],
+       [
+        36.220000000000006,
+        -5.25
+       ]
+      ],
+      "color": "#3388ff",
+      "fillColor": "#3388ff",
+      "fillOpacity": 0.2,
+      "id": "layer_9",
+      "name": "Dwell 3",
+      "opacity": 1.0,
+      "properties": {},
+      "radius": 10,
+      "type": "circle_markers",
+      "visible": false,
+      "weight": 3
+     }
+    ],
+    "name": "Dwell 3",
+    "type": "group",
+    "visible": true
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {},
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

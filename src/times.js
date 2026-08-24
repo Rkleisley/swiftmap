@@ -76,12 +76,17 @@ export function detectTimeFields(props) {
 
 // A field's values, one per feature. Point layers store a list per key;
 // single-geometry layers store scalars -- and a two-number "times" value on a
-// scalar layer is ONE feature's interval, not two features.
+// scalar layer is ONE feature's interval, not two features. Typed arrays count
+// as lists: they are the natural shape for a large epoch column, and testing
+// only Array.isArray silently read a Float64Array as one feature (round-2 gap C).
+const isListValue = (value) => Array.isArray(value)
+    || (ArrayBuffer.isView(value) && !(value instanceof DataView));
+
 function valuesOf(props, field) {
     const value = props[field];
-    if (Array.isArray(value)
-            && !(value.length === 2 && !Array.isArray(value[0]) && field === "times")) {
-        return value;
+    if (isListValue(value)
+            && !(value.length === 2 && !isListValue(value[0]) && field === "times")) {
+        return Array.isArray(value) ? value : Array.from(value);
     }
     return [value];
 }

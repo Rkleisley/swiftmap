@@ -176,3 +176,60 @@ export function polygonPartsOf(geometry) {
 export const POINT_GEOMETRY = new Set(["Point", "MultiPoint"]);
 export const LINE_GEOMETRY = new Set(["LineString", "MultiLineString"]);
 export const POLYGON_GEOMETRY = new Set(["Polygon", "MultiPolygon"]);
+
+// --- the AOI predicate ---------------------------------------------------------------
+
+const EARTH_RADIUS_M = 6371000;
+
+function haversineMetres(lat1, lon1, lat2, lon2) {
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLon = (lon2 - lon1) * rad;
+    const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+    return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
+}
+
+// Ray casting over one GeoJSON ring (lon-lat positions).
+function inRing(lat, lon, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i];
+        const [xj, yj] = ring[j];
+        if ((yi > lat) !== (yj > lat)
+                && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+// A (lat, lon) -> boolean predicate over drawn areas -- what "Filter to Area"
+// needs after onDrawChange hands over m.drawings (the React round-2 report,
+// gap E; the Shiny apps reach for shapely here). Polygons and rectangles test
+// by ray casting, ring 0 the boundary and the rest holes; MultiPolygons per
+// part; a drawn circle (a Point feature with kind "circle" and a metres
+// radius, as the draw toolbar serialises them) tests by great-circle distance.
+// Markers and lines contain nothing.
+export function containsLatLon(drawings) {
+    const polygons = [];
+    const circles = [];
+    for (const item of drawings || []) {
+        const geometry = item && item.type === "Feature" ? item.geometry : item;
+        const props = (item && item.properties) || {};
+        if (!geometry) continue;
+        if (props.kind === "circle" && geometry.type === "Point") {
+            circles.push({ lat: Number(geometry.coordinates[1]),
+                           lon: Number(geometry.coordinates[0]),
+                           radius: Number(props.radius) || 0 });
+        } else if (geometry.type === "Polygon") {
+            polygons.push(geometry.coordinates);
+        } else if (geometry.type === "MultiPolygon") {
+            for (const part of geometry.coordinates) polygons.push(part);
+        }
+    }
+    return (lat, lon) =>
+        polygons.some(rings => rings.length > 0 && inRing(lat, lon, rings[0])
+            && !rings.slice(1).some(hole => inRing(lat, lon, hole)))
+        || circles.some(c => haversineMetres(lat, lon, c.lat, c.lon) <= c.radius);
+}
