@@ -234,6 +234,9 @@ export function containsLatLon(drawings) {
             for (const part of geometry.coordinates) polygons.push(part);
         }
     }
+    // Lines and markers have no interior: drawings that collected no polygon
+    // and no circle are "nothing drawable", not "matched nothing" (round-4 M).
+    if (!polygons.length && !circles.length) return null;
     return (lat, lon) =>
         polygons.some(rings => rings.length > 0 && inRing(lat, lon, rings[0])
             && !rings.slice(1).some(hole => inRing(lat, lon, hole)))

@@ -42,6 +42,9 @@ test("containsLatLon answers polygons, holes and drawn circles", () => {
     assert.equal(containsLatLon([]), null,
         "nothing drawn is null, distinguishable from nothing matched");
     assert.equal(containsLatLon(null), null);
+    assert.equal(containsLatLon([{ type: "Feature", properties: {},
+        geometry: { type: "LineString", coordinates: [[-5.3, 36.0], [-5.2, 36.1]] } }]),
+        null, "a line has no interior: nothing drawABLE is null too (round-4 M)");
     const bare = containsLatLon([{ geometry: { type: "Polygon", coordinates: [
         [[-5.3, 36.0], [-5.1, 36.0], [-5.1, 36.2], [-5.3, 36.2], [-5.3, 36.0]],
     ] }, properties: {} }]);

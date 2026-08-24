@@ -314,7 +314,14 @@ export function renderSidebarControls(sidebar, layers, ctx, map, onLayerToggle) 
                 }
                 input.checked = groupConfigs[path].visible !== false;
             } else {
-                input.checked = node.visible !== false;
+                // A merged entry's box reads what the entry DRAWS -- the renderer needs
+                // the group flag AND a member's own flag, so after select() leaves the
+                // members false, a box read from the group flag alone claims layers
+                // that are dark, and the first click on the lie is a visual no-op
+                // (React round-4 report, gap J). Display only; writes are unchanged.
+                input.checked = node.visible !== false
+                    && (!Array.isArray(node.layers) || node.layers.length === 0
+                        || node.layers.some(sub => sub.visible !== false));
             }
 
             headerDiv.appendChild(input);

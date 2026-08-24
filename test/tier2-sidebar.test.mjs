@@ -542,7 +542,8 @@ test("a merged entry's checkbox cascades into its members (round-3 gap H)", () =
     const { el, model } = mount([group]);
     const box = inputs(el).find(i => i.type === "checkbox" && i.name.includes("dw1"));
     assert.ok(box, "the merged entry renders one checkbox");
-    assert.ok(box.checked, "it reads the group's own flag");
+    assert.equal(box.checked, false,
+        "and it starts unchecked -- the entry draws nothing (round-4 gap J)");
 
     box.checked = true;
     box.dispatchEvent(new globalThis.Event("change"));
@@ -552,4 +553,23 @@ test("a merged entry's checkbox cascades into its members (round-3 gap H)", () =
         { op: "set", id: "b", fields: { visible: true } },
     ], "the members flip with the entry (the group flag was already true)");
     assert.ok(group.layers.every(sub => sub.visible), "members draw again");
+});
+
+test("a merged entry's checkbox reads what the entry draws (round-4 gap J)", () => {
+    // select() leaves members false with the group flag true; a box read from
+    // the group flag alone claims layers that are dark, and the first click on
+    // the lie is a visual no-op.
+    const dark = layer({
+        id: "dk1", type: "group", name: "Dwell 1", layer_group: "Dwells", visible: true,
+        layers: [{ id: "a", type: "polygon", name: "Dwell 1", visible: false },
+                 { id: "b", type: "markers", name: "Dwell 1", visible: false }],
+    });
+    const lit = layer({
+        id: "lt1", type: "group", name: "Dwell 2", layer_group: "Dwells", visible: true,
+        layers: [{ id: "c", type: "polygon", name: "Dwell 2", visible: true }],
+    });
+    const { el } = mount([dark, lit]);
+    const box = (id) => inputs(el).find(i => i.type === "checkbox" && i.name.includes(id));
+    assert.equal(box("dk1").checked, false, "an entry drawing nothing reads unchecked");
+    assert.equal(box("lt1").checked, true, "an entry drawing something reads checked");
 });

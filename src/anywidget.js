@@ -12,11 +12,14 @@
 // browser test tiers hermetic. The CDN-loading variant survives as
 // src/anywidget-cdn.js for the no-Node rebuild path (tools/bundle.py).
 import L from "leaflet";
-// glify ships two builds and they are NOT equivalent: dist/glify.js (the
-// package main) renders no vector pixels under our wiring, while
-// dist/glify-browser.js -- the file the CDN always served -- draws correctly.
-// Import the proven artifact by path, everywhere swiftmap bundles it.
-import glify from "leaflet.glify/dist/glify-browser.js";
+// The bare specifier resolves to dist/glify-browser.js through the package's
+// browser/module fields under every browser-target bundler (verified against
+// esbuild's metafile); only CJS require or platform:node reaches dist/glify.js.
+// An earlier commit blamed a build divergence for blank vectors and pinned the
+// deep path -- the React port's round-4 review showed the real culprit was the
+// WebGL context loss fixed alongside, so the fragile deep import (it bypasses
+// field resolution and would hard-fail if glify ever adds an exports map) goes.
+import glify from "leaflet.glify";
 import "@geoman-io/leaflet-geoman-free";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";

@@ -566,6 +566,28 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
     // the network). Recovery is a rebuild: retire the dead instance, clear the
     // bucket's caches, and let the next sync build fresh canvases on a live
     // context.
+    // Recovery is not an auto-sync concern: the context died regardless of who
+    // drives repaints, so the rebuild goes through performSync directly rather
+    // than queueSync's auto_sync gate (a map built with auto_sync=False went
+    // permanently blank -- the React round-4 review, gap K). Repeated losses
+    // back off exponentially instead of looping at the debounce rate under
+    // sustained GPU pressure; ten quiet seconds reset the ladder.
+    let contextLossCount = 0;
+    let contextLossAt = 0;
+    let contextLossTimer = null;
+    function scheduleContextLossRebuild() {
+        const now = Date.now();
+        contextLossCount = now - contextLossAt > 10000 ? 0 : contextLossCount + 1;
+        contextLossAt = now;
+        const delay = contextLossCount === 0 ? 50
+            : Math.min(30000, 250 * 2 ** contextLossCount);
+        if (contextLossTimer) clearTimeout(contextLossTimer);
+        contextLossTimer = setTimeout(() => {
+            contextLossTimer = null;
+            if (!destroyed) performSync();
+        }, delay);
+    }
+
     function armContextLossRecovery(type, wrapper) {
         for (const gl of [wrapper.glPoints, wrapper.glLines, wrapper.glShapes]) {
             const canvas = gl && gl.layer && gl.layer.canvas;
@@ -581,7 +603,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                     state.ids = "";
                     state.meta = "";
                     state.visKey = null;
-                    queueSync();
+                    scheduleContextLossRebuild();
                 }
             });
         }
@@ -1289,6 +1311,10 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         if (syncTimeout) {
             clearTimeout(syncTimeout);
             syncTimeout = null;
+        }
+        if (contextLossTimer) {
+            clearTimeout(contextLossTimer);
+            contextLossTimer = null;
         }
         if (containerResize) containerResize.disconnect();
         if (typeof host.off === "function") {
