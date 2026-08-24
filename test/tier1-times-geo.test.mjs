@@ -39,7 +39,13 @@ test("containsLatLon answers polygons, holes and drawn circles", () => {
     assert.ok(!inside(36.3, -5.2), "outside the boundary");
     assert.ok(inside(36.505, -5.0), "≈550 m from the circle centre");
     assert.ok(!inside(36.52, -5.0), "≈2.2 km away");
-    assert.ok(!containsLatLon([])(36.0, -5.3), "no drawings contain nothing");
+    assert.equal(containsLatLon([]), null,
+        "nothing drawn is null, distinguishable from nothing matched");
+    assert.equal(containsLatLon(null), null);
+    const bare = containsLatLon([{ geometry: { type: "Polygon", coordinates: [
+        [[-5.3, 36.0], [-5.1, 36.0], [-5.1, 36.2], [-5.3, 36.2], [-5.3, 36.0]],
+    ] }, properties: {} }]);
+    assert.ok(bare(36.02, -5.28), "a bare {geometry} carrier counts too");
 });
 
 test("a merged child draws when the group AND its own flag agree (round-2 gap B)", async () => {

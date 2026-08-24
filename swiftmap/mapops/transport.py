@@ -36,7 +36,14 @@ def _handle_client_msg(self, widget: Any, content: Any, buffers: Any) -> None:
         # connection and takes the Shiny session with it. _set_layer_fields re-emits
         # each applied write as a tiny `set` patch, which is what keeps other views
         # of this map (notebook outputs) in step now that the trait carries nothing.
-        by_id = {l.get("id"): l for l in self.layers}
+        # Top-level layers AND merged-group members: the sidebar's cascade
+        # writes member flags too (a merged entry's checkbox is the whole
+        # entry), and an id the index misses is an op silently dropped.
+        by_id = {}
+        for l in self.layers:
+            by_id[l.get("id")] = l
+            for sub in (l.get("layers") or []):
+                by_id[sub.get("id")] = sub
         with self.batch():
             for op in content.get("ops") or []:
                 if not isinstance(op, dict) or op.get("op") != "set":

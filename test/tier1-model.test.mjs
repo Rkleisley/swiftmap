@@ -480,6 +480,28 @@ test("the op log is bounded and clearable (round-2 gap D)", () => {
     assert.equal(m.opLog.length, 0);
 });
 
+test("a consumed op stream retains nothing, and bytes are budgeted (round-3 gap I)", () => {
+    const fed = createMapModel();
+    fed.subscribe(() => {});
+    fed.clearOpLog();          // the seeded basemaps predate the subscriber
+    fed.addCircleMarkers({ lat: Array.from({ length: 500 }, (_, i) => 36 + i * 1e-4),
+                           lon: Array.from({ length: 500 }, () => -5.3) },
+                         { name: "Feed" });
+    assert.equal(fed.opLog.length, 0,
+        "a subscriber already took every op; nothing is held");
+
+    const budgeted = createMapModel({ maxOpLogBytes: 8000 });
+    for (let i = 0; i < 6; i++) {
+        budgeted.addCircleMarkers(
+            { lat: Array.from({ length: 200 }, (_, j) => 36 + j * 1e-4),
+              lon: Array.from({ length: 200 }, () => -5.3 - i * 0.01) },
+            { name: `Burst ${i}` });
+    }
+    const held = budgeted.opLog.reduce(
+        (sum, e) => sum + (e.buffer ? e.buffer.byteLength : 0), 0);
+    assert.ok(held <= 8000, `buffer bytes budgeted, holding ${held}`);
+});
+
 test("every golden has a scenario and vice versa", () => {
     const files = readdirSync(GOLDENS).filter(f => f.endsWith(".json"))
         .map(f => f.replace(/\.json$/, "")).sort();

@@ -527,3 +527,29 @@ test("two sidebars on one page keep separate collapse state", () => {
     assert.equal(arrowOf(a), "▸", "A's folder stays collapsed across a re-render");
     assert.equal(arrowOf(b), "▾", "B's folder is untouched -- the state is per sidebar");
 });
+
+test("a merged entry's checkbox cascades into its members (round-3 gap H)", () => {
+    // The renderer draws a member when the group AND its own flag agree, so a
+    // box that wrote only the group flag was a dead control once select() had
+    // left the members false -- re-checking it brought nothing back.
+    const group = layer({
+        id: "dw1", type: "group", name: "Dwell 1", layer_group: "Dwells", visible: true,
+        layers: [
+            { id: "a", type: "polygon", name: "Dwell 1", visible: false },
+            { id: "b", type: "markers", name: "Dwell 1", visible: false },
+        ],
+    });
+    const { el, model } = mount([group]);
+    const box = inputs(el).find(i => i.type === "checkbox" && i.name.includes("dw1"));
+    assert.ok(box, "the merged entry renders one checkbox");
+    assert.ok(box.checked, "it reads the group's own flag");
+
+    box.checked = true;
+    box.dispatchEvent(new globalThis.Event("change"));
+
+    assert.deepEqual(visibilityOps(model), [
+        { op: "set", id: "a", fields: { visible: true } },
+        { op: "set", id: "b", fields: { visible: true } },
+    ], "the members flip with the entry (the group flag was already true)");
+    assert.ok(group.layers.every(sub => sub.visible), "members draw again");
+});

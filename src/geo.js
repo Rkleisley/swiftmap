@@ -211,11 +211,17 @@ function inRing(lat, lon, ring) {
 // part; a drawn circle (a Point feature with kind "circle" and a metres
 // radius, as the draw toolbar serialises them) tests by great-circle distance.
 // Markers and lines contain nothing.
+// Returns null for an empty input, so "nothing drawn" and "nothing matched"
+// stay distinguishable to the caller (round-3 note 2).
 export function containsLatLon(drawings) {
+    if (!drawings || !drawings.length) return null;
     const polygons = [];
     const circles = [];
-    for (const item of drawings || []) {
-        const geometry = item && item.type === "Feature" ? item.geometry : item;
+    for (const item of drawings) {
+        // A Feature, a bare geometry, or anything merely CARRYING a geometry key
+        // (hand-built fixtures do) all read the same way (round-3 note 3).
+        const geometry = item && item.type === "Feature" ? item.geometry
+            : (item && !item.coordinates && item.geometry ? item.geometry : item);
         const props = (item && item.properties) || {};
         if (!geometry) continue;
         if (props.kind === "circle" && geometry.type === "Point") {

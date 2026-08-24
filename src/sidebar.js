@@ -405,9 +405,23 @@ export function renderSidebarControls(sidebar, layers, ctx, map, onLayerToggle) 
                 // it stays dirty and the next save_changes (any pan) flushes it.
                 const changes = [];
                 const flip = (lyr, visible) => {
-                    if ((lyr.visible !== false) === visible) return;
-                    lyr.visible = visible;
-                    changes.push({ id: lyr.id, visible });
+                    if ((lyr.visible !== false) !== visible) {
+                        lyr.visible = visible;
+                        changes.push({ id: lyr.id, visible });
+                    }
+                    // A merged entry's checkbox speaks for the WHOLE entry: the
+                    // renderer draws a member when the group AND its own flag
+                    // agree, so after select() left members false, a re-checked
+                    // box that only set the group flag was a dead control -- the
+                    // members stayed dark and nothing could bring them back
+                    // (React round-3 report, gap H). Cascading keeps partial
+                    // API targeting (hide(name, types=...)) intact.
+                    for (const sub of lyr.layers || []) {
+                        if ((sub.visible !== false) !== visible) {
+                            sub.visible = visible;
+                            changes.push({ id: sub.id, visible });
+                        }
+                    }
                 };
 
                 if (!isMultiSelect) {

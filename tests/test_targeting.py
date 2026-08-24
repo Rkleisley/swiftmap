@@ -665,3 +665,14 @@ def test_a_missed_selection_warns_and_restores(m):
         m.select("No Such Layer", scope="Field")
     assert all(s.get("visible") is not False for s in subs(m).values()), \
         "an unmatched selection lands like an empty one: a clean slate"
+
+
+def test_a_sidebar_write_reaches_a_merged_member(m):
+    # The sidebar cascade writes member flags too (a merged entry's checkbox is
+    # the whole entry); the write-back index used to hold top-level layers only,
+    # so a member's op was silently dropped.
+    member = m.find_layers("Survey", types="polyline")[0]
+    m._handle_client_msg(None, {"kind": "swiftmap_write", "ops": [
+        {"op": "set", "id": member.get("id"), "fields": {"visible": False}}]}, [])
+    assert m.find_layers("Survey", types="polyline")[0].get("visible") is False
+    assert m.find_layers("Survey", types="circle_markers")[0].get("visible", True),         "only the addressed member flipped"

@@ -196,10 +196,16 @@ export function createMapModel(options = {}) {
     // replaces, targeted sets, buffer (re)writes, append deltas -- in the same
     // order. opLog keeps them all; onPatch streams them to a live consumer.
     const opLog = [];
-    // Bounded by default: a feed ticking for hours must not retain every op and
-    // every buffer it ever emitted (round-2 gap D). Raise it, or pass Infinity,
-    // when the full history matters; clearOpLog() empties it on demand.
+    // Bounded two ways: by count and by BUFFER BYTES -- 1000 ops of 10k-point
+    // bursts held ~50 MB nothing would read again (round-3 gap I). And while a
+    // consumer is attached (onPatch or a subscriber -- useSwiftMapFeed's case
+    // by construction), each op has already been taken, so nothing is retained
+    // at all unless retainOpLog says otherwise. clearOpLog() empties on demand.
     const maxOpLog = options.maxOpLog !== undefined ? options.maxOpLog : 1000;
+    const maxOpLogBytes = options.maxOpLogBytes !== undefined
+        ? options.maxOpLogBytes : 16 * 1024 * 1024;
+    const retainOpLog = options.retainOpLog || false;
+    let opLogBytes = 0;
     const onPatch = options.onPatch || null;
     const subscribers = new Set();
     function subscribe(fn) {
@@ -208,11 +214,19 @@ export function createMapModel(options = {}) {
     }
     function clearOpLog() {
         opLog.length = 0;
+        opLogBytes = 0;
     }
     function emit(op, buffer = null) {
-        opLog.push({ op, buffer });
-        if (Number.isFinite(maxOpLog) && opLog.length > maxOpLog) {
-            opLog.splice(0, opLog.length - maxOpLog);
+        const consumed = onPatch != null || subscribers.size > 0;
+        if (!consumed || retainOpLog) {
+            opLog.push({ op, buffer });
+            opLogBytes += buffer ? buffer.byteLength : 0;
+            while (opLog.length
+                    && ((Number.isFinite(maxOpLog) && opLog.length > maxOpLog)
+                        || (Number.isFinite(maxOpLogBytes) && opLogBytes > maxOpLogBytes))) {
+                const dropped = opLog.shift();
+                opLogBytes -= dropped.buffer ? dropped.buffer.byteLength : 0;
+            }
         }
         if (onPatch) onPatch(op, buffer);
         for (const fn of subscribers) fn(op, buffer);
@@ -766,6 +780,10 @@ export function createMapModel(options = {}) {
         if (dimHidden != null) cfg.dim_hidden = !!dimHidden;
         state.legend_config = cfg;
         if (options.show != null) state.show_legend = !!options.show;
+        else if (Object.keys(options).length && !state.show_legend) {
+            console.warn("swiftmap: configureLegend: options set while show_legend is "
+                + "false; pass show: true to display the legend.");
+        }
         return model;
     }
 
@@ -790,6 +808,10 @@ export function createMapModel(options = {}) {
         if (maxWidth != null) cfg.max_width = Math.trunc(Number(maxWidth));
         state.scale_config = cfg;
         if (options.show != null) state.show_scale = !!options.show;
+        else if (Object.keys(options).length && !state.show_scale) {
+            console.warn("swiftmap: configureScale: options set while show_scale is "
+                + "false; pass show: true to display the scale bar.");
+        }
         return model;
     }
 
@@ -813,6 +835,10 @@ export function createMapModel(options = {}) {
         }
         state.draw_config = cfg;
         if (options.show != null) state.show_draw = !!options.show;
+        else if (Object.keys(options).length && !state.show_draw) {
+            console.warn("swiftmap: configureDraw: options set while show_draw is "
+                + "false; pass show: true to display the toolbar.");
+        }
         return model;
     }
 
