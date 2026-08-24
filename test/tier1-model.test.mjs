@@ -50,6 +50,48 @@ const SCENARIOS = {
         return m;
     },
 
+    ramp_default: () => createMapModel().addCircleMarkers(
+        { lat: Array.from({ length: 101 }, (_, i) => 36.0 + i * 0.001),
+          lon: Array.from({ length: 101 }, (_, i) => -5.3 + i * 0.001),
+          value: Array.from({ length: 101 }, (_, i) => i) },
+        { name: "Sweep", colorCol: "value" }),
+
+    ramp_named_clamped: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1, 36.2, 36.3], lon: [-5.3, -5.2, -5.1, -5.0],
+          reading: [5.0, 20.0, 62.5, 95.0] },
+        { name: "Readings", colorCol: "reading", colormap: "turbo", vmin: 20, vmax: 80 }),
+
+    ramp_list: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1, 36.2], lon: [-5.3, -5.2, -5.1], value: [0.0, 2.5, 10.0] },
+        { name: "TwoTone", colorCol: "value", colormap: ["#000000", "#ffffff"] }),
+
+    color_bins: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1, 36.2, 36.3, 36.4], lon: [-5.3, -5.2, -5.1, -5.0, -4.9],
+          value: [1.0, 3.0, 4.5, 6.0, 9.0] },
+        { name: "Classed", colorCol: "value", colormap: "plasma", colorBins: [3, 6] }),
+
+    categorical_auto: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1, 36.2, 36.3], lon: [-5.3, -5.2, -5.1, -5.0],
+          status: ["Idle", "Active", "Fault", "Active"] },
+        { name: "Status", colorCol: "status" }),
+
+    categorical_spread: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1, 36.2, 36.3], lon: [-5.3, -5.2, -5.1, -5.0],
+          grade: ["a", "b", "c", "d"] },
+        { name: "Grades", colorCol: "grade", colormap: "viridis" }),
+
+    categorical_dict: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1, 36.2], lon: [-5.3, -5.2, -5.1],
+          risk: ["high", "medium", "zzz"] },
+        { name: "Risk", colorCol: "risk", color: "#123456",
+          colormap: { high: "#ff0000", medium: "#ffaa00", low: "#00ff00" } }),
+
+    radius_col: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1, 36.2, 36.3], lon: [-5.3, -5.2, -5.1, -5.0],
+          tonnage: [900.0, 12000.0, 44100.0, 78900.0] },
+        { name: "Fleet", colorCol: "tonnage", radiusCol: "tonnage",
+          radiusRange: [4, 20] }),
+
     radio_group: () => {
         const m = createMapModel();
         m.addCircleMarkers([[36.01, -5.29]], { name: "Plan A", layerGroup: "Plans",

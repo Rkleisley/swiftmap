@@ -100,6 +100,94 @@ def scenario_radio_group():
     return m
 
 
+def scenario_ramp_default():
+    """color_col over the default viridis ramp, extremes from the data.
+
+    A 0..100 sweep, so the interpolation and its rounding are exercised across
+    the whole ramp -- the half-to-even cases included."""
+    m = Map(show_logo=False)
+    n = 101
+    m.add_circle_markers(
+        {"lat": [36.0 + i * 0.001 for i in range(n)],
+         "lon": [-5.3 + i * 0.001 for i in range(n)],
+         "value": list(range(n))},
+        name="Sweep", color_col="value")
+    return m
+
+
+def scenario_ramp_named_clamped():
+    """A named map with fixed extremes; values outside them clamp."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2, 36.3], "lon": [-5.3, -5.2, -5.1, -5.0],
+         "reading": [5.0, 20.0, 62.5, 95.0]},
+        name="Readings", color_col="reading", colormap="turbo", vmin=20, vmax=80)
+    return m
+
+
+def scenario_ramp_list():
+    """A list of colours is a ramp for numbers."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2], "lon": [-5.3, -5.2, -5.1],
+         "value": [0.0, 2.5, 10.0]},
+        name="TwoTone", color_col="value", colormap=["#000000", "#ffffff"])
+    return m
+
+
+def scenario_color_bins():
+    """Bin edges make discrete classes, and the legend states them."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2, 36.3, 36.4], "lon": [-5.3, -5.2, -5.1, -5.0, -4.9],
+         "value": [1.0, 3.0, 4.5, 6.0, 9.0]},
+        name="Classed", color_col="value", colormap="plasma", color_bins=[3, 6])
+    return m
+
+
+def scenario_categorical_auto():
+    """A non-numeric column takes the categorical palette, cycling."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2, 36.3], "lon": [-5.3, -5.2, -5.1, -5.0],
+         "status": ["Idle", "Active", "Fault", "Active"]},
+        name="Status", color_col="status")
+    return m
+
+
+def scenario_categorical_spread():
+    """Naming a sequential map spreads it evenly across the categories."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2, 36.3], "lon": [-5.3, -5.2, -5.1, -5.0],
+         "grade": ["a", "b", "c", "d"]},
+        name="Grades", color_col="grade", colormap="viridis")
+    return m
+
+
+def scenario_categorical_dict():
+    """A {value: colour} mapping: its order in the legend, a declared value the
+    data has not delivered still listed, an unmapped value on the fallback."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2], "lon": [-5.3, -5.2, -5.1],
+         "risk": ["high", "medium", "zzz"]},
+        name="Risk", color_col="risk", color="#123456",
+        colormap={"high": "#ff0000", "medium": "#ffaa00", "low": "#00ff00"})
+    return m
+
+
+def scenario_radius_col():
+    """radius_col sizes by the square root over a range; both buffers, both keys."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2, 36.3], "lon": [-5.3, -5.2, -5.1, -5.0],
+         "tonnage": [900.0, 12000.0, 44100.0, 78900.0]},
+        name="Fleet", color_col="tonnage", radius_col="tonnage",
+        radius_range=(4, 20))
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -109,6 +197,14 @@ SCENARIOS = [
     scenario_polygon,
     scenario_merge_promotion,
     scenario_radio_group,
+    scenario_ramp_default,
+    scenario_ramp_named_clamped,
+    scenario_ramp_list,
+    scenario_color_bins,
+    scenario_categorical_auto,
+    scenario_categorical_spread,
+    scenario_categorical_dict,
+    scenario_radius_col,
 ]
 
 

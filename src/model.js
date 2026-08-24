@@ -27,6 +27,8 @@
 // GeoJSON ingestion, query/select/update and time layers are later stages.
 
 import { layersBoundsUnion } from "./utils.js";
+import { resolveColormap, dataDrivenColors, dataDrivenRadii,
+         dataDrivenLegend, dataDrivenSizeLegend } from "./colormaps.js";
 
 // What Python seeds every map with (basemap_registry.DEFAULT_BASEMAPS): OSM
 // visible, Dark Matter hidden, radio-grouped. The full name-callable catalogue
@@ -252,6 +254,29 @@ export function createMapModel(options = {}) {
 
     // --- builders --------------------------------------------------------------------
 
+    // color_col / radius_col do three jobs in one call, exactly as in Python: the
+    // buffer the GPU draws, and the legend block that describes it, from the same
+    // arithmetic -- so the legend cannot disagree with the pixels (GAPS.md gap 4).
+    function applyDataDriven(layer, options, method) {
+        const dataOpts = {
+            color_col: opt(options, "colorCol", "color_col") ?? null,
+            colormap: resolveColormap(opt(options, "colormap", "colormap") ?? null),
+            vmin: opt(options, "vmin", "vmin") ?? null,
+            vmax: opt(options, "vmax", "vmax") ?? null,
+            color_bins: opt(options, "colorBins", "color_bins") ?? null,
+            radius_col: opt(options, "radiusCol", "radius_col") ?? null,
+            radius_range: opt(options, "radiusRange", "radius_range") ?? [3.0, 18.0],
+        };
+        const colors = dataDrivenColors(layer.properties, dataOpts, layer.color, method);
+        if (colors) buffersSet(`${layer.id}::colors`, new DataView(colors.buffer));
+        const radii = dataDrivenRadii(layer.properties, dataOpts, method);
+        if (radii) buffersSet(`${layer.id}::radii`, new DataView(radii.buffer));
+        const legend = dataDrivenLegend(layer.properties, dataOpts, layer.color);
+        if (legend) layer.legend = legend;
+        const sizeLegend = dataDrivenSizeLegend(layer.properties, dataOpts);
+        if (sizeLegend) layer.legend_size = sizeLegend;
+    }
+
     function addCircleMarkers(data, options = {}) {
         const { pairs, properties } = normalizePoints(data, options);
         const layer = {
@@ -267,6 +292,7 @@ export function createMapModel(options = {}) {
             opacity: options.opacity !== undefined ? options.opacity : 1.0,
             properties,
         };
+        applyDataDriven(layer, options, "addCircleMarkers");
         addLayer(layer, pairs, options, "Circle Markers Group");
         return model;
     }
@@ -281,6 +307,7 @@ export function createMapModel(options = {}) {
             color: options.color || "#e61a26",
             properties,
         };
+        applyDataDriven(layer, options, "addMarkers");
         addLayer(layer, pairs, options, "Markers Group");
         return model;
     }

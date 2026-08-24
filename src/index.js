@@ -8,6 +8,8 @@
 
 export { createSwiftMap, sendLayerWrite } from "./core.js";
 export { createMapModel, DEFAULT_BASEMAPS } from "./model.js";
+export { mapColors, mapRadii, resolveColormap, registerColormap,
+         dataDrivenLegend, COLORMAPS, CATEGORICAL_PALETTES } from "./colormaps.js";
 export { createHostStub } from "./host.js";
 export { decodeBase64Buffers, decodeBase64BuffersReusing } from "./transport.js";
 export { provideLeaflet, requireLeaflet } from "./libs.js";
