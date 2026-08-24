@@ -38,6 +38,8 @@ import { resolveColormap, dataDrivenColors, dataDrivenRadii,
 import { isValidPeriod, normalizeLayerTimes } from "./times.js";
 import { XYZ, ALIASES as BASEMAP_ALIASES, PRESETS, WMS,
          DEFAULT_BASEMAPS, queryKey } from "./basemap-catalog.js";
+import { featuresOf, pointPairsOf, linePartsOf, polygonPartsOf,
+         POINT_GEOMETRY, LINE_GEOMETRY, POLYGON_GEOMETRY } from "./geo.js";
 
 // Mirrors TIME_POSITIONS in swiftmap/mapops/time.py and POSITIONS in
 // src/timecontrol.js; the sets must not drift.
@@ -91,9 +93,29 @@ function findColumn(keys, wanted, explicit) {
 // Points from the three JS-native shapes: [[lat, lon], ...], a column dict
 // ({lat: [...], lon: [...], other: [...]}), or rows of objects. Returns
 // { pairs, properties } with the coordinate columns removed from properties.
+function isGeometryInput(data) {
+    return typeof data === "string"
+        || (data && typeof data === "object" && !Array.isArray(data)
+            && typeof data.type === "string");
+}
+
 function normalizePoints(data, options = {}) {
     const latCol = opt(options, "latCol", "lat_col");
     const lonCol = opt(options, "lonCol", "lon_col");
+    if (isGeometryInput(data)) {
+        const features = featuresOf(data)
+            .filter(f => f.geometry && POINT_GEOMETRY.has(f.geometry.type));
+        const keys = [...new Set(features.flatMap(f => Object.keys(f.properties)))];
+        const pairs = [];
+        const properties = Object.fromEntries(keys.map(k => [k, []]));
+        for (const f of features) {
+            for (const pair of pointPairsOf(f.geometry)) {
+                pairs.push(pair);
+                for (const k of keys) properties[k].push(f.properties[k] ?? null);
+            }
+        }
+        return { pairs, properties };
+    }
     if (Array.isArray(data) && data.length && Array.isArray(data[0])) {
         return { pairs: data.map(p => [Number(p[0]), Number(p[1])]), properties: {} };
     }
@@ -161,9 +183,15 @@ export function createMapModel(options = {}) {
     // order. opLog keeps them all; onPatch streams them to a live consumer.
     const opLog = [];
     const onPatch = options.onPatch || null;
+    const subscribers = new Set();
+    function subscribe(fn) {
+        subscribers.add(fn);
+        return () => subscribers.delete(fn);
+    }
     function emit(op, buffer = null) {
         opLog.push({ op, buffer });
         if (onPatch) onPatch(op, buffer);
+        for (const fn of subscribers) fn(op, buffer);
     }
 
     const asBytes = (view) =>
@@ -287,8 +315,8 @@ export function createMapModel(options = {}) {
     // records added_with on the config; the frontend ignores it, so this side
     // keeps it out of the state instead.
     const addedWith = new Map();
-    function recordAddedWith(layer, options, dataDrivenMethod) {
-        const record = { parser: {}, data_opts: null, properties: null };
+    function recordAddedWith(layer, options, dataDrivenMethod, fanned = false) {
+        const record = { parser: {}, data_opts: null, properties: null, fanned };
         const latCol = opt(options, "latCol", "lat_col");
         const lonCol = opt(options, "lonCol", "lon_col");
         if (latCol) record.parser.lat_col = latCol;
@@ -409,7 +437,77 @@ export function createMapModel(options = {}) {
         return model;
     }
 
+    // WKT strings and GeoJSON route through the feature path: one feature is
+    // one layer (multi-part geometry keeps its parts/rings structure); several
+    // features FAN into numbered sibling layers exactly as Python's adders do --
+    // and a name matching a property key names each from its own value. Fanned
+    // layers refuse updateLayer(data=...), as in Python: siblings share no
+    // persistent link.
+    function addVectorFeatures(type, data, options) {
+        const family = type === "polyline" ? LINE_GEOMETRY : POLYGON_GEOMETRY;
+        const partsOf = type === "polyline" ? linePartsOf : polygonPartsOf;
+        const label = type === "polyline" ? "addLine" : "addPolygon";
+        const defaultName = type === "polyline" ? "Line" : "Polygon";
+        const features = featuresOf(data)
+            .filter(f => f.geometry && family.has(f.geometry.type));
+        if (!features.length) {
+            console.warn(`swiftmap: ${label} found no ${type} geometry in the supplied `
+                + `data. No layer was added.`);
+            return model;
+        }
+        const isMulti = features.length > 1;
+        const baseName = options.name;
+        const nameIsColumn = baseName != null
+            && features.some(f => baseName in f.properties);
+        const keys = [...new Set(features.flatMap(f => Object.keys(f.properties)))];
+        features.forEach((feature, i) => {
+            const name = nameIsColumn ? String(feature.properties[baseName])
+                : isMulti ? `${baseName ?? defaultName} ${i + 1}`
+                : (baseName ?? defaultName);
+            const props = Object.fromEntries(keys.map(k => [k, feature.properties[k] ?? null]));
+            Object.assign(props, options.properties || {});
+            const layer = type === "polyline"
+                ? {
+                    id: nextId(), type, name,
+                    visible: options.visible !== undefined ? options.visible : true,
+                    autobind_popup: true, autobind_tooltip: true,
+                    color: options.color || "#3388ff",
+                    weight: options.weight !== undefined ? options.weight : 3,
+                    opacity: options.opacity !== undefined ? options.opacity : 1.0,
+                    properties: props,
+                }
+                : {
+                    id: nextId(), type, name,
+                    visible: options.visible !== undefined ? options.visible : true,
+                    autobind_popup: true, autobind_tooltip: true,
+                    color: options.color || "#3388ff",
+                    fillOpacity: opt(options, "fillOpacity", "fill_opacity", 0.2),
+                    weight: options.weight !== undefined ? options.weight : 3,
+                    opacity: options.opacity !== undefined ? options.opacity : 1.0,
+                    properties: props,
+                };
+            if (type === "polygon") {
+                const fillColor = opt(options, "fillColor", "fill_color");
+                if (fillColor !== undefined) layer.fillColor = fillColor;
+            }
+            const parts = partsOf(feature.geometry);
+            let flat;
+            if (type === "polyline") {
+                flat = parts.flat();
+                if (parts.length > 1) layer.parts = parts.map(p => p.length);
+            } else {
+                flat = parts.flat(2);
+                const plain = parts.length === 1 && parts[0].length === 1;
+                if (!plain) layer.rings = parts.map(part => part.map(r => r.length));
+            }
+            addLayer(layer, flat, options, `${defaultName} Group`);
+            recordAddedWith(layer, options, null, isMulti || nameIsColumn);
+        });
+        return model;
+    }
+
     function addLine(coords, options = {}) {
+        if (isGeometryInput(coords)) return addVectorFeatures("polyline", coords, options);
         const pairs = coords.map(p => [Number(p[0]), Number(p[1])]);
         const layer = {
             id: nextId(), type: "polyline",
@@ -427,6 +525,7 @@ export function createMapModel(options = {}) {
     }
 
     function addPolygon(coords, options = {}) {
+        if (isGeometryInput(coords)) return addVectorFeatures("polygon", coords, options);
         const ring = coords.map(p => [Number(p[0]), Number(p[1])]);
         const [f, l] = [ring[0], ring[ring.length - 1]];
         if (f && (f[0] !== l[0] || f[1] !== l[1])) ring.push([f[0], f[1]]);
@@ -445,6 +544,34 @@ export function createMapModel(options = {}) {
         if (fillColor !== undefined) layer.fillColor = fillColor;
         addLayer(layer, ring, options, "Polygon Group");
         recordAddedWith(layer, options, null);
+        return model;
+    }
+
+    // A mixed collection: one layer per geometry kind present, all sharing the
+    // name so the merge machinery collapses them into a single sidebar entry
+    // (Python's add_collection). Point features go to circles or pins by
+    // pointType; lines and polygons keep their structure.
+    function addCollection(data, options = {}) {
+        const features = featuresOf(data);
+        const pointType = opt(options, "pointType", "point_type", "circle_markers");
+        const family = (set) => features.filter(f => f.geometry && set.has(f.geometry.type));
+        const fc = (list) => ({
+            type: "FeatureCollection",
+            features: list.map(f => ({ type: "Feature", geometry: f.geometry,
+                                       properties: f.properties })),
+        });
+        const points = family(POINT_GEOMETRY);
+        const lines = family(LINE_GEOMETRY);
+        const polys = family(POLYGON_GEOMETRY);
+        if (!points.length && !lines.length && !polys.length) {
+            console.warn("swiftmap: addCollection found no geometry. Nothing was added.");
+            return model;
+        }
+        if (points.length) {
+            (pointType === "markers" ? addMarkers : addCircleMarkers)(fc(points), options);
+        }
+        if (lines.length) addLine(fc(lines), options);
+        if (polys.length) addPolygon(fc(polys), options);
         return model;
     }
 
@@ -920,6 +1047,12 @@ export function createMapModel(options = {}) {
 
     function updatePoints(layer, data, append, parser, fieldKwargs) {
         const rec = addedWith.get(layer.id) || {};
+        if (rec.fanned) {
+            console.warn(`swiftmap: updateLayer: '${layer.name}' was fanned out from `
+                + `several features -- one of several sibling layers with no persistent `
+                + `link. Update a flat layer, or remove and re-add the set. Nothing changed.`);
+            return model;
+        }
         let parsed;
         try {
             parsed = normalizePoints(data, { ...(rec.parser || {}), ...parser });
@@ -1002,6 +1135,12 @@ export function createMapModel(options = {}) {
 
     function updateSingle(layer, data, fieldKwargs) {
         const rec = addedWith.get(layer.id) || {};
+        if (rec.fanned) {
+            console.warn(`swiftmap: updateLayer: '${layer.name}' was fanned out from `
+                + `several features -- one of several sibling layers with no persistent `
+                + `link. Update a flat layer, or remove and re-add the set. Nothing changed.`);
+            return model;
+        }
         const pairs = data.map(p => [Number(p[0]), Number(p[1])]);
         if (layer.type === "polygon" && pairs.length) {
             const [f, l] = [pairs[0], pairs[pairs.length - 1]];
@@ -1050,7 +1189,8 @@ export function createMapModel(options = {}) {
     }
 
     const model = {
-        addCircleMarkers, addMarkers, addLine, addPolygon, addBasemap, listBasemaps,
+        addCircleMarkers, addMarkers, addLine, addPolygon, addCollection,
+        addBasemap, listBasemaps, subscribe,
         makeTimeLayer, clearTimeLayer, configureTime,
         findLayers, getLayer,
         hide, show, select, setLayersVisibility, setLayerFields,

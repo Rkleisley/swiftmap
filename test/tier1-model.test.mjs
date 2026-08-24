@@ -161,6 +161,46 @@ const SCENARIOS = {
 
     crs_4326_defaults: () => createMapModel({ crs: "EPSG:4326" }),
 
+    collection_geojson: () => createMapModel().addCollection(
+        { type: "FeatureCollection", features: [
+            { type: "Feature", geometry: { type: "Point", coordinates: [-5.3, 36.0] },
+              properties: { site: "A" } },
+            { type: "Feature", geometry: { type: "LineString",
+                                           coordinates: [[-5.3, 36.0], [-5.2, 36.1]] },
+              properties: { site: "B" } },
+            { type: "Feature", geometry: { type: "Polygon",
+                                           coordinates: [[[-5.3, 36.0], [-5.2, 36.0],
+                                                          [-5.2, 36.1], [-5.3, 36.0]]] },
+              properties: { site: "C" } },
+        ] }, { name: "Survey", layerGroup: "Field" }),
+
+    polygon_hole_wkt: () => createMapModel().addPolygon(
+        "POLYGON ((-5.3 36.0, -5.1 36.0, -5.1 36.2, -5.3 36.2, -5.3 36.0), "
+        + "(-5.25 36.05, -5.15 36.05, -5.15 36.15, -5.25 36.05))",
+        { name: "Zone", properties: { zone: "N" } }),
+
+    multiline_wkt: () => createMapModel().addLine(
+        "MULTILINESTRING ((-5.3 36.0, -5.2 36.1), (-5.1 36.0, -5.0 36.1))",
+        { name: "Route", properties: { route: "R1" } }),
+
+    line_fan_geojson: () => createMapModel().addLine(
+        { type: "FeatureCollection", features: [
+            { type: "Feature", geometry: { type: "LineString",
+                                           coordinates: [[-5.3, 36.0], [-5.2, 36.1]] },
+              properties: { n: 1 } },
+            { type: "Feature", geometry: { type: "LineString",
+                                           coordinates: [[-5.1, 36.0], [-5.0, 36.1]] },
+              properties: { n: 2 } },
+        ] }, { name: "Tracks" }),
+
+    points_geojson: () => createMapModel().addCircleMarkers(
+        { type: "FeatureCollection", features: [
+            { type: "Feature", geometry: { type: "Point", coordinates: [-5.3, 36.0] },
+              properties: { site: "Alpha", value: 10 } },
+            { type: "Feature", geometry: { type: "Point", coordinates: [-5.2, 36.1] },
+              properties: { site: "Bravo", value: 55 } },
+        ] }, { name: "Sites" }),
+
     mut_hide_show: () => {
         const m = createMapModel();
         m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2] }, { name: "Sites" });

@@ -369,6 +369,71 @@ def scenario_crs_4326_defaults():
     return Map(show_logo=False, crs="EPSG:4326")
 
 
+FC_MIXED = {"type": "FeatureCollection", "features": [
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-5.3, 36.0]},
+     "properties": {"site": "A"}},
+    {"type": "Feature", "geometry": {"type": "LineString",
+                                     "coordinates": [[-5.3, 36.0], [-5.2, 36.1]]},
+     "properties": {"site": "B"}},
+    {"type": "Feature", "geometry": {"type": "Polygon",
+                                     "coordinates": [[[-5.3, 36.0], [-5.2, 36.0],
+                                                      [-5.2, 36.1], [-5.3, 36.0]]]},
+     "properties": {"site": "C"}},
+]}
+
+WKT_HOLE = ("POLYGON ((-5.3 36.0, -5.1 36.0, -5.1 36.2, -5.3 36.2, -5.3 36.0), "
+            "(-5.25 36.05, -5.15 36.05, -5.15 36.15, -5.25 36.05))")
+WKT_ML = "MULTILINESTRING ((-5.3 36.0, -5.2 36.1), (-5.1 36.0, -5.0 36.1))"
+
+
+def scenario_collection_geojson():
+    """A mixed FeatureCollection: one layer per kind, merged into one entry."""
+    m = Map(show_logo=False)
+    m.add_collection(FC_MIXED, name="Survey", layer_group="Field")
+    return m
+
+
+def scenario_polygon_hole_wkt():
+    """A WKT polygon with a hole: the rings table over one flat buffer.
+    Python reads it from a WKT column; JS parses the same WKT string."""
+    import pandas as pd
+    m = Map(show_logo=False)
+    m.add_polygon(pd.DataFrame({"geometry": [WKT_HOLE], "zone": ["N"]}), name="Zone")
+    return m
+
+
+def scenario_multiline_wkt():
+    """A WKT multi-line: one feature with parts."""
+    import pandas as pd
+    m = Map(show_logo=False)
+    m.add_line(pd.DataFrame({"geometry": [WKT_ML], "route": ["R1"]}), name="Route")
+    return m
+
+
+def scenario_line_fan_geojson():
+    """Several line features FAN into numbered sibling layers."""
+    m = Map(show_logo=False)
+    m.add_line({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "geometry": {"type": "LineString",
+                                         "coordinates": [[-5.3, 36.0], [-5.2, 36.1]]},
+         "properties": {"n": 1}},
+        {"type": "Feature", "geometry": {"type": "LineString",
+                                         "coordinates": [[-5.1, 36.0], [-5.0, 36.1]]},
+         "properties": {"n": 2}}]}, name="Tracks")
+    return m
+
+
+def scenario_points_geojson():
+    """A Point FeatureCollection: properties become columns."""
+    m = Map(show_logo=False)
+    m.add_circle_markers({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-5.3, 36.0]},
+         "properties": {"site": "Alpha", "value": 10}},
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-5.2, 36.1]},
+         "properties": {"site": "Bravo", "value": 55}}]}, name="Sites")
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -403,6 +468,11 @@ SCENARIOS = [
     scenario_basemap_wms,
     scenario_basemap_url,
     scenario_crs_4326_defaults,
+    scenario_collection_geojson,
+    scenario_polygon_hole_wkt,
+    scenario_multiline_wkt,
+    scenario_line_fan_geojson,
+    scenario_points_geojson,
 ]
 
 
