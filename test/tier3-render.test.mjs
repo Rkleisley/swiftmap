@@ -1325,12 +1325,26 @@ suite("the React example app renders the same map over the same core", async () 
 
         const log = () => page.locator("#log").innerText();
 
-        // A feature click reaches the app through onFeatureClick: "Bravo" sits at
-        // the map centre.
+        // The Sites layer is TIMED (the model packed ::times and set the meta),
+        // so hit-testing honours the window: seek the slider to the last tick
+        // and click the day that owns it -- "Charlie".
+        await page.evaluate(() => {
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = s.max;
+            s.dispatchEvent(new Event("input"));
+        });
+        await page.waitForTimeout(600);
         const box = await page.locator(".leaflet-container").boundingBox();
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        const [cx, cy] = await page.evaluate(() => {
+            const crs = window.L.CRS.EPSG3857;
+            const p = crs.latLngToPoint(window.L.latLng(36.08, -5.22), 12);
+            const c = crs.latLngToPoint(window.L.latLng(36.05, -5.25), 12);
+            return [p.x - c.x, p.y - c.y];
+        });
+        await page.mouse.click(box.x + box.width / 2 + cx, box.y + box.height / 2 + cy);
         await page.waitForTimeout(500);
-        assert.match(await log(), /click .*"layerId":"sites"/, "the click names the layer");
+        assert.match(await log(), /click .*"layerId":"layer_\d+".*"index":2/,
+            "the click names the model's layer and Charlie's row");
 
         // A sidebar toggle reaches onLayerToggle with the targeted op.
         await page.evaluate(() => {
@@ -1340,10 +1354,13 @@ suite("the React example app renders the same map over the same core", async () 
             input.dispatchEvent(new Event("change"));
         });
         await page.waitForTimeout(500);
-        assert.match(await log(), /toggle .*"id":"track".*"visible":false/,
+        assert.match(await log(), /toggle .*"visible":false/,
             "the toggle arrives as the same targeted op Python receives");
 
-        // A live append through the ref: the widget's own patch path.
+        // A live append through the MODEL: updateLayer(append) emits the delta
+        // ops -- buffer tails, the append row, one set -- and useSwiftMapFeed
+        // forwards them to applyPatch. One state model, wire cost of the batch
+        // (GAPS.md gap 11 answered end to end).
         const fed = () => page.evaluate(() => {
             const a = window.L.glify.pointsInstances;
             return a[a.length - 1].settings.data.length;

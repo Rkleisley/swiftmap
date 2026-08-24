@@ -15,7 +15,8 @@
 // Dependencies are the consumer's: react, leaflet, leaflet.glify and Geoman are
 // peers imported here, never fetched. Include leaflet.css, leaflet-geoman.css and
 // swiftmap.css from your bundler; this file imports no CSS on your behalf.
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle,
+               useReducer, useRef } from "react";
 import L from "leaflet";
 import glify from "leaflet.glify";
 import "@geoman-io/leaflet-geoman-free";
@@ -166,6 +167,13 @@ export const SwiftMap = forwardRef(function SwiftMap(props, ref) {
     // Prop updates flow into the host as state changes, which fire the core's own
     // change handlers -- the same path a trait snapshot takes in the widget. A
     // new `buffers` object is a new identity to the GL meta key, so it rebuilds.
+    //
+    // A prop is applied only when IT changed, never because it differs from the
+    // host's state: the core moves keys of its own (a pan moves center, the
+    // slider moves time_current), and comparing against host state re-asserted
+    // every stale prop on every app re-render -- one log line snapped the
+    // slider, or the viewport, back to the opening values.
+    const prevProps = useRef({});
     useEffect(() => {
         const host = hostRef.current;
         if (!host) return;
@@ -173,7 +181,12 @@ export const SwiftMap = forwardRef(function SwiftMap(props, ref) {
         try {
             for (const [prop, key] of Object.entries(PROP_KEYS)) {
                 const value = props[prop];
-                if (value !== undefined && host.get(key) !== value) host.set(key, value);
+                const previous = prevProps.current[prop];
+                prevProps.current[prop] = value;
+                if (value !== undefined && value !== previous
+                        && host.get(key) !== value) {
+                    host.set(key, value);
+                }
             }
         } finally {
             applying.current = false;
@@ -199,5 +212,36 @@ export const SwiftMap = forwardRef(function SwiftMap(props, ref) {
              style={{ width: "100%", height: props.height || "100%", ...(props.style || {}) }} />
     );
 });
+
+// Build a map model once and mutate it Python-style. `mutate` runs your
+// function against the model and re-renders, so a fresh `model.props()` spread
+// reaches <SwiftMap> with new identities exactly where something changed --
+// the mutate-then-snapshot shape @map_effect gives Shiny.
+export function useSwiftMapModel(build) {
+    const modelRef = useRef(null);
+    if (!modelRef.current) modelRef.current = build();
+    const [, force] = useReducer(c => c + 1, 0);
+    const mutate = useCallback((fn) => {
+        const result = fn ? fn(modelRef.current) : undefined;
+        force();
+        return result;
+    }, []);
+    return [modelRef.current, mutate];
+}
+
+// The feed mode: every op the model emits flows straight to the map through
+// applyPatch -- the widget's own incremental path, so an append's wire cost is
+// the batch, never the layer. The contract: snapshot model.props() ONCE for the
+// initial render and drive every later change through the model, or the change
+// arrives twice (once as a patch, once as new props). Do not mix this with
+// re-spreading fresh props for the same mutation.
+export function useSwiftMapFeed(model, mapRef) {
+    useEffect(() => model.subscribe((op, buffer) => {
+        const handle = mapRef.current;
+        if (!handle) return;
+        handle.applyPatch([buffer ? { ...op, buffer_index: 0 } : op],
+                          buffer ? [buffer] : []);
+    }), [model, mapRef]);
+}
 
 export default SwiftMap;
