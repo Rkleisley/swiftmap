@@ -40,6 +40,20 @@ import { XYZ, ALIASES as BASEMAP_ALIASES, PRESETS, WMS,
          DEFAULT_BASEMAPS, queryKey } from "./basemap-catalog.js";
 import { featuresOf, pointPairsOf, linePartsOf, polygonPartsOf,
          POINT_GEOMETRY, LINE_GEOMETRY, POLYGON_GEOMETRY } from "./geo.js";
+import { POINTS, LINES, AREAS, STYLE_KEYS, normalizeStyle, popStyleOptions,
+         resolveStyles, resolveFeatureLabels, resolveFeatureLabel,
+         warnOnUndrawnOptions } from "./style.js";
+
+// Per-type style defaults (Python's _STYLE_DEFAULTS): what a layer draws with
+// when nothing is said. Polygon fill colour deliberately absent -- it appears
+// on the config only when given.
+const STYLE_DEFAULTS = {
+    circle_markers: { color: "#3388ff", fill_color: "#3388ff", fill_opacity: 0.2,
+                      weight: 3, opacity: 1.0 },
+    markers: { color: "#e61a26" },
+    polyline: { color: "#3388ff", weight: 3, opacity: 1.0 },
+    polygon: { color: "#3388ff", fill_opacity: 0.2, weight: 3, opacity: 1.0 },
+};
 
 // Mirrors TIME_POSITIONS in swiftmap/mapops/time.py and POSITIONS in
 // src/timecontrol.js; the sets must not drift.
@@ -304,7 +318,12 @@ export function createMapModel(options = {}) {
         // buffers, then the add itself.
         buffersSet(layer.id, packPairs(pairs));
         if (dataDrivenMethod) applyDataDriven(layer, options, dataDrivenMethod);
-        recordAddedWith(layer, options, dataDrivenMethod);
+        const { explicit, staticStyle } = popStyleOptions({ ...options, radius: undefined },
+                                                          "addLayer", null);
+        recordAddedWith(layer, options, dataDrivenMethod, false, {
+            style: explicit, static_style: staticStyle,
+            label: opt(options, "label", "label") ?? null,
+        });
         place(layer);
         autoFitExtend(bounds);
         return layer;
@@ -315,8 +334,8 @@ export function createMapModel(options = {}) {
     // records added_with on the config; the frontend ignores it, so this side
     // keeps it out of the state instead.
     const addedWith = new Map();
-    function recordAddedWith(layer, options, dataDrivenMethod, fanned = false) {
-        const record = { parser: {}, data_opts: null, properties: null, fanned };
+    function recordAddedWith(layer, options, dataDrivenMethod, fanned = false, extras = {}) {
+        const record = { parser: {}, data_opts: null, properties: null, fanned, ...extras };
         const latCol = opt(options, "latCol", "lat_col");
         const lonCol = opt(options, "lonCol", "lon_col");
         if (latCol) record.parser.lat_col = latCol;
@@ -404,36 +423,45 @@ export function createMapModel(options = {}) {
         if (sizeLegend) layer.legend_size = sizeLegend;
     }
 
-    function addCircleMarkers(data, options = {}) {
+    function addPointsLayer(type, defaultName, method, data, options) {
         const { pairs, properties } = normalizePoints(data, options);
+        // `radius` is its own named option, as in Python, so it must not reach
+        // the style pop and land twice.
+        const { explicit, staticStyle } = popStyleOptions(
+            { ...options, radius: undefined }, method, type);
+        const { layerStyle, featureStyles } = resolveStyles(
+            explicit, staticStyle, properties, pairs.length, STYLE_DEFAULTS[type]);
         const layer = {
-            id: nextId(), type: "circle_markers",
-            name: options.name || "Circle Markers",
+            id: nextId(), type,
+            name: options.name || defaultName,
             visible: options.visible !== undefined ? options.visible : true,
             autobind_popup: true, autobind_tooltip: true,
-            radius: options.radius !== undefined ? options.radius : 10,
-            color: options.color || "#3388ff",
-            fillColor: opt(options, "fillColor", "fill_color", "#3388ff"),
-            fillOpacity: opt(options, "fillOpacity", "fill_opacity", 0.2),
-            weight: options.weight !== undefined ? options.weight : 3,
-            opacity: options.opacity !== undefined ? options.opacity : 1.0,
+            ...(type === "circle_markers"
+                ? { radius: options.radius !== undefined ? options.radius : 10 } : {}),
+            ...layerStyle,
             properties,
         };
-        addLayer(layer, pairs, options, "Circle Markers Group", "addCircleMarkers");
+        if (featureStyles) layer.feature_styles = featureStyles;
+        const label = opt(options, "label", "label");
+        const labels = resolveFeatureLabels(label ?? null, properties, pairs.length);
+        if (labels) {
+            if (pairs.length > 1000) {
+                console.warn(`swiftmap: ${method}: ${pairs.length} permanent labels means `
+                    + `${pairs.length} DOM elements on the map. Labels are for site-scale layers.`);
+            }
+            layer.labels = labels;
+        }
+        addLayer(layer, pairs, options, `${defaultName} Group`, method);
+        return layer;
+    }
+
+    function addCircleMarkers(data, options = {}) {
+        addPointsLayer("circle_markers", "Circle Markers", "addCircleMarkers", data, options);
         return model;
     }
 
     function addMarkers(data, options = {}) {
-        const { pairs, properties } = normalizePoints(data, options);
-        const layer = {
-            id: nextId(), type: "markers",
-            name: options.name || "Markers",
-            visible: options.visible !== undefined ? options.visible : true,
-            autobind_popup: true, autobind_tooltip: true,
-            color: options.color || "#e61a26",
-            properties,
-        };
-        addLayer(layer, pairs, options, "Markers Group", "addMarkers");
+        addPointsLayer("markers", "Markers", "addMarkers", data, options);
         return model;
     }
 
@@ -460,36 +488,27 @@ export function createMapModel(options = {}) {
         const nameIsColumn = baseName != null
             && features.some(f => baseName in f.properties);
         const keys = [...new Set(features.flatMap(f => Object.keys(f.properties)))];
+        const columns = Object.fromEntries(
+            keys.map(k => [k, features.map(f => f.properties[k] ?? null)]));
+        const { explicit, staticStyle } = popStyleOptions(options, label, type);
+        const { layerStyle, featureStyles } = resolveStyles(
+            explicit, staticStyle, columns, features.length, STYLE_DEFAULTS[type]);
+        const labelOpt = opt(options, "label", "label") ?? null;
         features.forEach((feature, i) => {
             const name = nameIsColumn ? String(feature.properties[baseName])
                 : isMulti ? `${baseName ?? defaultName} ${i + 1}`
                 : (baseName ?? defaultName);
             const props = Object.fromEntries(keys.map(k => [k, feature.properties[k] ?? null]));
             Object.assign(props, options.properties || {});
-            const layer = type === "polyline"
-                ? {
-                    id: nextId(), type, name,
-                    visible: options.visible !== undefined ? options.visible : true,
-                    autobind_popup: true, autobind_tooltip: true,
-                    color: options.color || "#3388ff",
-                    weight: options.weight !== undefined ? options.weight : 3,
-                    opacity: options.opacity !== undefined ? options.opacity : 1.0,
-                    properties: props,
-                }
-                : {
-                    id: nextId(), type, name,
-                    visible: options.visible !== undefined ? options.visible : true,
-                    autobind_popup: true, autobind_tooltip: true,
-                    color: options.color || "#3388ff",
-                    fillOpacity: opt(options, "fillOpacity", "fill_opacity", 0.2),
-                    weight: options.weight !== undefined ? options.weight : 3,
-                    opacity: options.opacity !== undefined ? options.opacity : 1.0,
-                    properties: props,
-                };
-            if (type === "polygon") {
-                const fillColor = opt(options, "fillColor", "fill_color");
-                if (fillColor !== undefined) layer.fillColor = fillColor;
-            }
+            const layer = {
+                id: nextId(), type, name,
+                visible: options.visible !== undefined ? options.visible : true,
+                autobind_popup: true, autobind_tooltip: true,
+                ...(featureStyles ? featureStyles[i] : layerStyle),
+                properties: props,
+            };
+            const featureLabel = resolveFeatureLabel(labelOpt, columns, i);
+            if (featureLabel != null) layer.label = featureLabel;
             const parts = partsOf(feature.geometry);
             let flat;
             if (type === "polyline") {
@@ -509,18 +528,20 @@ export function createMapModel(options = {}) {
     function addLine(coords, options = {}) {
         if (isGeometryInput(coords)) return addVectorFeatures("polyline", coords, options);
         const pairs = coords.map(p => [Number(p[0]), Number(p[1])]);
+        const { explicit, staticStyle } = popStyleOptions(options, "addLine", "polyline");
+        const { layerStyle } = resolveStyles(explicit, staticStyle, {}, 1,
+                                             STYLE_DEFAULTS.polyline);
         const layer = {
             id: nextId(), type: "polyline",
             name: options.name || "Line",
             visible: options.visible !== undefined ? options.visible : true,
             autobind_popup: true, autobind_tooltip: true,
-            color: options.color || "#3388ff",
-            weight: options.weight !== undefined ? options.weight : 3,
-            opacity: options.opacity !== undefined ? options.opacity : 1.0,
+            ...layerStyle,
             properties: options.properties || {},
         };
+        const label = resolveFeatureLabel(opt(options, "label", "label") ?? null, {}, 0);
+        if (label != null) layer.label = label;
         addLayer(layer, pairs, options, "Line Group");
-        recordAddedWith(layer, options, null);
         return model;
     }
 
@@ -529,21 +550,20 @@ export function createMapModel(options = {}) {
         const ring = coords.map(p => [Number(p[0]), Number(p[1])]);
         const [f, l] = [ring[0], ring[ring.length - 1]];
         if (f && (f[0] !== l[0] || f[1] !== l[1])) ring.push([f[0], f[1]]);
+        const { explicit, staticStyle } = popStyleOptions(options, "addPolygon", "polygon");
+        const { layerStyle } = resolveStyles(explicit, staticStyle, {}, 1,
+                                             STYLE_DEFAULTS.polygon);
         const layer = {
             id: nextId(), type: "polygon",
             name: options.name || "Polygon",
             visible: options.visible !== undefined ? options.visible : true,
             autobind_popup: true, autobind_tooltip: true,
-            color: options.color || "#3388ff",
-            fillOpacity: opt(options, "fillOpacity", "fill_opacity", 0.2),
-            weight: options.weight !== undefined ? options.weight : 3,
-            opacity: options.opacity !== undefined ? options.opacity : 1.0,
+            ...layerStyle,
             properties: options.properties || {},
         };
-        const fillColor = opt(options, "fillColor", "fill_color");
-        if (fillColor !== undefined) layer.fillColor = fillColor;
+        const label = resolveFeatureLabel(opt(options, "label", "label") ?? null, {}, 0);
+        if (label != null) layer.label = label;
         addLayer(layer, ring, options, "Polygon Group");
-        recordAddedWith(layer, options, null);
         return model;
     }
 
@@ -939,6 +959,77 @@ export function createMapModel(options = {}) {
         return model;
     }
 
+    // Per-feature style overrides: transient styling in a field of its own,
+    // above the layer's style and the data's -- replace-not-merge, {} clears
+    // (Python's set_feature_styles, emitting the same `style` op).
+    function setFeatureStyles(target = null, overrides = null, criteria = {}) {
+        const matched = findLayers(target, criteria);
+        if (!matched.length) {
+            console.warn("swiftmap: setFeatureStyles matched no layers. Nothing was styled.");
+            return model;
+        }
+        const wanted = {};
+        for (const [k, v] of Object.entries(overrides || {})) wanted[String(k)] = v;
+        const targets = matched.filter(l => l.id != null
+            && JSON.stringify(l.style_overrides || {}) !== JSON.stringify(wanted));
+        if (!targets.length) return model;
+        state.layers = applyChanges(state.layers,
+            new Map(targets.map(l => [l.id, { style_overrides: wanted }])));
+        for (const l of targets) emit({ op: "style", id: l.id, overrides: wanted });
+        return model;
+    }
+
+    // Whole-layer selection styling in its own field above everything else;
+    // each call states the complete highlight, null clears (Python's highlight).
+    function highlight(target = null, options = {}) {
+        const opts = { ...options };
+        const criteria = {};
+        for (const key of ["ids", "name", "types", "excludeTypes", "exclude_types",
+                           "group", "includeGroups", "include_groups"]) {
+            if (key in opts) {
+                criteria[key] = opts[key];
+                delete opts[key];
+            }
+        }
+        const perFamily = { markers: opts.markers || {}, lines: opts.lines || {},
+                            polygons: opts.polygons || {} };
+        delete opts.markers;
+        delete opts.lines;
+        delete opts.polygons;
+        if (!target) {
+            const lit = findLayers().filter(l => l.highlight_style
+                && Object.keys(l.highlight_style).length);
+            return lit.length ? setLayerFields(lit, { highlight_style: {} }) : model;
+        }
+        const matched = findLayers(target, criteria);
+        if (!matched.length) {
+            console.warn("swiftmap: highlight matched no layers. Nothing was highlighted.");
+            return model;
+        }
+        const { explicit: shared } = popStyleOptions(opts, "highlight");
+        const families = { markers: POINTS, lines: LINES, polygons: AREAS };
+        for (const layer of matched) {
+            const merged = { ...shared };
+            for (const [family, style] of Object.entries(perFamily)) {
+                if (Object.keys(style).length && families[family].has(layer.type)) {
+                    Object.assign(merged, normalizeStyle(style));
+                }
+            }
+            if (!Object.keys(merged).length) continue;
+            warnOnUndrawnOptions(merged, "highlight", layer.type);
+            const frontend = {};
+            for (const [k, v] of Object.entries(merged)) {
+                if (k in STYLE_KEYS) frontend[STYLE_KEYS[k]] = v;
+            }
+            setLayerFields([layer], { highlight_style: frontend });
+        }
+        const keep = new Set(matched.map(l => l.id));
+        const stale = findLayers().filter(l => l.highlight_style
+            && Object.keys(l.highlight_style).length && !keep.has(l.id));
+        if (stale.length) setLayerFields(stale, { highlight_style: {} });
+        return model;
+    }
+
     // --- removal -----------------------------------------------------------------------
 
     function removeLayers(identifiers) {
@@ -1088,10 +1179,14 @@ export function createMapModel(options = {}) {
         }
         const n = pairs.length;
         const dataOpts = rec.data_opts || dataOptsOf({});
+        const { featureStyles } = resolveStyles(rec.style || {}, rec.static_style || {},
+                                                props, n, STYLE_DEFAULTS[layer.type]);
         const colors = dataDrivenColors(props, dataOpts, layer.color, "updateLayer");
         const radii = dataDrivenRadii(props, dataOpts, "updateLayer");
         const legend = dataDrivenLegend(props, dataOpts, layer.color);
         const sizeLegend = dataDrivenSizeLegend(props, dataOpts);
+        const labels = rec.label != null
+            ? resolveFeatureLabels(rec.label, props, n) : null;
         let timesPayload = null, dropTime = false;
         if (layer.time) ({ payload: timesPayload, dropTime } = retime(layer, props));
         const bounds = boundsOfPairs(pairs);
@@ -1099,13 +1194,27 @@ export function createMapModel(options = {}) {
 
         const config = { ...layer, properties: props, bounds };
         if (dropTime) config.time = null;
-        for (const [key, value] of [["legend", legend], ["legend_size", sizeLegend]]) {
+        for (const [key, value] of [["legend", legend], ["legend_size", sizeLegend],
+                                    ["labels", labels], ["feature_styles", featureStyles]]) {
             if (value) config[key] = value;
             else delete config[key];
         }
+        // Feature indices do not survive a data replace, so per-feature
+        // overrides are cleared with a warning (Python's _clear_overrides).
+        const hadOverrides = layer.style_overrides
+            && Object.keys(layer.style_overrides).length;
+        if (hadOverrides && !append) {
+            console.warn(`swiftmap: updateLayer: '${layer.name}' had per-feature style `
+                + `overrides (setFeatureStyles). Feature indices do not survive a data `
+                + `replace, so they were cleared.`);
+            config.style_overrides = {};
+        }
         Object.assign(config, fieldKwargs);
 
-        if (append && nOld > 0 && !dropTime) {
+        // A per-feature style column resolves over the whole set, so that shape
+        // takes the full path, exactly as a lost time property does.
+        if (append && nOld > 0 && !dropTime && featureStyles == null
+                && !layer.feature_styles) {
             buffersAppend(layer.id, new DataView(coords.buffer.slice(nOld * 16)));
             growOrReset(`${layer.id}::colors`, colors, 4, nOld);
             growOrReset(`${layer.id}::radii`, radii, 4, nOld);
@@ -1118,8 +1227,11 @@ export function createMapModel(options = {}) {
             }
             const tails = {};
             for (const [k, v] of Object.entries(props)) tails[k] = v.slice(nOld);
+            const appendOp = { op: "append", id: layer.id, base: nOld, count: nNew,
+                               properties: tails };
+            if (labels) appendOp.lists = { labels: labels.slice(nOld) };
             replaceInState(layer, config, [
-                { op: "append", id: layer.id, base: nOld, count: nNew, properties: tails },
+                appendOp,
                 { op: "set", id: layer.id, fields },
             ]);
         } else {
@@ -1150,6 +1262,9 @@ export function createMapModel(options = {}) {
         const config = { ...layer, properties: { ...(rec.properties || {}) }, bounds };
         delete config.parts;
         delete config.rings;
+        const label = rec.label != null ? resolveFeatureLabel(rec.label, {}, 0) : null;
+        if (label != null) config.label = label;
+        else delete config.label;
         let timesPayload = null, dropTime = false;
         if (layer.time) ({ payload: timesPayload, dropTime } = retime(layer, config.properties));
         if (dropTime) config.time = null;
@@ -1194,6 +1309,7 @@ export function createMapModel(options = {}) {
         makeTimeLayer, clearTimeLayer, configureTime,
         findLayers, getLayer,
         hide, show, select, setLayersVisibility, setLayerFields,
+        setFeatureStyles, highlight,
         removeLayer, removeLayers, updateLayer,
         wireState, props,
         get layers() { return state.layers; },

@@ -10,6 +10,8 @@ export { createSwiftMap, sendLayerWrite } from "./core.js";
 export { createMapModel } from "./model.js";
 export { parseTimestamp, normalizeLayerTimes, isValidPeriod } from "./times.js";
 export { parseWKT, featuresOf } from "./geo.js";
+export { resolveStyles, normalizeStyle, popStyleOptions,
+         resolveFeatureLabels } from "./style.js";
 export { XYZ as BASEMAP_XYZ, PRESETS as BASEMAP_PRESETS, WMS as BASEMAP_WMS,
          DEFAULT_BASEMAPS, queryKey as basemapQueryKey } from "./basemap-catalog.js";
 export { mapColors, mapRadii, resolveColormap, registerColormap,

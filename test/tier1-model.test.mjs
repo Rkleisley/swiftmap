@@ -201,6 +201,76 @@ const SCENARIOS = {
               properties: { site: "Bravo", value: 55 } },
         ] }, { name: "Sites" }),
 
+    labels: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2],
+                             site: ["Alpha", null] }, { name: "Sites", label: "site" });
+        m.addPolygon([[36.0, -5.3], [36.0, -5.2], [36.1, -5.2]],
+                     { name: "Zone", label: "Restricted" });
+        return m;
+    },
+
+    style_column: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1, 36.2], lon: [-5.3, -5.2, -5.1],
+                             style: ["red", { color: "#00ff00", radius: 14 }, null] },
+                           { name: "Mixed" });
+        m.addCircleMarkers({ lat: [36.3, 36.4], lon: [-5.0, -4.9],
+                             style: ["blue", "blue"] }, { name: "Uniform" });
+        return m;
+    },
+
+    static_style: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1], lon: [-5.3, -5.2], style: ["red", "green"] },
+        { name: "Fixed", staticStyle: { color: "#123456" } }),
+
+    feature_style_ops: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2] }, { name: "Sites" });
+        m.setFeatureStyles("Sites", { 1: { color: "#ffcc00", radius: 14 } });
+        m.setFeatureStyles("Sites", {});
+        return m;
+    },
+
+    highlight: () => {
+        const m = createMapModel();
+        m.addCollection({ type: "FeatureCollection", features: [
+            { type: "Feature", geometry: { type: "Point", coordinates: [-5.3, 36.0] },
+              properties: { site: "A" } },
+            { type: "Feature", geometry: { type: "LineString",
+                                           coordinates: [[-5.3, 36.0], [-5.2, 36.1]] },
+              properties: { site: "B" } },
+            { type: "Feature", geometry: { type: "Polygon",
+                                           coordinates: [[[-5.3, 36.0], [-5.2, 36.0],
+                                                          [-5.2, 36.1], [-5.3, 36.0]]] },
+              properties: { site: "C" } },
+        ] }, { name: "Survey", layerGroup: "Field" });
+        m.addCircleMarkers([[36.5, -5.5]], { name: "Other" });
+        m.highlight("Survey", { color: "#ffcc00", markers: { radius: 14 },
+                                polygons: { fill_opacity: 0.5 } });
+        m.highlight("Other", { color: "#00ffff" });
+        return m;
+    },
+
+    styled_replace: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2],
+                             style: ["red", "yellow"] }, { name: "Feed" });
+        m.setFeatureStyles("Feed", { 0: { radius: 20 } });
+        m.updateLayer("Feed", { data: { lat: [36.2, 36.3, 36.4], lon: [-5.1, -5.0, -4.9],
+                                        style: ["green", null, "red"] } });
+        return m;
+    },
+
+    labels_append: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2],
+                             site: ["Alpha", "Bravo"] }, { name: "Feed", label: "site" });
+        m.updateLayer("Feed", { data: { lat: [36.2], lon: [-5.1], site: ["Charlie"] },
+                                append: true });
+        return m;
+    },
+
     mut_hide_show: () => {
         const m = createMapModel();
         m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2] }, { name: "Sites" });

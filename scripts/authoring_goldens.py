@@ -434,6 +434,80 @@ def scenario_points_geojson():
     return m
 
 
+def scenario_labels():
+    """label= as a column (a null row labels empty) and as a literal."""
+    m = Map(show_logo=False)
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                          "site": ["Alpha", None]}, name="Sites", label="site")
+    m.add_polygon([[36.0, -5.3], [36.0, -5.2], [36.1, -5.2]], name="Zone",
+                  label="Restricted")
+    return m
+
+
+def scenario_style_column():
+    """A `style` property column styles per feature; a uniform one collapses
+    back onto the layer and ships nothing extra."""
+    m = Map(show_logo=False)
+    m.add_circle_markers({"lat": [36.0, 36.1, 36.2], "lon": [-5.3, -5.2, -5.1],
+                          "style": ["red", {"color": "#00ff00", "radius": 14}, None]},
+                         name="Mixed")
+    m.add_circle_markers({"lat": [36.3, 36.4], "lon": [-5.0, -4.9],
+                          "style": ["blue", "blue"]}, name="Uniform")
+    return m
+
+
+def scenario_static_style():
+    """static_style overrides the data's style column outright."""
+    m = Map(show_logo=False)
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                          "style": ["red", "green"]},
+                         name="Fixed", static_style={"color": "#123456"})
+    return m
+
+
+def scenario_feature_style_ops():
+    """set_feature_styles: apply then clear, each a `style` op."""
+    m = Map(show_logo=False)
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2]}, name="Sites")
+    m.set_feature_styles("Sites", {1: {"color": "#ffcc00", "radius": 14}})
+    m.set_feature_styles("Sites", {})
+    return m
+
+
+def scenario_highlight():
+    """highlight states the whole selection: per-family styles over the shared
+    ones, and the previous highlight goes dark on the next call."""
+    m = Map(show_logo=False)
+    m.add_collection(FC_MIXED, name="Survey", layer_group="Field")
+    m.add_circle_markers([[36.5, -5.5]], name="Other")
+    m.highlight("Survey", color="#ffcc00", markers={"radius": 14},
+                polygons={"fill_opacity": 0.5})
+    m.highlight("Other", color="#00ffff")
+    return m
+
+
+def scenario_styled_replace():
+    """A data replace re-resolves the style column and clears feature overrides
+    (indices do not survive)."""
+    m = Map(show_logo=False)
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                          "style": ["red", "yellow"]}, name="Feed")
+    m.set_feature_styles("Feed", {0: {"radius": 20}})
+    m.update_layer("Feed", data={"lat": [36.2, 36.3, 36.4], "lon": [-5.1, -5.0, -4.9],
+                                 "style": ["green", None, "red"]})
+    return m
+
+
+def scenario_labels_append():
+    """An append ships the new labels in the append op's lists."""
+    m = Map(show_logo=False)
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                          "site": ["Alpha", "Bravo"]}, name="Feed", label="site")
+    m.update_layer("Feed", data={"lat": [36.2], "lon": [-5.1], "site": ["Charlie"]},
+                   append=True)
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -473,6 +547,13 @@ SCENARIOS = [
     scenario_multiline_wkt,
     scenario_line_fan_geojson,
     scenario_points_geojson,
+    scenario_labels,
+    scenario_style_column,
+    scenario_static_style,
+    scenario_feature_style_ops,
+    scenario_highlight,
+    scenario_styled_replace,
+    scenario_labels_append,
 ]
 
 
