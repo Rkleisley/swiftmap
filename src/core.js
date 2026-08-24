@@ -577,7 +577,15 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
     let contextLossTimer = null;
     function scheduleContextLossRebuild() {
         const now = Date.now();
-        contextLossCount = now - contextLossAt > 10000 ? 0 : contextLossCount + 1;
+        // One GPU bounce loses EVERY canvas in the same tick, and each canvas
+        // lands here -- the ladder advances per loss EVENT, not per canvas, with
+        // the pending timer as the coalescing signal, exactly as it already
+        // coalesces the rebuild itself. Counting canvases walked a four-canvas
+        // map to a 2 s delay on its very first loss and to the 30 s cap on the
+        // second (React round-5 report, gap N, measured to the rung).
+        if (contextLossTimer == null) {
+            contextLossCount = now - contextLossAt > 10000 ? 0 : contextLossCount + 1;
+        }
         contextLossAt = now;
         const delay = contextLossCount === 0 ? 50
             : Math.min(30000, 250 * 2 ** contextLossCount);

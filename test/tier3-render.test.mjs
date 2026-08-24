@@ -1385,6 +1385,33 @@ suite("the React example app renders the same map over the same core", async () 
     }, "/examples/react/index.html", ".leaflet-points-pane canvas");
 });
 
+suite("a whole-map GPU loss rebuilds every bucket in one rung", async () => {
+    // A real GPU process bounce fires webglcontextlost on every canvas in the
+    // same tick. The backoff ladder must advance once per EVENT, not once per
+    // canvas -- counting canvases delayed a multi-bucket map's very first
+    // recovery by seconds (round-5 gap N). Forced with WEBGL_lose_context,
+    // the same way the report measured it: pixels must be back well inside
+    // the first rung's window, not after a walked-up ladder.
+    await withPage(async (page, errors) => {
+        const mapArea = { x: 40, y: 60, width: 500, height: 400 };
+        await page.waitForTimeout(400);
+        const before = await page.screenshot({ clip: mapArea });
+        await page.evaluate(() => {
+            for (const canvas of document.querySelectorAll(".leaflet-pane canvas")) {
+                const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+                const ext = gl && gl.getExtension("WEBGL_lose_context");
+                if (ext) ext.loseContext();
+            }
+        });
+        await page.waitForTimeout(900);
+        const after = await page.screenshot({ clip: mapArea });
+        assert.equal(Buffer.compare(before, after), 0,
+            "every bucket redrew within the first rung -- per-canvas counting "
+            + "would still be waiting on a walked-up timer");
+        assert.deepEqual(errors, [], "no errors through loss and recovery");
+    }, "widget.html");
+});
+
 suite("destroying a map while its first sync is in flight leaves nothing behind", async () => {
     // The hazard the React host surfaced: a host may tear the map down (an
     // unmount, a throwaway mount) before the initial sync has added its GL layers.
