@@ -1,6 +1,7 @@
 # swiftmap examples
 
-One notebook per topic, simple at the top and deeper as it goes. Every dataset is
+One notebook per topic, simple at the top and deeper as it goes, plus a runnable app
+per stack (`shiny/`, `streamlit/`, `react/`). Every dataset is
 generated in-cell — nothing to download, every notebook runs top-to-bottom on its
 own. Numbered order is a reading journey for newcomers; each notebook also stands
 alone for anyone arriving with a task.
@@ -19,16 +20,30 @@ alone for anyone arriving with a task.
 | [10_ipywidgets](10_ipywidgets.ipynb) | Notebook-native reactivity: `observe`, `interact`, map traits driving widgets, layout, sizing — plus an honest findings section | `observe`, `batch`, `click_seq`, `time_current`, `height` |
 | [11_legend](11_legend.ipynb) | The auto-derived legend: ramps/bins/categories/size rows, scope and dimming, manual entries, persistent suppression, full takeover | `configure_legend`, `legend_add`, `legend_remove`, `legend_clear` |
 | [12_draw_aoi](12_draw_aoi.ipynb) | The draw toolbar: shapes coming back as GeoJSON, seeding AOIs from Python, filtering data against them | `configure_draw`, `drawings`, `draw_seq`, `clear_drawings` |
+| [13_imagery](13_imagery.ipynb) | Raster overlays authored in-cell: single band through colormaps, nodata transparency, and a UTM source landing on the same footprint as its 4326 twin | `add_imagery` |
 
-## Shiny apps
+## Apps, one per stack
 
-Apps cannot be notebooks; these run with `shiny run <file>` from `shiny/`:
+Apps cannot be notebooks. The Shiny ones run with `shiny run <file>` from `shiny/`:
 
 | App | What it shows |
 | --- | --- |
 | [shiny/01_basic_app.py](shiny/01_basic_app.py) | The build-once rule, `map_effect`, and a select-driven filter |
 | [shiny/02_linked_table.py](shiny/02_linked_table.py) | Table ↔ map both ways: row selection drives `select()`, clicks report back via `clicked_layer_id` |
 | [shiny/03_draw_filter.py](shiny/03_draw_filter.py) | Draw an AOI, filter the data: `draw_seq` + `drawings` feeding a table, a count, and a map spotlight |
+| [shiny/04_live_feed.py](shiny/04_live_feed.py) | A timer-driven feed: `update_layer(append=True)` grows layers in place, so a sidebar choice and the time slider survive every tick |
+
+Streamlit — `streamlit run streamlit/app.py`:
+
+| App | What it shows |
+| --- | --- |
+| [streamlit/app.py](streamlit/app.py) | The bidirectional component: `st_swiftmap` returning clicks, draws and viewport on every rerun, with the map built once under `@st.cache_resource` |
+
+React — `npm run build`, then serve `react/index.html`:
+
+| App | What it shows |
+| --- | --- |
+| [react/app.jsx](react/app.jsx) | `<SwiftMap>` authored entirely through `createMapModel` — the JS authoring surface held byte-identical to Python's — with callbacks and a live feed |
 
 ## Conventions
 

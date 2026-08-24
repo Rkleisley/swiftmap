@@ -10,11 +10,17 @@ controls; deck.gl scales but is a different mental model with a thin Python laye
 swiftmap keeps the Leaflet mental model, adds WebGL scale, hierarchical layer controls,
 and bidirectional Python sync.
 
-It runs anywhere `anywidget` runs — JupyterLab, Jupyter Notebook, VS Code — and is
-first-class in **Shiny for Python**, where map state (viewport, visibility, clicks,
-the time slider) syncs reactively in both directions. A finished map also exports to
-a single static HTML file that opens with no backend at all — see
+One rendering core serves four stacks: **notebooks** (anywhere `anywidget` runs —
+JupyterLab, Jupyter Notebook, VS Code), **[Shiny for Python](#quick-start-shiny)**,
+**[React](#react)**, and **[Streamlit](#streamlit)** — with map state (viewport,
+visibility, clicks, draws, the time slider) syncing reactively in both directions
+wherever there is a Python side to sync with. A finished map also exports to a single
+static HTML file that opens with no backend at all — see
 [Sharing a map](#sharing-a-map-one-static-file).
+
+**Everything runs offline.** Leaflet, glify and Leaflet-Geoman ride inside the bundle
+that ships in the wheel, so nothing is fetched when a map is viewed — on an air-gapped
+network the wheel is the whole story.
 
 ---
 
@@ -29,8 +35,9 @@ pip install -e .
 Required: `anywidget`, `numpy`, and `xyzservices` (the tile-provider catalogue behind
 name-callable basemaps — pure metadata, no compiled bits). Pandas, Polars, GeoPandas,
 and geostructures are all supported as data sources but none is a dependency — swiftmap
-parses whatever you have installed. The bundled JavaScript ships with the package, so installing never
-requires Node.
+parses whatever you have installed. The bundled JavaScript ships with the package, so
+installing never requires Node — and its map libraries are bundled in, so viewing never
+reaches the network either.
 
 ---
 
@@ -123,11 +130,12 @@ rejects the map argument at decoration time).
 | --- | --- | --- |
 | `add_markers` | Pin icons | Custom GLSL shader — anti-aliased pins with drop shadows, at scale |
 | `add_circle_markers` | Circle points | `radius` in **pixels**; the cheaper primitive, better default for many points |
-| `add_line` / `add_polyline` | Polylines | Long-format rows (`line_id_col`, `order_col`), WKT, GeoJSON, GeoPandas... |
+| `add_line` / `add_polyline` | Polylines | Long-format rows (`line_id_col`, `order_col`), WKT, GeoJSON, GeoPandas... A MultiLineString is one layer drawn as disjoint parts |
 | `add_polygon` (+ `add_polygons`, `add_shape`, `add_shapes`) | Polygons | Interior holes and MultiPolygons render correctly; one MultiPolygon is one layer |
 | `add_circle` | Geodesic circle | Center plus `radius` in **meters** — note the unit difference from circle markers |
 | `add_collection` (aliases `add_geojson`, `add_geostructures`) | Every kind in a mixed dataset | One layer per geometry kind, merged under a single sidebar entry; points render as circle markers unless `point_type="markers"` |
 | `add_basemap` | Tile layer | Any xyzservices catalogue name (~880 providers), a WMS registry name or raw WMS endpoint, or a raw `{z}/{x}/{y}` template — see [Basemaps](#basemaps) |
+| `add_imagery` | Georeferenced raster overlay | Anything GDAL reads, warped into the map's CRS; single band through the house colormaps — see [Imagery](#imagery); requires `rasterio` (optional) |
 
 Every `add_*` method accepts the same range of inputs:
 
@@ -138,6 +146,8 @@ Every `add_*` method accepts the same range of inputs:
 - **GeoPandas** GeoDataFrames and GeoSeries
 - **geostructures** shapes, `FeatureCollection`s, and `Track`s
 - **GeoJSON** dicts or strings
+- **A bare geometry** — a WKT string (`m.add_polygon("POLYGON ((...))")`), a shapely
+  geometry, or a geostructures shape — straight in, no table around it
 - **Raw lists and dicts** of coordinates, with a range-based heuristic for axis order
   (`coord_order="lat_lon"`/`"lon_lat"` to state it explicitly; WKT and GeoJSON declare
   their own order and are never guessed at)
@@ -246,10 +256,17 @@ m.add_polygon(districts, name="Districts",
   continuous ramp. Missing values (NaN) paint as the layer's base color.
 - **Non-numeric columns** are categories: each distinct value takes a palette colour
   automatically. Naming a sequential colormap instead spreads it evenly across the
-  categories.
+  categories. To say exactly which value gets which colour — and the order the legend
+  reads in — pass a mapping: `colormap={"high": "#d7191c", "medium": "#fdae61",
+  "low": "#1a9641"}`; a value the mapping does not name takes the layer colour, and
+  every value it does name is listed in the legend whether or not the data carries it
+  yet, so a feed's legend holds still as it fills in.
 - **Colormaps:** `viridis` (default), `plasma`, `inferno`, `magma`, `turbo`, `coolwarm`,
   `blues`, `reds`, `greens`, `greys`; categorical palette `swift10`. They are small anchor
-  tables interpolated in RGB — matplotlib-faithful with no matplotlib dependency.
+  tables interpolated in RGB — matplotlib-faithful with no matplotlib dependency. Bring
+  your own too: a list of colours, a callable `t -> colour` (a matplotlib `Colormap`
+  object works as-is), or `"matplotlib:cividis"` when matplotlib is installed; and
+  `swiftmap.register_colormap("corp", [...])` makes a name of it for every call.
 - **`radius_col`** sizes points so *area* is proportional to the value (radius grows with
   the square root) — a doubled value looks doubled, not quadrupled — across
   `radius_range` pixels, default `(3, 18)`.
@@ -296,6 +313,21 @@ m.configure_scale(units="nautical")     # metric (default) | imperial | both | n
 It measures through the map's CRS — Leaflet's own control underneath, so there is no
 pixel math of swiftmap's to get wrong — and exports carry it.
 
+## Logo card
+
+Off by default, and the branding is yours — swiftmap ships none:
+
+```python
+m.configure_logo(company="assets/logo.png",          # URL, data URI, or a local file
+                 parent_company={"url": "...", "alt": "Parent"},
+                 position="bottom-right", height=35, show=True)
+```
+
+A local file is read and embedded as a data URI, so it survives a static export and a
+machine with no route to the file's home. A slot you never set does not render, and
+`False` clears one. Corner positions, like the draw toolbar — mind that the legend
+defaults to the same bottom-left corner.
+
 ---
 
 ## The sidebar: hierarchy from your data
@@ -330,6 +362,20 @@ m.set_feature_styles("Sites", {12: {"color": "#ffcc00"}})     # one feature, by 
 m.fit_bounds(m.bounds_of(["Dwell 3", "Dwell 7"]), zoom_offset=-1)
 ```
 
+A layer's **data** updates in place too, and that is the live-feed primitive: the layer
+keeps its id, name, folder, visibility, time animation and highlight while its points
+change under it. `append=True` grows a point layer with the new rows instead:
+
+```python
+m.update_layer("Feed", data=latest_df)                # replace the data
+m.update_layer("Feed", data=new_rows, append=True)    # grow it
+```
+
+`color_col`/`radius_col`, labels, the legend and bounds re-derive from the new data; a
+refresh never moves a viewport you have chosen. One limitation for now: a layer that was
+fanned out from a column (`name=<column>`, `layer_group=[..., <column>]`) is one of several
+siblings and warns rather than guessing how to re-fan.
+
 `select` and `highlight` are declarative and total: each call states the complete
 selection, so switching needs no undoing and `select(None)` / `highlight(None)` restores
 a clean slate. Highlights and per-feature overrides sit in fields of their own above the
@@ -361,8 +407,8 @@ aoi = m.drawings[0]["geometry"]          # after the analyst draws one
 
 The trait syncs both ways: setting `m.drawings` from Python seeds AOIs onto the map,
 `clear_drawings()` empties it, and exports carry the drawings and the toolbar with
-them. The drawing engine (Leaflet-Geoman) loads from unpkg at view time, the same
-way Leaflet and glify do.
+them. The drawing engine (Leaflet-Geoman) is bundled like Leaflet and glify, so the
+toolbar works with no network.
 
 ---
 
@@ -376,6 +422,12 @@ geostructures `Track` already records — so nothing extra is passed in:
 m.add_circle_markers(df, name="Vessel")          # df has a timestamp column
 m.make_time_layer("Vessel", period="PT1H")
 ```
+
+Ticks land on period boundaries — 04:00, 05:00 for `PT1H`, not 03:17, 04:17 — so the
+slider reads in round numbers, and data arriving *earlier* than everything before it
+only adds ticks at the front instead of shifting every existing one. Wherever the
+playhead is, it stays there: it is an absolute moment, not an index into a series that
+can move underneath it.
 
 The automatic probe checks the usual names (`times`, `datetime_start`/`datetime_end`,
 `timestamp`, `datetime`, `time`, `date`). When your column is called something else —
@@ -461,6 +513,113 @@ zones, not point clouds — so the point builders warn past a thousand.
 
 ---
 
+## React
+
+The same map as a component. `swiftmap-core/react` exports `<SwiftMap>`, one more host
+over the core the notebook widget and the static export use — not a second renderer:
+
+```jsx
+import { SwiftMap } from "swiftmap-core/react";
+// plus leaflet.css, leaflet-geoman.css and swiftmap-core/swiftmap.css from your bundler
+
+<SwiftMap ref={mapRef} layers={layers} buffers={buffers} center={[36.05, -5.25]} zoom={12}
+          showLegend timeConfig={{ period: "P1D" }}
+          onViewChange={...} onLayerToggle={...} onFeatureClick={...}
+          onDrawChange={...} onTimeChange={...} />
+```
+
+Props are the same configs the Python side builds (`layers`, binary `buffers`, the
+legend/time/draw/scale/logo configs); the callbacks are the core's write-backs; and
+`mapRef.current.applyPatch(ops, buffers)` is the widget's own incremental path — a live
+feed's `buffer_append`/`append` ops land exactly as they do from Python. `react`,
+`leaflet`, `leaflet.glify` and Leaflet-Geoman are peer dependencies your bundler owns.
+`examples/react/` is the working example, and tier 3 drives it.
+
+Building layers in JS no longer means hand-writing configs -- `createMapModel`
+is the same authoring surface Python has, held byte-identical to it by a
+conformance suite:
+
+```js
+import { createMapModel } from "swiftmap-core";
+
+const model = createMapModel();
+model.addCircleMarkers({ lat, lon, site, value }, { name: "Sites" });
+model.addPolygon(ring, { name: "Zone", fillColor: "#00ff00" });
+
+<SwiftMap {...model.props()} />
+```
+
+Same defaults, same folder seeding, same merge rule (same name + same folder
+becomes one collection), same auto-fit -- because a golden-fixture suite pins the
+JS output (state, buffers, and the op stream) byte-identical to what Python's
+`Map` produces for the same inputs. The whole surface is there: data-driven
+colour and size with their legend blocks (`colorCol`, `radiusCol`), WKT strings
+and GeoJSON straight into the builders (`addPolygon("POLYGON ((...))")`, holes
+and multi-parts included; several features fan into numbered layers),
+`addCollection`, `findLayers` / `select` / `hide` / `show` / `updateLayer`
+(attributes, replace, and the append delta), `makeTimeLayer` / `configureTime`,
+and `addBasemap` over a catalogue generated from the same registry Python
+resolves. Every mutation emits the ops Python's transport emits
+(`model.subscribe`), so a live feed drives the map through
+`useSwiftMapFeed(model, mapRef)` from `swiftmap-core/react` -- one state model,
+wire cost of the batch -- while `useSwiftMapModel` covers the
+mutate-then-snapshot shape. `examples/react/` is authored entirely through the
+model. Not in JS yet: labels, feature styles/highlight, imagery, and
+column-driven point fan-out.
+
+Hand-building configs and buffers anyway? The contract, which nothing else documents:
+
+| buffer key | dtype | stride |
+|---|---|---|
+| `<id>` | Float64 | 2 per vertex, **lat then lon** (the reverse of GeoJSON/WKT order) |
+| `<id>::colors` | Uint8 | 4 per point, RGBA |
+| `<id>::radii` | Float32 | 1 per point, pixels |
+| `<id>::times` | Float64 | 2 per feature, `[start, end]` epoch **milliseconds** (never seconds) |
+
+Multi-ring polygons carry `rings: [[5, 5], [5]]` — parts → ring vertex counts,
+concatenated into one flat buffer, first ring of each part the outer boundary and the
+rest holes; a single plain ring omits the key. Multi-part lines carry `parts` (vertex
+counts per part). Two layers added with the same `name` **and** `layer_group` merge
+into one `type: "group"` entry with the members nested under `layers` — one sidebar
+entry, selected as one unit — and the group has an id of its own. A map given layers
+but no `center`/`zoom` opens fitted to their bounds, exactly as `Map()` does in Python.
+Malformed configs no longer fail silently: the core warns on unknown types,
+buffer/count mismatches, desynced property columns, seconds-shaped times, and `append`
+ops whose `base` disagrees with the layer (`collectLayerProblems` exports the same
+checks for linting up front).
+
+## Streamlit
+
+The fourth stack, and a bidirectional one: `st_swiftmap` renders the map as a
+Streamlit component and returns what the viewer did — clicks, draws, the viewport,
+the time slider, layer toggles — on every rerun.
+
+```python
+import streamlit as st
+from swiftmap import Map
+from swiftmap.streamlit import st_swiftmap
+
+@st.cache_resource
+def build():
+    m = Map(height="600px")
+    m.add_circle_markers(df, name="Sensors", color_col="reading")
+    return m
+
+events = st_swiftmap(build(), key="map")
+if events["clicked_layer_id"]:
+    st.write(events["clicked_layer_id"], events["selected_index"])
+aoi = events["drawings"]
+```
+
+Build the map once — `@st.cache_resource`, or `st.session_state` when each session
+mutates its own — and let the component decide: every call carries a change
+fingerprint, so a rerun that changed nothing costs the frontend a comparison, not a
+rebuild. The returned dict always has the same keys, empty before anyone has
+interacted. The component ships Leaflet, glify and Geoman bundled inside the wheel, like the widget
+and the export do — no stack needs a network. `pip install swiftmap[streamlit]`;
+`st.components.v1.html(m.to_html())` remains the static, no-interaction embed.
+`examples/streamlit/app.py` is the working app.
+
 ## Sharing a map: one static file
 
 ```python
@@ -472,8 +631,8 @@ configs, every coordinate/time/style buffer (base64, so expect roughly 4/3 of th
 binary size), the widget bundle and its CSS. Hand the file to anyone: it opens from disk
 or a static file host with no Python, no kernel, no server. The sidebar and time playback
 work fully client-side, and the automatic fit rides along so the file opens framed on its
-data. One caveat: Leaflet and glify load from unpkg when the file is opened, the same way
-the live widget loads them, so *viewing* needs internet (or your own vendored bundle).
+data. It is genuinely self-contained: Leaflet, glify and Geoman are inside the file too,
+so it opens on a machine that has never had a network.
 
 `to_html()` returns the same document as a string, which is also the Streamlit story:
 
