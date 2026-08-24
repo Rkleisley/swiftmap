@@ -32,6 +32,13 @@ class LayerConfig:
     def __contains__(self, key):
         return key in self.__dict__
 
+    def keys(self):
+        # dict(layer) and {**layer} read keys() then __getitem__. Without this,
+        # __getattr__ answered `keys` with None -- like any unknown attribute --
+        # and the failure was "'NoneType' object is not callable", a long way
+        # from the cause.
+        return self.__dict__.keys()
+
 _STATIC_DIR = pathlib.Path(__file__).parent / "static"
 
 

@@ -556,3 +556,14 @@ def test_drawings_seed_and_clear_from_python():
     assert m.drawings[0]["geometry"]["type"] == "Polygon"
     m.clear_drawings()
     assert m.drawings == []
+
+
+def test_a_layer_config_supports_the_dict_protocol():
+    # dict(layer) and {**layer} failed with "'NoneType' object is not callable":
+    # __getattr__ answered `keys` with None like any unknown attribute.
+    m = Map()
+    m.add_circle_markers([[36.0, -5.3]], name="Sites")
+    layer = m.find_layers("Sites")[0]
+    as_dict = dict(layer)
+    assert as_dict == layer.to_dict()
+    assert {**layer}["name"] == "Sites"
