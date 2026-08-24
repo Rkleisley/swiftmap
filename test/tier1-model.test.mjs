@@ -100,6 +100,67 @@ const SCENARIOS = {
         return m;
     },
 
+    time_points: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1, 36.2], lon: [-5.3, -5.2, -5.1],
+                             timestamp: ["2026-01-01T00:00:00", "2026-01-02T12:30:00Z", null] },
+                           { name: "Feed" });
+        m.makeTimeLayer("Feed", { period: "PT1H" });
+        return m;
+    },
+
+    time_epoch_pairs: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2],
+                             datetime_start: [1767225600, 1767312000],
+                             datetime_end: [1767229200, 1767315600] },
+                           { name: "Dwells" });
+        m.makeTimeLayer("Dwells", { duration: "PT2H", fade: true });
+        return m;
+    },
+
+    time_clear: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2], value: [1.0, 9.0],
+                             timestamp: ["2026-01-01T00:00:00", "2026-01-02T00:00:00"] },
+                           { name: "Feed", colorCol: "value" });
+        m.makeTimeLayer("Feed", { period: "P1D" });
+        m.clearTimeLayer("Feed");
+        return m;
+    },
+
+    time_append: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2],
+                             timestamp: ["2026-01-01T00:00:00", "2026-01-02T00:00:00"] },
+                           { name: "Feed" });
+        m.makeTimeLayer("Feed", { period: "P1D" });
+        m.updateLayer("Feed", { data: { lat: [36.2], lon: [-5.1],
+                                        timestamp: ["2026-01-03T00:00:00"] },
+                                append: true });
+        return m;
+    },
+
+    time_config: () => createMapModel().configureTime(
+        { period: "PT15M", speed: 2, loop: true, window: "PT2H30M",
+          position: "bottom-center" }),
+
+    basemap_names: () => {
+        const m = createMapModel();
+        m.addBasemap("CartoDB positron", { visible: true });
+        m.addBasemap("Esri.WorldImagery");
+        m.addBasemap("OpenTopoMap");
+        return m;
+    },
+
+    basemap_wms: () => createMapModel().addBasemap("usgs imagery wms"),
+
+    basemap_url: () => createMapModel().addBasemap(
+        "https://tiles.example.test/{z}/{x}/{y}.png",
+        { attribution: "Example tiles", maxZoom: 19 }),
+
+    crs_4326_defaults: () => createMapModel({ crs: "EPSG:4326" }),
+
     mut_hide_show: () => {
         const m = createMapModel();
         m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2] }, { name: "Sites" });

@@ -1,0 +1,284 @@
+{
+ "buffers": {
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
+  "layer_2::colors": "RAFU//3nJf8="
+ },
+ "doc": "clear_time_layer removes the animation and ONLY the ::times buffer.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": "RAFU//3nJf8=",
+   "op": {
+    "id": "layer_2::colors",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.1,
+       -5.2
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Circle Markers Group",
+     "legend": {
+      "anchors": [
+       "#440154",
+       "#482878",
+       "#3e4989",
+       "#31688e",
+       "#26828e",
+       "#1f9e89",
+       "#35b779",
+       "#6ece58",
+       "#b5de2b",
+       "#fde725"
+      ],
+      "field": "value",
+      "kind": "ramp",
+      "vmax": 9,
+      "vmin": 1
+     },
+     "name": "Feed",
+     "opacity": 1.0,
+     "properties": {
+      "timestamp": [
+       "2026-01-01T00:00:00",
+       "2026-01-02T00:00:00"
+      ],
+      "value": [
+       1.0,
+       9.0
+      ]
+     },
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AACAqm23eUIAAICqbbd5QgAAQBDAt3lCAABAEMC3eUI=",
+   "op": {
+    "id": "layer_2::times",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "time": {
+      "duration": "period",
+      "field": "timestamp"
+     }
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "time": null
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "id": "layer_2::times",
+    "op": "buffer_remove"
+   }
+  }
+ ],
+ "scenario": "time_clear",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.3
+    ],
+    [
+     36.1,
+     -5.2
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 1,
+   "zoom_offset": 0
+  },
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Circle Markers Group": {
+    "multi_select": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 20,
+    "max_zoom": 22,
+    "name": "Dark Matter",
+    "subdomains": "abcd",
+    "type": "basemap",
+    "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.3
+     ],
+     [
+      36.1,
+      -5.2
+     ]
+    ],
+    "color": "#3388ff",
+    "fillColor": "#3388ff",
+    "fillOpacity": 0.2,
+    "id": "layer_2",
+    "layer_group": "Circle Markers Group",
+    "legend": {
+     "anchors": [
+      "#440154",
+      "#482878",
+      "#3e4989",
+      "#31688e",
+      "#26828e",
+      "#1f9e89",
+      "#35b779",
+      "#6ece58",
+      "#b5de2b",
+      "#fde725"
+     ],
+     "field": "value",
+     "kind": "ramp",
+     "vmax": 9,
+     "vmin": 1
+    },
+    "name": "Feed",
+    "opacity": 1.0,
+    "properties": {
+     "timestamp": [
+      "2026-01-01T00:00:00",
+      "2026-01-02T00:00:00"
+     ],
+     "value": [
+      1.0,
+      9.0
+     ]
+    },
+    "radius": 10,
+    "time": null,
+    "type": "circle_markers",
+    "visible": true,
+    "weight": 3
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {
+   "period": "P1D"
+  },
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

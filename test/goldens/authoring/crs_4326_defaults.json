@@ -1,0 +1,67 @@
+{
+ "buffers": {},
+ "doc": "EPSG:4326 seeds its own default basemap row.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 15,
+     "max_zoom": 15,
+     "name": "Esri WGS84",
+     "type": "basemap",
+     "url": "https://wi.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+     "visible": true
+    },
+    "op": "add"
+   }
+  }
+ ],
+ "scenario": "crs_4326_defaults",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:4326",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {},
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 15,
+    "max_zoom": 15,
+    "name": "Esri WGS84",
+    "type": "basemap",
+    "url": "https://wi.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "visible": true
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {},
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

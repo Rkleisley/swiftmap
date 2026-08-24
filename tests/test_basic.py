@@ -578,3 +578,21 @@ def test_a_lines_properties_constant_survives_a_data_update():
                properties={"vessel": "Swift One"})
     m.update_layer("Track", data=[[36.0, -5.3], [36.2, -5.1]])
     assert m.find_layers("Track")[0].get("properties") == {"vessel": "Swift One"}
+
+
+def test_clear_time_layer_keeps_the_layers_other_buffers():
+    # clear_time_layer passed layer IDS to the buffer sweep, which removes
+    # everything under an id -- the coordinate and colour buffers went with the
+    # animation and the layer vanished client-side.
+    m = Map()
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                          "value": [1.0, 9.0],
+                          "timestamp": ["2026-01-01T00:00:00", "2026-01-02T00:00:00"]},
+                         name="Feed", color_col="value")
+    m.make_time_layer("Feed", period="P1D")
+    layer_id = m.find_layers("Feed")[0]["id"]
+    assert f"{layer_id}::times" in m.coordinate_buffers
+    m.clear_time_layer("Feed")
+    assert f"{layer_id}::times" not in m.coordinate_buffers, "the animation went"
+    assert layer_id in m.coordinate_buffers, "the coordinates stayed"
+    assert f"{layer_id}::colors" in m.coordinate_buffers, "the colours stayed"

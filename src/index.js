@@ -7,7 +7,10 @@
 // pieces it is built from, for consumers that compose their own.
 
 export { createSwiftMap, sendLayerWrite } from "./core.js";
-export { createMapModel, DEFAULT_BASEMAPS } from "./model.js";
+export { createMapModel } from "./model.js";
+export { parseTimestamp, normalizeLayerTimes, isValidPeriod } from "./times.js";
+export { XYZ as BASEMAP_XYZ, PRESETS as BASEMAP_PRESETS, WMS as BASEMAP_WMS,
+         DEFAULT_BASEMAPS, queryKey as basemapQueryKey } from "./basemap-catalog.js";
 export { mapColors, mapRadii, resolveColormap, registerColormap,
          dataDrivenLegend, COLORMAPS, CATEGORICAL_PALETTES } from "./colormaps.js";
 export { createHostStub } from "./host.js";

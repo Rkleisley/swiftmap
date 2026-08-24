@@ -1,0 +1,125 @@
+{
+ "buffers": {},
+ "doc": "A raw tile template is its own definition.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "Example tiles",
+     "id": "layer_2",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 19,
+     "name": "https://tiles.example.test/{z}/{x}/{y}.png",
+     "type": "basemap",
+     "url": "https://tiles.example.test/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  }
+ ],
+ "scenario": "basemap_url",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {},
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 20,
+    "max_zoom": 22,
+    "name": "Dark Matter",
+    "subdomains": "abcd",
+    "type": "basemap",
+    "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "visible": false
+   },
+   {
+    "attribution": "Example tiles",
+    "id": "layer_2",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 19,
+    "name": "https://tiles.example.test/{z}/{x}/{y}.png",
+    "type": "basemap",
+    "url": "https://tiles.example.test/{z}/{x}/{y}.png",
+    "visible": false
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {},
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

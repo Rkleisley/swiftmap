@@ -281,6 +281,94 @@ def scenario_radius_col():
     return m
 
 
+def scenario_time_points():
+    """A timestamp column animates the layer: ::times packed (a null row stays
+    timeless -- NaN bytes), the meta set, the period on the shared config."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2], "lon": [-5.3, -5.2, -5.1],
+         "timestamp": ["2026-01-01T00:00:00", "2026-01-02T12:30:00Z", None]},
+        name="Feed")
+    m.make_time_layer("Feed", period="PT1H")
+    return m
+
+
+def scenario_time_epoch_pairs():
+    """Detected start/end epoch-second columns: the s->ms rule, the pair field,
+    a fixed duration, fade."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+         "datetime_start": [1767225600, 1767312000],
+         "datetime_end": [1767229200, 1767315600]},
+        name="Dwells")
+    m.make_time_layer("Dwells", duration="PT2H", fade=True)
+    return m
+
+
+def scenario_time_clear():
+    """clear_time_layer removes the animation and ONLY the ::times buffer."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1], "lon": [-5.3, -5.2], "value": [1.0, 9.0],
+         "timestamp": ["2026-01-01T00:00:00", "2026-01-02T00:00:00"]},
+        name="Feed", color_col="value")
+    m.make_time_layer("Feed", period="P1D")
+    m.clear_time_layer("Feed")
+    return m
+
+
+def scenario_time_append():
+    """Appending to a timed layer ships the ::times tail with the coordinates."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+         "timestamp": ["2026-01-01T00:00:00", "2026-01-02T00:00:00"]},
+        name="Feed")
+    m.make_time_layer("Feed", period="P1D")
+    m.update_layer("Feed", data={"lat": [36.2], "lon": [-5.1],
+                                 "timestamp": ["2026-01-03T00:00:00"]}, append=True)
+    return m
+
+
+def scenario_time_config():
+    """configure_time merges validated options into the shared config."""
+    m = Map(show_logo=False)
+    m.configure_time(period="PT15M", speed=2, loop=True, window="PT2H30M",
+                     position="bottom-center")
+    return m
+
+
+def scenario_basemap_names():
+    """Aliases, canonical dots and bare names all resolve; a second visible
+    basemap in the radio group starts hidden."""
+    m = Map(show_logo=False)
+    m.add_basemap("CartoDB positron", visible=True)
+    m.add_basemap("Esri.WorldImagery")
+    m.add_basemap("OpenTopoMap")
+    return m
+
+
+def scenario_basemap_wms():
+    """A WMS registry entry by alias: the canonical name, the wms request block."""
+    m = Map(show_logo=False)
+    m.add_basemap("usgs imagery wms")
+    return m
+
+
+def scenario_basemap_url():
+    """A raw tile template is its own definition."""
+    m = Map(show_logo=False)
+    m.add_basemap("https://tiles.example.test/{z}/{x}/{y}.png",
+                  attribution="Example tiles", max_zoom=19)
+    return m
+
+
+def scenario_crs_4326_defaults():
+    """EPSG:4326 seeds its own default basemap row."""
+    return Map(show_logo=False, crs="EPSG:4326")
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -306,6 +394,15 @@ SCENARIOS = [
     scenario_mut_update_append_tail,
     scenario_mut_update_append_full,
     scenario_mut_update_line,
+    scenario_time_points,
+    scenario_time_epoch_pairs,
+    scenario_time_clear,
+    scenario_time_append,
+    scenario_time_config,
+    scenario_basemap_names,
+    scenario_basemap_wms,
+    scenario_basemap_url,
+    scenario_crs_4326_defaults,
 ]
 
 

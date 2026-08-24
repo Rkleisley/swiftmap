@@ -1,0 +1,221 @@
+{
+ "buffers": {
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTA",
+  "layer_2::times": "AACAqm23eUIAAICqbbd5QgAAlPrqt3lCAACU+uq3eUIAAAAAAAD4fwAAAAAAAPh/"
+ },
+ "doc": "A timestamp column animates the layer: ::times packed (a null row stays\n    timeless -- NaN bytes), the meta set, the period on the shared config.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTA",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.2,
+       -5.1
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Circle Markers Group",
+     "name": "Feed",
+     "opacity": 1.0,
+     "properties": {
+      "timestamp": [
+       "2026-01-01T00:00:00",
+       "2026-01-02T12:30:00Z",
+       null
+      ]
+     },
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AACAqm23eUIAAICqbbd5QgAAlPrqt3lCAACU+uq3eUIAAAAAAAD4fwAAAAAAAPh/",
+   "op": {
+    "id": "layer_2::times",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "time": {
+      "duration": "period",
+      "field": "timestamp"
+     }
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  }
+ ],
+ "scenario": "time_points",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.3
+    ],
+    [
+     36.2,
+     -5.1
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 1,
+   "zoom_offset": 0
+  },
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Circle Markers Group": {
+    "multi_select": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 20,
+    "max_zoom": 22,
+    "name": "Dark Matter",
+    "subdomains": "abcd",
+    "type": "basemap",
+    "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.3
+     ],
+     [
+      36.2,
+      -5.1
+     ]
+    ],
+    "color": "#3388ff",
+    "fillColor": "#3388ff",
+    "fillOpacity": 0.2,
+    "id": "layer_2",
+    "layer_group": "Circle Markers Group",
+    "name": "Feed",
+    "opacity": 1.0,
+    "properties": {
+     "timestamp": [
+      "2026-01-01T00:00:00",
+      "2026-01-02T12:30:00Z",
+      null
+     ]
+    },
+    "radius": 10,
+    "time": {
+     "duration": "period",
+     "field": "timestamp"
+    },
+    "type": "circle_markers",
+    "visible": true,
+    "weight": 3
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {
+   "period": "PT1H"
+  },
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

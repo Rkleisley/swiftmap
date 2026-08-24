@@ -35,24 +35,16 @@
 import { layersBoundsUnion } from "./utils.js";
 import { resolveColormap, dataDrivenColors, dataDrivenRadii,
          dataDrivenLegend, dataDrivenSizeLegend } from "./colormaps.js";
+import { isValidPeriod, normalizeLayerTimes } from "./times.js";
+import { XYZ, ALIASES as BASEMAP_ALIASES, PRESETS, WMS,
+         DEFAULT_BASEMAPS, queryKey } from "./basemap-catalog.js";
 
-// What Python seeds every map with (basemap_registry.DEFAULT_BASEMAPS): OSM
-// visible, Dark Matter hidden, radio-grouped. The full name-callable catalogue
-// is a later stage; these two are the contract every map starts from.
-export const DEFAULT_BASEMAPS = [
-    {
-        name: "Open Street Map",
-        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
-        max_native_zoom: 19, max_zoom: 22, visible: true,
-    },
-    {
-        name: "Dark Matter",
-        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
-        max_native_zoom: 20, max_zoom: 22, subdomains: "abcd", visible: false,
-    },
-];
+// Mirrors TIME_POSITIONS in swiftmap/mapops/time.py and POSITIONS in
+// src/timecontrol.js; the sets must not drift.
+const TIME_POSITIONS = new Set([
+    "top-left", "top-center", "top-right", "left-center", "right-center",
+    "bottom-left", "bottom-center", "bottom-right",
+]);
 
 // An option under either naming convention: the JS surface takes camelCase, the
 // wire and anyone porting Python code takes snake_case, both mean the same thing.
@@ -186,13 +178,14 @@ export function createMapModel(options = {}) {
 
     // --- the rules Python's _add_child applies -------------------------------------
 
-    function ensureGroupConfig(group, multiSelect) {
+    function ensureGroupConfig(group, multiSelect, fallback = true) {
         const existing = state.group_configs[group];
         const isNew = !existing || existing.multi_select === undefined;
         if (isNew || multiSelect !== undefined) {
             state.group_configs = {
                 ...state.group_configs,
-                [group]: { ...existing, multi_select: multiSelect !== undefined ? multiSelect : true },
+                [group]: { ...existing,
+                           multi_select: multiSelect !== undefined ? multiSelect : fallback },
             };
         }
     }
@@ -455,6 +448,202 @@ export function createMapModel(options = {}) {
         return model;
     }
 
+    // The name-callable basemap surface, resolved through the GENERATED
+    // catalogue (src/basemap-catalog.js): presets first, then the WMS registry
+    // (case-insensitive, aliases included, displaying the canonical name), then
+    // raw URL templates (a WMS endpoint when wmsLayers says so), then the xyz
+    // catalogue with Python's aliases and query_name tolerance.
+    function addBasemap(name, options = {}) {
+        const layerGroup = opt(options, "layerGroup", "layer_group", "Basemaps");
+        const multiSelect = opt(options, "multiSelect", "multi_select",
+            opt(options, "groupMultiSelect", "group_multi_select"));
+        const visible = options.visible !== undefined ? options.visible : false;
+        const wmsLayers = opt(options, "wmsLayers", "wms_layers");
+        let url, attribution, maxZoom, maxNativeZoom;
+        let subdomains = null, wms = null, displayName = name;
+        const preset = PRESETS[name];
+        const wmsEntry = preset ? null : WMS[String(name).toLowerCase()];
+        if (preset) {
+            ({ url, attribution, max_zoom: maxZoom, max_native_zoom: maxNativeZoom } = preset);
+        } else if (wmsEntry) {
+            url = wmsEntry.url;
+            displayName = wmsEntry.name;
+            attribution = wmsEntry.attribution;
+            maxZoom = wmsEntry.max_zoom;
+            maxNativeZoom = wmsEntry.max_native_zoom !== undefined
+                ? wmsEntry.max_native_zoom : maxZoom;
+            wms = { layers: wmsEntry.layers, format: wmsEntry.format,
+                    version: wmsEntry.version, transparent: wmsEntry.transparent };
+            if (wmsEntry.styles) wms.styles = wmsEntry.styles;
+        } else if (String(name).startsWith("http://") || String(name).startsWith("https://")
+                   || String(name).includes("{")) {
+            url = name;
+            attribution = opt(options, "attribution", "attribution", "");
+            maxZoom = opt(options, "maxZoom", "max_zoom", 22);
+            maxNativeZoom = opt(options, "maxNativeZoom", "max_native_zoom",
+                                wmsLayers ? maxZoom : 19);
+            if (wmsLayers) {
+                wms = { layers: wmsLayers,
+                        format: opt(options, "wmsFormat", "wms_format", "image/png"),
+                        version: opt(options, "wmsVersion", "wms_version", "1.1.1"),
+                        transparent: opt(options, "wmsTransparent", "wms_transparent", false) };
+            }
+        } else {
+            const entry = XYZ[queryKey(BASEMAP_ALIASES[name] ?? name)];
+            if (!entry) {
+                console.warn(`swiftmap: addBasemap: no basemap named '${name}' -- not a `
+                    + `preset, not a WMS entry, not a tile URL, not in the generated `
+                    + `catalogue (curated; scripts/generate_basemap_catalog.py adds `
+                    + `providers). No basemap was added.`);
+                return model;
+            }
+            ({ url, attribution, max_zoom: maxZoom, max_native_zoom: maxNativeZoom } = entry);
+            subdomains = entry.subdomains || null;
+        }
+        const layer = {
+            id: nextId(), type: "basemap", name: displayName, layer_group: layerGroup,
+            visible, url, attribution, max_zoom: maxZoom, max_native_zoom: maxNativeZoom,
+            ...(subdomains ? { subdomains } : {}),
+            ...(wms ? { wms } : {}),
+        };
+        ensureGroupConfig(layerGroup, multiSelect, layerGroup === "Basemaps" ? false : true);
+        radioAdjust(layer);
+        state.layers = [...state.layers, layer];
+        emit({ op: "add", layer });
+        return model;
+    }
+
+    function listBasemaps(search = null) {
+        const names = new Set([
+            ...Object.keys(PRESETS),
+            ...Object.keys(BASEMAP_ALIASES),
+            ...Object.values(XYZ).map(e => e.name),
+            ...Object.values(WMS).map(e => e.name),
+        ]);
+        let out = [...names];
+        if (search) {
+            const needle = search.toLowerCase();
+            out = out.filter(n => n.toLowerCase().includes(needle));
+        }
+        return out.sort();
+    }
+
+    // --- time layers --------------------------------------------------------------------
+
+    // Animates the matching layers along the times their features already
+    // carry: ::times packed from properties, the meta set as a field, the
+    // period onto the one shared slider (Python's make_time_layer).
+    function makeTimeLayer(target = null, options = {}) {
+        const opts = { ...options };
+        const timeField = opt(opts, "timeField", "time_field") ?? null;
+        const timeEndField = opt(opts, "timeEndField", "time_end_field") ?? null;
+        const period = opts.period ?? null;
+        let duration = opts.duration !== undefined ? opts.duration : "period";
+        const fade = opts.fade || false;
+        for (const key of ["timeField", "time_field", "timeEndField", "time_end_field",
+                           "period", "duration", "fade"]) delete opts[key];
+        const matched = findLayers(target, opts);
+        if (!matched.length) {
+            console.warn("swiftmap: makeTimeLayer matched no layers. Nothing was animated.");
+            return model;
+        }
+        if (duration !== null && duration !== "period" && !isValidPeriod(duration)) {
+            console.warn(`swiftmap: makeTimeLayer: duration '${duration}' is not an ISO8601 `
+                + `duration (like 'PT1H'). Falling back to 'period'.`);
+            duration = "period";
+        }
+        for (const layer of matched) {
+            const props = layer.properties || {};
+            if (timeField && !(timeField in props)) {
+                console.warn(`swiftmap: makeTimeLayer: '${timeField}' is not a property of `
+                    + `layer '${layer.name}'. Its features stay visible at every tick.`);
+                continue;
+            }
+            if (timeEndField && !(timeEndField in props)) {
+                console.warn(`swiftmap: makeTimeLayer: end field '${timeEndField}' is not a `
+                    + `property of layer '${layer.name}'; using start times only.`);
+            }
+            const { interleaved, field, timeless } =
+                normalizeLayerTimes(props, timeField, timeEndField);
+            if (interleaved == null) {
+                console.warn(`swiftmap: makeTimeLayer: layer '${layer.name}' has no time `
+                    + `property. Pass timeField naming one; its features stay visible at `
+                    + `every tick until then.`);
+                continue;
+            }
+            if (timeless) {
+                console.warn(`swiftmap: makeTimeLayer: ${timeless} of ${interleaved.length / 2} `
+                    + `feature(s) in '${layer.name}' carry no parseable time and will stay `
+                    + `visible at every tick.`);
+            }
+            const payload = new DataView(interleaved.buffer);
+            const key = `${layer.id}::times`;
+            if (!buffers[key] || !bytesEqual(buffers[key], payload)) buffersSet(key, payload);
+            const timeMeta = { field, duration };
+            if (fade) timeMeta.fade = true;
+            setLayerFields([layer], { time: timeMeta });
+        }
+        if (period != null) configureTime({ period });
+        return model;
+    }
+
+    function clearTimeLayer(target = null, criteria = {}) {
+        const pool = target == null && !Object.keys(criteria).length
+            ? findLayers() : findLayers(target, criteria);
+        const matched = pool.filter(l => l.time);
+        if (!matched.length) return model;
+        setLayerFields(matched, { time: null });
+        buffersRemove(matched.filter(l => buffers[`${l.id}::times`])
+                             .map(l => `${l.id}::times`));
+        return model;
+    }
+
+    function configureTime(options = {}) {
+        const opts = { ...options };
+        if ("position" in opts && !TIME_POSITIONS.has(opts.position)) {
+            console.warn(`swiftmap: configureTime: position '${opts.position}' is not one of `
+                + `${[...TIME_POSITIONS].sort().join(", ")}. Keeping the previous position.`);
+            delete opts.position;
+        }
+        if ("window" in opts) {
+            const window = opts.window;
+            delete opts.window;
+            if (window == null) {
+                if ("window" in state.time_config) {
+                    const next = { ...state.time_config };
+                    delete next.window;
+                    state.time_config = next;
+                }
+            } else if (!isValidPeriod(window)) {
+                console.warn(`swiftmap: configureTime: window '${window}' is not an ISO8601 `
+                    + `duration (like 'PT2H30M'). Keeping the previous window.`);
+            } else {
+                opts.window = window;
+            }
+        }
+        if ("period" in opts && !isValidPeriod(opts.period)) {
+            console.warn(`swiftmap: configureTime: period '${opts.period}' is not an ISO8601 `
+                + `duration (like 'P1D' or 'PT1H'). Keeping the previous period.`);
+            delete opts.period;
+        }
+        if (Object.keys(opts).length) state.time_config = { ...state.time_config, ...opts };
+        return model;
+    }
+
+    // Re-normalises a time layer's ::times from new properties with the same
+    // field(s), or drops the animation with a warning when the property is gone.
+    function retime(layer, props) {
+        const desc = String((layer.time && layer.time.field) || "");
+        const [startField, endField] = desc ? desc.split("/", 2) : [null, null];
+        const { interleaved } = normalizeLayerTimes(props, startField || null, endField || null);
+        if (interleaved == null) {
+            console.warn(`swiftmap: updateLayer: the new data for '${layer.name}' has no `
+                + `'${desc}' time property; the layer stops animating.`);
+            return { payload: null, dropTime: true };
+        }
+        return { payload: new Uint8Array(interleaved.buffer), dropTime: false };
+    }
+
     // --- query -----------------------------------------------------------------------
 
     // One targeting vocabulary, shared by everything that operates on existing
@@ -528,7 +717,7 @@ export function createMapModel(options = {}) {
     // addressed by its OWN id takes the fields itself, members still visited.
     function applyChanges(layers, changes) {
         const differs = (layer, fields) =>
-            fields && Object.entries(fields).some(([k, v]) => layer[k] !== v);
+            fields && Object.entries(fields).some(([k, v]) => !sameValue(layer[k], v));
         const rebuild = (layer) => {
             if (layer.type === "group") {
                 const subs = (layer.layers || []).map(rebuild);
@@ -545,9 +734,15 @@ export function createMapModel(options = {}) {
         return layers.map(rebuild);
     }
 
+    // Python's `!=` compares dicts by value; a repeated set of the same time
+    // meta (or any object field) must stay a no-op here too.
+    const sameValue = (a, b) => a === b
+        || (a != null && b != null && typeof a === "object" && typeof b === "object"
+            && JSON.stringify(a) === JSON.stringify(b));
+
     function setLayerFields(targets, fields) {
         const real = targets.filter(l => l.id != null
-            && Object.entries(fields).some(([k, v]) => l[k] !== v));
+            && Object.entries(fields).some(([k, v]) => !sameValue(l[k], v)));
         if (!real.length) return model;
         state.layers = applyChanges(state.layers,
             new Map(real.map(l => [l.id, fields])));
@@ -738,11 +933,6 @@ export function createMapModel(options = {}) {
             console.warn(`swiftmap: updateLayer found no points for '${layer.name}'. Nothing changed.`);
             return model;
         }
-        if (layer.time) {
-            console.warn(`swiftmap: updateLayer: '${layer.name}' is a time layer; time buffers `
-                + `are not re-derived by the JS model yet. Nothing changed.`);
-            return model;
-        }
         const nNew = pairs.length;
         let nOld = 0;
         if (append) {
@@ -769,20 +959,26 @@ export function createMapModel(options = {}) {
         const radii = dataDrivenRadii(props, dataOpts, "updateLayer");
         const legend = dataDrivenLegend(props, dataOpts, layer.color);
         const sizeLegend = dataDrivenSizeLegend(props, dataOpts);
+        let timesPayload = null, dropTime = false;
+        if (layer.time) ({ payload: timesPayload, dropTime } = retime(layer, props));
         const bounds = boundsOfPairs(pairs);
         const coords = packPairs(pairs);
 
         const config = { ...layer, properties: props, bounds };
+        if (dropTime) config.time = null;
         for (const [key, value] of [["legend", legend], ["legend_size", sizeLegend]]) {
             if (value) config[key] = value;
             else delete config[key];
         }
         Object.assign(config, fieldKwargs);
 
-        if (append && nOld > 0) {
+        if (append && nOld > 0 && !dropTime) {
             buffersAppend(layer.id, new DataView(coords.buffer.slice(nOld * 16)));
             growOrReset(`${layer.id}::colors`, colors, 4, nOld);
             growOrReset(`${layer.id}::radii`, radii, 4, nOld);
+            if (layer.time && timesPayload != null) {
+                growOrReset(`${layer.id}::times`, timesPayload, 16, nOld);
+            }
             const fields = { bounds, ...fieldKwargs };
             for (const [key, value] of [["legend", legend], ["legend_size", sizeLegend]]) {
                 if (!deepEqual(value || null, layer[key] || null)) fields[key] = value;
@@ -797,6 +993,7 @@ export function createMapModel(options = {}) {
             buffersSet(layer.id, coords);
             setOrRemoveBuffer(`${layer.id}::colors`, colors);
             setOrRemoveBuffer(`${layer.id}::radii`, radii);
+            if (layer.time) setOrRemoveBuffer(`${layer.id}::times`, timesPayload);
             replaceInState(layer, config);
         }
         autoFitExtend(bounds);
@@ -814,8 +1011,12 @@ export function createMapModel(options = {}) {
         const config = { ...layer, properties: { ...(rec.properties || {}) }, bounds };
         delete config.parts;
         delete config.rings;
+        let timesPayload = null, dropTime = false;
+        if (layer.time) ({ payload: timesPayload, dropTime } = retime(layer, config.properties));
+        if (dropTime) config.time = null;
         Object.assign(config, fieldKwargs);
         buffersSet(layer.id, packPairs(pairs));
+        if (layer.time) setOrRemoveBuffer(`${layer.id}::times`, timesPayload);
         replaceInState(layer, config);
         autoFitExtend(bounds);
         return model;
@@ -849,7 +1050,8 @@ export function createMapModel(options = {}) {
     }
 
     const model = {
-        addCircleMarkers, addMarkers, addLine, addPolygon,
+        addCircleMarkers, addMarkers, addLine, addPolygon, addBasemap, listBasemaps,
+        makeTimeLayer, clearTimeLayer, configureTime,
         findLayers, getLayer,
         hide, show, select, setLayersVisibility, setLayerFields,
         removeLayer, removeLayers, updateLayer,
@@ -859,14 +1061,11 @@ export function createMapModel(options = {}) {
         get opLog() { return opLog; },
     };
 
-    // Every map starts from the seeded basemaps, radio-grouped, like Python's.
+    // Every map starts from the registry's per-CRS defaults, resolved through
+    // addBasemap exactly as Python's Map() resolves them.
     if (opt(options, "basemaps", "basemaps") !== false) {
-        ensureGroupConfig("Basemaps", false);
-        for (const spec of DEFAULT_BASEMAPS) {
-            const layer = { id: nextId(), type: "basemap", layer_group: "Basemaps", ...spec };
-            state.layers = [...state.layers, layer];
-            emit({ op: "add", layer });
-        }
+        const rows = DEFAULT_BASEMAPS[state.crs] || DEFAULT_BASEMAPS["EPSG:3857"];
+        for (const [bname, vis] of rows) addBasemap(bname, { visible: vis });
     }
 
     return model;

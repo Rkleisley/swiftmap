@@ -157,7 +157,11 @@ def clear_time_layer(self, target: Any = None, **criteria) -> "Map":
         return self
     with self.batch():
         self._set_layer_fields(matched, {"time": None})
-        self._remove_layer_buffers([l.get("id") for l in matched
+        # The ::times KEYS, not the layer ids: _remove_layer_buffers sweeps
+        # everything under an id, and passing the id here deleted the layer's
+        # coordinate (and colour) buffers with the animation -- the layer
+        # vanished from the map. Caught building the JS model's mirror of this.
+        self._remove_layer_buffers([f"{l.get('id')}::times" for l in matched
                                     if f"{l.get('id')}::times" in self.coordinate_buffers])
     return self
 
