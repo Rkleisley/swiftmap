@@ -508,6 +508,65 @@ def scenario_labels_append():
     return m
 
 
+def scenario_circle():
+    """A geodesic circle: metres radius, the cos(lat)-widened box, no buffer."""
+    m = Map(show_logo=False)
+    m.add_circle([36.05, -5.25], 500, name="Perimeter", color="#ff0000")
+    return m
+
+
+def scenario_point_fanout():
+    """A column-backed folder part fans one call into a layer per value, with
+    the data-driven colours ranged over the WHOLE dataset and sliced."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2, 36.3], "lon": [-5.3, -5.2, -5.1, -5.0],
+         "status": ["Active", "Idle", "Active", "Fault"],
+         "value": [1.0, 2.0, 3.0, 4.0]},
+        name="Feed", layer_group=["Sensors", "status"], color_col="value")
+    return m
+
+
+def scenario_point_name_column():
+    """A name matching a property key names each layer from its own value."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2], "lon": [-5.3, -5.2, -5.1],
+         "site": ["A", "B", "A"]}, name="site")
+    return m
+
+
+def scenario_configures():
+    """The marginalia surface: legend, scale, draw, group, logo -- only the
+    options given change, validated as in the frontend."""
+    m = Map(show_logo=False)
+    m.configure_legend(show=True, title="Key", position="bottom-right", scope="visible")
+    m.configure_scale(show=True, units="nautical", max_width=160)
+    m.configure_draw(show=True, tools=["rectangle", "polygon"], position="top-right")
+    m.configure_group("Feeds", collapsed=True)
+    m.configure_logo("https://example.test/logo.png", position="bottom-right",
+                     height=40, show=True)
+    return m
+
+
+def scenario_fit_bounds():
+    """An explicit fit is a command, and it disarms the data's steering: the
+    add after it must not move the request."""
+    m = Map(show_logo=False)
+    m.add_circle_markers([[36.0, -5.3]], name="A")
+    m.fit_bounds([[35.9, -5.5], [36.2, -5.0]], zoom_offset=-1, max_zoom=16, padding=20)
+    m.add_circle_markers([[36.1, -5.2]], name="B")
+    return m
+
+
+def scenario_bare_wkt():
+    """Bare WKT strings straight into the adders -- the same input both sides."""
+    m = Map(show_logo=False)
+    m.add_polygon(WKT_HOLE, name="Zone")
+    m.add_line(WKT_ML, name="Route")
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -554,6 +613,12 @@ SCENARIOS = [
     scenario_highlight,
     scenario_styled_replace,
     scenario_labels_append,
+    scenario_circle,
+    scenario_point_fanout,
+    scenario_point_name_column,
+    scenario_configures,
+    scenario_fit_bounds,
+    scenario_bare_wkt,
 ]
 
 

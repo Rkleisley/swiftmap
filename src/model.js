@@ -295,12 +295,28 @@ export function createMapModel(options = {}) {
         }
     }
 
-    function addLayer(layer, pairs, options, defaultGroup, dataDrivenMethod = null) {
-        layer.layer_group = opt(options, "layerGroup", "layer_group", defaultGroup);
-        const multiSelect = opt(options, "multiSelect", "multi_select",
-            opt(options, "groupMultiSelect", "group_multi_select"));
-        ensureGroupConfig(layer.layer_group, multiSelect);
-        radioAdjust(layer);
+    // layer_group parts, each (value, isColumn): a part naming a property key
+    // resolves per feature, so one call fans into a folder tree the data drives.
+    function buildGroupSpecs(layerGroup, props) {
+        if (layerGroup == null) return [];
+        const parts = Array.isArray(layerGroup) ? layerGroup : [layerGroup];
+        return parts.filter(part => part != null)
+            .map(part => [part, props != null && part in props]);
+    }
+
+    function staticGroupPath(specs, fallback) {
+        if (!specs.length) return fallback;
+        if (specs.some(([, isColumn]) => isColumn)) return null;
+        return specs.map(([value]) => String(value)).join("/");
+    }
+
+    function resolveGroupPath(specs, props, index, fallback) {
+        if (!specs.length) return fallback;
+        return specs.map(([value, isColumn]) =>
+            isColumn ? String(props[value][index]) : String(value)).join("/");
+    }
+
+    function applyDisplayOptions(layer, options) {
         const displayKeys = [
             ["popupFields", "popup_fields"], ["popupNames", "popup_names"],
             ["tooltipFields", "tooltip_fields"], ["tooltipNames", "tooltip_names"],
@@ -312,15 +328,21 @@ export function createMapModel(options = {}) {
             const value = opt(options, camel, snake);
             if (value !== undefined) layer[snake] = value;
         }
+    }
+
+    function addLayer(layer, pairs, options, defaultGroup) {
+        layer.layer_group = opt(options, "layerGroup", "layer_group", defaultGroup);
+        const multiSelect = opt(options, "multiSelect", "multi_select",
+            opt(options, "groupMultiSelect", "group_multi_select"));
+        ensureGroupConfig(layer.layer_group, multiSelect);
+        radioAdjust(layer);
+        applyDisplayOptions(layer, options);
         const bounds = boundsOfPairs(pairs);
         if (bounds) layer.bounds = bounds;
-        // Emission order is Python's: the coordinate buffer, then the data-driven
-        // buffers, then the add itself.
         buffersSet(layer.id, packPairs(pairs));
-        if (dataDrivenMethod) applyDataDriven(layer, options, dataDrivenMethod);
         const { explicit, staticStyle } = popStyleOptions({ ...options, radius: undefined },
                                                           "addLayer", null);
-        recordAddedWith(layer, options, dataDrivenMethod, false, {
+        recordAddedWith(layer, options, null, false, {
             style: explicit, static_style: staticStyle,
             label: opt(options, "label", "label") ?? null,
         });
@@ -411,48 +433,106 @@ export function createMapModel(options = {}) {
         };
     }
 
-    function applyDataDriven(layer, options, method) {
-        const dataOpts = dataOptsOf(options);
-        const colors = dataDrivenColors(layer.properties, dataOpts, layer.color, method);
-        if (colors) buffersSet(`${layer.id}::colors`, new DataView(colors.buffer));
-        const radii = dataDrivenRadii(layer.properties, dataOpts, method);
-        if (radii) buffersSet(`${layer.id}::radii`, new DataView(radii.buffer));
-        const legend = dataDrivenLegend(layer.properties, dataOpts, layer.color);
-        if (legend) layer.legend = legend;
-        const sizeLegend = dataDrivenSizeLegend(layer.properties, dataOpts);
-        if (sizeLegend) layer.legend_size = sizeLegend;
-    }
-
     function addPointsLayer(type, defaultName, method, data, options) {
         const { pairs, properties } = normalizePoints(data, options);
+        const n = pairs.length;
         // `radius` is its own named option, as in Python, so it must not reach
         // the style pop and land twice.
         const { explicit, staticStyle } = popStyleOptions(
             { ...options, radius: undefined }, method, type);
         const { layerStyle, featureStyles } = resolveStyles(
-            explicit, staticStyle, properties, pairs.length, STYLE_DEFAULTS[type]);
-        const layer = {
-            id: nextId(), type,
-            name: options.name || defaultName,
-            visible: options.visible !== undefined ? options.visible : true,
-            autobind_popup: true, autobind_tooltip: true,
-            ...(type === "circle_markers"
-                ? { radius: options.radius !== undefined ? options.radius : 10 } : {}),
-            ...layerStyle,
-            properties,
-        };
-        if (featureStyles) layer.feature_styles = featureStyles;
-        const label = opt(options, "label", "label");
-        const labels = resolveFeatureLabels(label ?? null, properties, pairs.length);
-        if (labels) {
-            if (pairs.length > 1000) {
-                console.warn(`swiftmap: ${method}: ${pairs.length} permanent labels means `
-                    + `${pairs.length} DOM elements on the map. Labels are for site-scale layers.`);
-            }
-            layer.labels = labels;
+            explicit, staticStyle, properties, n, STYLE_DEFAULTS[type]);
+        // Everything data-derived resolves over the WHOLE dataset first -- an
+        // auto-ranged colormap spans every point, not each folder's -- and each
+        // fanned layer takes its slice, as Python's builders do.
+        const dataOpts = dataOptsOf(options);
+        const fallbackColor = layerStyle.color || STYLE_DEFAULTS[type].color;
+        const colors = dataDrivenColors(properties, dataOpts, fallbackColor, method);
+        const radii = dataDrivenRadii(properties, dataOpts, method);
+        const legend = dataDrivenLegend(properties, dataOpts, fallbackColor);
+        const sizeLegend = dataDrivenSizeLegend(properties, dataOpts);
+        const labelOpt = opt(options, "label", "label") ?? null;
+        const labels = resolveFeatureLabels(labelOpt, properties, n);
+        if (labels && n > 1000) {
+            console.warn(`swiftmap: ${method}: ${n} permanent labels means ${n} DOM `
+                + `elements on the map. Labels are for site-scale layers.`);
         }
-        addLayer(layer, pairs, options, `${defaultName} Group`, method);
-        return layer;
+
+        // The fan: a layer_group part or a name that names a property column
+        // splits the dataset into one layer per (folder path, name) -- the
+        // sidebar tree the data drives. A single static group and literal name
+        // is the whole-dataset fast path.
+        const specs = buildGroupSpecs(opt(options, "layerGroup", "layer_group"), properties);
+        const baseName = options.name;
+        const nameIsColumn = baseName != null && properties != null && baseName in properties;
+        const staticPath = staticGroupPath(specs, `${defaultName} Group`);
+        const fanned = nameIsColumn || staticPath === null;
+        const groups = new Map();
+        if (!fanned) {
+            groups.set("", { path: staticPath, name: baseName ?? defaultName, indices: null });
+        } else {
+            for (let i = 0; i < n; i++) {
+                const path = staticPath !== null ? staticPath
+                    : resolveGroupPath(specs, properties, i, `${defaultName} Group`);
+                const name = nameIsColumn ? String(properties[baseName][i])
+                    : (baseName ?? defaultName);
+                const key = `${path}\u0000${name}`;
+                if (!groups.has(key)) groups.set(key, { path, name, indices: [] });
+                groups.get(key).indices.push(i);
+            }
+        }
+
+        const multiSelect = opt(options, "multiSelect", "multi_select",
+            opt(options, "groupMultiSelect", "group_multi_select"));
+        for (const { path, name, indices } of groups.values()) {
+            const whole = indices === null || indices.length === n;
+            const subPairs = whole ? pairs : indices.map(i => pairs[i]);
+            const subProps = {};
+            for (const [k, v] of Object.entries(properties)) {
+                subProps[k] = whole ? v : indices.map(i => v[i]);
+            }
+            const layer = {
+                id: nextId(), type, name, layer_group: path,
+                visible: options.visible !== undefined ? options.visible : true,
+                autobind_popup: true, autobind_tooltip: true,
+                ...(type === "circle_markers"
+                    ? { radius: options.radius !== undefined ? options.radius : 10 } : {}),
+                ...layerStyle,
+                properties: subProps,
+            };
+            if (featureStyles) {
+                layer.feature_styles = whole ? featureStyles
+                    : indices.map(i => featureStyles[i]);
+            }
+            if (labels) layer.labels = whole ? labels : indices.map(i => labels[i]);
+            if (legend) layer.legend = legend;
+            if (sizeLegend) layer.legend_size = sizeLegend;
+            ensureGroupConfig(path, multiSelect);
+            radioAdjust(layer);
+            applyDisplayOptions(layer, options);
+            const bounds = boundsOfPairs(subPairs);
+            if (bounds) layer.bounds = bounds;
+            buffersSet(layer.id, packPairs(subPairs));
+            if (colors) {
+                const sub = whole ? colors : (() => {
+                    const out = new Uint8Array(indices.length * 4);
+                    indices.forEach((src, dst) => out.set(colors.subarray(src * 4, src * 4 + 4), dst * 4));
+                    return out;
+                })();
+                buffersSet(`${layer.id}::colors`, new DataView(sub.buffer, sub.byteOffset, sub.byteLength));
+            }
+            if (radii) {
+                const sub = whole ? radii
+                    : Float32Array.from(indices, i => radii[i]);
+                buffersSet(`${layer.id}::radii`, new DataView(sub.buffer, sub.byteOffset, sub.byteLength));
+            }
+            recordAddedWith(layer, options, method, fanned, {
+                style: explicit, static_style: staticStyle, label: labelOpt,
+            });
+            place(layer);
+            autoFitExtend(bounds);
+        }
+        return model;
     }
 
     function addCircleMarkers(data, options = {}) {
@@ -592,6 +672,191 @@ export function createMapModel(options = {}) {
         }
         if (lines.length) addLine(fc(lines), options);
         if (polys.length) addPolygon(fc(polys), options);
+        return model;
+    }
+
+    // A geodesic circle: a centre and a physical radius in metres -- one
+    // feature, no buffer, its box widened east-west by 1/cos(lat) exactly as
+    // Python computes it (the last-bit parity needs lat * (PI/180) as one
+    // constant, the way math.radians multiplies).
+    const DEG2RAD = Math.PI / 180;
+    function addCircle(location, radius, options = {}) {
+        const { explicit, staticStyle } = popStyleOptions(options, "addCircle", "circle");
+        const { layerStyle } = resolveStyles(explicit, staticStyle, {}, 1,
+            { color: "#3388ff", fill_color: "#3388ff", fill_opacity: 0.2 });
+        const lat = Number(location[0]), lon = Number(location[1]);
+        const dLat = radius / 111320.0;
+        const dLon = radius / (111320.0 * Math.max(Math.cos(lat * DEG2RAD), 1e-6));
+        const bounds = [[lat - dLat, lon - dLon], [lat + dLat, lon + dLon]];
+        const layer = {
+            id: nextId(), type: "circle",
+            name: options.name || "Circle",
+            visible: options.visible !== undefined ? options.visible : true,
+            autobind_popup: true, autobind_tooltip: true,
+            location: [lat, lon], radius: Number(radius), bounds,
+            ...layerStyle,
+            properties: options.properties || {},
+        };
+        layer.layer_group = opt(options, "layerGroup", "layer_group", "Circle Group");
+        const multiSelect = opt(options, "multiSelect", "multi_select",
+            opt(options, "groupMultiSelect", "group_multi_select"));
+        ensureGroupConfig(layer.layer_group, multiSelect);
+        radioAdjust(layer);
+        applyDisplayOptions(layer, options);
+        place(layer);
+        autoFitExtend(bounds);
+        return model;
+    }
+
+    // --- the marginalia: legend, scale, draw, logo, groups, the viewport ----------------
+
+    const CORNERS = new Set(["top-left", "top-right", "bottom-left", "bottom-right"]);
+    const SCALE_UNITS = new Set(["metric", "imperial", "both", "nautical"]);
+    const DRAW_TOOLS = new Set(["marker", "polyline", "rectangle", "polygon", "circle"]);
+
+    function configureLegend(options = {}) {
+        const cfg = { ...state.legend_config };
+        if (options.title != null) cfg.title = options.title;
+        if (options.position != null) {
+            if (!TIME_POSITIONS.has(options.position)) {
+                console.warn(`swiftmap: configureLegend: unknown position '${options.position}'. Ignored.`);
+            } else {
+                cfg.position = options.position;
+            }
+        }
+        if (options.auto != null) cfg.auto = !!options.auto;
+        if (options.scope != null) {
+            if (options.scope !== "all" && options.scope !== "visible") {
+                console.warn(`swiftmap: configureLegend: scope must be 'all' or 'visible'. Ignored.`);
+            } else {
+                cfg.scope = options.scope;
+            }
+        }
+        const dimHidden = opt(options, "dimHidden", "dim_hidden");
+        if (dimHidden != null) cfg.dim_hidden = !!dimHidden;
+        state.legend_config = cfg;
+        if (options.show != null) state.show_legend = !!options.show;
+        return model;
+    }
+
+    function configureScale(options = {}) {
+        const cfg = { ...state.scale_config };
+        if (options.units != null) {
+            if (!SCALE_UNITS.has(options.units)) {
+                console.warn(`swiftmap: configureScale: units must be one of `
+                    + `${[...SCALE_UNITS].sort().join(", ")}. Ignored.`);
+            } else {
+                cfg.units = options.units;
+            }
+        }
+        if (options.position != null) {
+            if (!CORNERS.has(options.position)) {
+                console.warn(`swiftmap: configureScale: position must be a corner. Ignored.`);
+            } else {
+                cfg.position = options.position;
+            }
+        }
+        const maxWidth = opt(options, "maxWidth", "max_width");
+        if (maxWidth != null) cfg.max_width = Math.trunc(Number(maxWidth));
+        state.scale_config = cfg;
+        if (options.show != null) state.show_scale = !!options.show;
+        return model;
+    }
+
+    function configureDraw(options = {}) {
+        const cfg = { ...state.draw_config };
+        if (options.tools != null) {
+            const bad = options.tools.filter(t => !DRAW_TOOLS.has(t));
+            if (bad.length) {
+                console.warn(`swiftmap: configureDraw: unknown tools ${bad.join(", ")}; expected `
+                    + `a subset of ${[...DRAW_TOOLS].sort().join(", ")}. Ignored.`);
+            } else {
+                cfg.tools = [...options.tools];
+            }
+        }
+        if (options.position != null) {
+            if (!CORNERS.has(options.position)) {
+                console.warn(`swiftmap: configureDraw: position must be a corner. Ignored.`);
+            } else {
+                cfg.position = options.position;
+            }
+        }
+        state.draw_config = cfg;
+        if (options.show != null) state.show_draw = !!options.show;
+        return model;
+    }
+
+    function clearDrawings() {
+        state.drawings = [];
+        return model;
+    }
+
+    // Slots take a URL or data URI (or {url, alt}); the browser cannot embed
+    // local files the way Python does -- export from Python for that. null
+    // leaves a slot, false or "" clears it.
+    function resolveLogoImage(value) {
+        if (value === false || value === "") return null;
+        if (typeof value === "string") return { url: value, alt: "" };
+        if (value && typeof value === "object" && value.url) {
+            return { url: value.url, alt: value.alt || "" };
+        }
+        console.warn("swiftmap: configureLogo: a slot takes a URL, a data URI or "
+            + "{url, alt}; local file paths need the Python side. Ignored.");
+        return undefined;
+    }
+
+    function configureLogo(company = null, options = {}) {
+        const cfg = { ...state.logo_config };
+        const parentCompany = opt(options, "parentCompany", "parent_company") ?? null;
+        for (const [slot, value] of [["company", company],
+                                     ["parent_company", parentCompany]]) {
+            if (value == null) continue;
+            const resolved = resolveLogoImage(value);
+            if (resolved === null) delete cfg[slot];
+            else if (resolved !== undefined) cfg[slot] = resolved;
+        }
+        if (options.position != null) {
+            if (!CORNERS.has(options.position)) {
+                console.warn(`swiftmap: configureLogo: position must be a corner. Ignored.`);
+            } else {
+                cfg.position = options.position;
+            }
+        }
+        if (options.height != null) cfg.height = Math.max(1, Math.trunc(Number(options.height)));
+        state.logo_config = cfg;
+        if (options.show != null) state.show_logo = !!options.show;
+        return model;
+    }
+
+    function configureGroup(groupName, options = {}) {
+        const next = { ...state.group_configs };
+        const conf = { ...(next[groupName] || {}) };
+        for (const [k, v] of Object.entries(options)) {
+            if (k === "multi_select" || k === "multiSelect"
+                    || k === "group_multi_select" || k === "groupMultiSelect") {
+                conf.multi_select = v;
+            } else {
+                conf[k] = v;
+            }
+        }
+        next[groupName] = conf;
+        state.group_configs = next;
+        return model;
+    }
+
+    // A command, not declared state: fitting the same bounds twice moves the
+    // map twice, and an explicit fit disarms the data's steering of the view.
+    function fitBounds(bounds, options = {}) {
+        if (!bounds) return model;
+        autoFitArmed = false;
+        fitSeq += 1;
+        state.fit_bounds_request = {
+            bounds,
+            zoom_offset: opt(options, "zoomOffset", "zoom_offset", 0),
+            max_zoom: opt(options, "maxZoom", "max_zoom", null),
+            padding: options.padding !== undefined ? options.padding : null,
+            seq: fitSeq,
+        };
         return model;
     }
 
@@ -1304,8 +1569,10 @@ export function createMapModel(options = {}) {
     }
 
     const model = {
-        addCircleMarkers, addMarkers, addLine, addPolygon, addCollection,
+        addCircleMarkers, addMarkers, addLine, addPolygon, addCircle, addCollection,
         addBasemap, listBasemaps, subscribe,
+        configureLegend, configureScale, configureDraw, configureLogo,
+        configureGroup, clearDrawings, fitBounds,
         makeTimeLayer, clearTimeLayer, configureTime,
         findLayers, getLayer,
         hide, show, select, setLayersVisibility, setLayerFields,

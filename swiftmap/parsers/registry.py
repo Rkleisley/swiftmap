@@ -12,6 +12,35 @@ _SOURCE_PACKAGES = frozenset({
 })
 
 
+def _coerce_geometry_input(data: Any) -> Any:
+    """
+    The bare-geometry front door: forms that state their geometry plainly read
+    as naturally as the wrapped ones. A WKT string becomes the one-column table
+    the tabular parser already reads; a shapely geometry becomes its
+    __geo_interface__ GeoJSON; a list of shapely geometries becomes a
+    FeatureCollection. The JS model accepted all three first (its addPolygon
+    takes "POLYGON ((...))" directly), and the asymmetry was the gap.
+    Everything else passes through untouched.
+    """
+    if isinstance(data, str):
+        text = data.strip()
+        if text and not text.startswith(("{", "[")):
+            from .sources._utils import wkt_kind
+            if wkt_kind(text):
+                return {"geometry": [data]}
+        return data
+    module = type(data).__module__ or ""
+    if module.startswith("shapely") and hasattr(data, "__geo_interface__"):
+        return data.__geo_interface__
+    if isinstance(data, (list, tuple)) and len(data) > 0 and all(
+            (type(item).__module__ or "").startswith("shapely")
+            and hasattr(item, "__geo_interface__") for item in data):
+        return {"type": "FeatureCollection",
+                "features": [{"type": "Feature", "geometry": item.__geo_interface__,
+                              "properties": {}} for item in data]}
+    return data
+
+
 class GeometryParserRegistry:
     """Registry broker managing coordinate data parsing strategies for a geometry type."""
     def __init__(self, geometry_name: str = "geometry"):
@@ -22,6 +51,7 @@ class GeometryParserRegistry:
         self._parsers.append((check_func, parse_func))
 
     def parse(self, data: Any, *args, **kwargs):
+        data = _coerce_geometry_input(data)
         for check, parse_fn in self._parsers:
             if check(data):
                 return parse_fn(data, *args, **kwargs)
@@ -85,6 +115,7 @@ def parse_polygons(data: Any, *args, **kwargs) -> Tuple[List[List[List[float]]],
 
 def supports_mixed_geometry(data: Any) -> bool:
     """True if `data` comes from a source that distinguishes geometry types when parsing."""
+    data = _coerce_geometry_input(data)
     return any(check(data) for check in mixed_geometry_checks)
 
 

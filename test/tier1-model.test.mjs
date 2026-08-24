@@ -271,6 +271,50 @@ const SCENARIOS = {
         return m;
     },
 
+    circle: () => createMapModel().addCircle([36.05, -5.25], 500,
+        { name: "Perimeter", color: "#ff0000" }),
+
+    point_fanout: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1, 36.2, 36.3], lon: [-5.3, -5.2, -5.1, -5.0],
+          status: ["Active", "Idle", "Active", "Fault"],
+          value: [1.0, 2.0, 3.0, 4.0] },
+        { name: "Feed", layerGroup: ["Sensors", "status"], colorCol: "value" }),
+
+    point_name_column: () => createMapModel().addCircleMarkers(
+        { lat: [36.0, 36.1, 36.2], lon: [-5.3, -5.2, -5.1],
+          site: ["A", "B", "A"] }, { name: "site" }),
+
+    configures: () => {
+        const m = createMapModel();
+        m.configureLegend({ show: true, title: "Key", position: "bottom-right",
+                            scope: "visible" });
+        m.configureScale({ show: true, units: "nautical", maxWidth: 160 });
+        m.configureDraw({ show: true, tools: ["rectangle", "polygon"],
+                          position: "top-right" });
+        m.configureGroup("Feeds", { collapsed: true });
+        m.configureLogo("https://example.test/logo.png",
+                        { position: "bottom-right", height: 40, show: true });
+        return m;
+    },
+
+    fit_bounds: () => {
+        const m = createMapModel();
+        m.addCircleMarkers([[36.0, -5.3]], { name: "A" });
+        m.fitBounds([[35.9, -5.5], [36.2, -5.0]], { zoomOffset: -1, maxZoom: 16,
+                                                    padding: 20 });
+        m.addCircleMarkers([[36.1, -5.2]], { name: "B" });
+        return m;
+    },
+
+    bare_wkt: () => {
+        const m = createMapModel();
+        m.addPolygon("POLYGON ((-5.3 36.0, -5.1 36.0, -5.1 36.2, -5.3 36.2, -5.3 36.0), "
+            + "(-5.25 36.05, -5.15 36.05, -5.15 36.15, -5.25 36.05))", { name: "Zone" });
+        m.addLine("MULTILINESTRING ((-5.3 36.0, -5.2 36.1), (-5.1 36.0, -5.0 36.1))",
+                  { name: "Route" });
+        return m;
+    },
+
     mut_hide_show: () => {
         const m = createMapModel();
         m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2] }, { name: "Sites" });

@@ -1,0 +1,120 @@
+{
+ "buffers": {},
+ "doc": "The marginalia surface: legend, scale, draw, group, logo -- only the\n    options given change, validated as in the frontend.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  }
+ ],
+ "scenario": "configures",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {
+   "position": "top-right",
+   "tools": [
+    "rectangle",
+    "polygon"
+   ]
+  },
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {},
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Feeds": {
+    "collapsed": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 20,
+    "max_zoom": 22,
+    "name": "Dark Matter",
+    "subdomains": "abcd",
+    "type": "basemap",
+    "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "visible": false
+   }
+  ],
+  "legend_config": {
+   "position": "bottom-right",
+   "scope": "visible",
+   "title": "Key"
+  },
+  "logo_config": {
+   "company": {
+    "alt": "",
+    "url": "https://example.test/logo.png"
+   },
+   "height": 40,
+   "position": "bottom-right"
+  },
+  "scale_config": {
+   "max_width": 160,
+   "units": "nautical"
+  },
+  "show_click_coordinates": false,
+  "show_draw": true,
+  "show_legend": true,
+  "show_logo": true,
+  "show_scale": true,
+  "sync_trigger": 0,
+  "time_config": {},
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}
