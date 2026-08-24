@@ -16,8 +16,15 @@ Both suites pin to the same committed files:
 - tier 1 (test/tier1-model.test.mjs) builds the same scenarios through the JS
   model and asserts byte-identical buffers and equal configs.
 
-`added_with` is stripped from the goldens: it is Python's update_layer
-bookkeeping, and the JS model grows its equivalent in the query/mutation stage.
+`added_with` is stripped from the goldens -- state and op payloads alike: it
+is Python's update_layer bookkeeping; the JS model keeps its own equivalent
+internally and never puts it on the wire.
+
+Since stage 3 every golden also carries the OP STREAM: each `_emit` during the
+scenario, in order, with its buffer as base64. That is the wire itself -- adds,
+replaces, targeted sets, removals, and the append deltas with their
+tail-versus-full buffer decisions -- so the JS model's emissions are pinned as
+tightly as its state.
 """
 import base64
 import json
@@ -177,6 +184,92 @@ def scenario_categorical_dict():
     return m
 
 
+def scenario_mut_hide_show():
+    """hide by name, then by target, then show: targeted set ops, never the trait."""
+    m = Map(show_logo=False)
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2]}, name="Sites")
+    m.add_line([[36.0, -5.3], [36.1, -5.2]], name="Track")
+    m.hide("Sites")
+    m.hide("Track")
+    m.show("Track")
+    return m
+
+
+def scenario_mut_select():
+    """select is declarative within its scope; None restores the scope whole."""
+    m = Map(show_logo=False)
+    m.add_circle_markers([[36.0, -5.3]], name="A", layer_group="Fleet")
+    m.add_circle_markers([[36.1, -5.3]], name="B", layer_group="Fleet")
+    m.add_circle_markers([[36.2, -5.3]], name="C", layer_group="Fleet")
+    m.select("B", scope="Fleet")
+    m.select(None, scope="Fleet")
+    return m
+
+
+def scenario_mut_remove():
+    """Removing a layer drops it and every buffer keyed under its id."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1], "lon": [-5.3, -5.2], "value": [1.0, 9.0]},
+        name="Sites", color_col="value")
+    m.add_circle_markers([[36.3, -5.1]], name="Keep")
+    m.remove_layer("Sites")
+    return m
+
+
+def scenario_mut_update_attrs():
+    """update_layer without data: the attributes set, one replace per match."""
+    m = Map(show_logo=False)
+    m.add_circle_markers([[36.0, -5.3]], name="Sites")
+    m.update_layer("Sites", color="#112233", radius=6)
+    return m
+
+
+def scenario_mut_update_replace():
+    """update_layer(data=...): same identity, new data, every derived piece
+    re-derived -- buffers in full, one replace."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1], "lon": [-5.3, -5.2], "value": [1.0, 9.0]},
+        name="Feed", color_col="value")
+    m.update_layer("Feed", data={"lat": [36.2, 36.3, 36.4], "lon": [-5.1, -5.0, -4.9],
+                                 "value": [2.0, 5.0, 8.0]})
+    return m
+
+
+def scenario_mut_update_append_tail():
+    """Append under a FIXED colour range: existing values cannot move, so the
+    colors buffer ships as a tail beside the coordinates."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1], "lon": [-5.3, -5.2], "value": [10.0, 90.0]},
+        name="Feed", color_col="value", vmin=0, vmax=100)
+    m.update_layer("Feed", data={"lat": [36.2], "lon": [-5.1], "value": [50.0]},
+                   append=True)
+    return m
+
+
+def scenario_mut_update_append_full():
+    """Append that MOVES an auto range: every existing colour changes, so the
+    colors buffer goes in full while the coordinates still append."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1], "lon": [-5.3, -5.2], "value": [10.0, 90.0]},
+        name="Feed", color_col="value")
+    m.update_layer("Feed", data={"lat": [36.2], "lon": [-5.1], "value": [200.0]},
+                   append=True)
+    return m
+
+
+def scenario_mut_update_line():
+    """A single line's data replaced in place."""
+    m = Map(show_logo=False)
+    m.add_line([[36.0, -5.3], [36.1, -5.2]], name="Track", color="#0055ff",
+               properties={"vessel": "Swift One"})
+    m.update_layer("Track", data=[[36.0, -5.3], [36.05, -5.25], [36.2, -5.1]])
+    return m
+
+
 def scenario_radius_col():
     """radius_col sizes by the square root over a range; both buffers, both keys."""
     m = Map(show_logo=False)
@@ -205,6 +298,14 @@ SCENARIOS = [
     scenario_categorical_spread,
     scenario_categorical_dict,
     scenario_radius_col,
+    scenario_mut_hide_show,
+    scenario_mut_select,
+    scenario_mut_remove,
+    scenario_mut_update_attrs,
+    scenario_mut_update_replace,
+    scenario_mut_update_append_tail,
+    scenario_mut_update_append_full,
+    scenario_mut_update_line,
 ]
 
 
@@ -216,21 +317,46 @@ def strip_added_with(layer):
     return layer
 
 
-def golden_of(m):
+def _strip_op(op):
+    op = dict(op)
+    if isinstance(op.get("layer"), dict):
+        op["layer"] = strip_added_with(op["layer"])
+    return op
+
+
+def golden_of(build):
+    """Builds a scenario with every _emit captured: the wire, op by op."""
+    captured = []
+    orig = Map._emit
+
+    def spy(self, op, buffer=None):
+        captured.append({
+            "op": _strip_op(op),
+            "buffer": (base64.b64encode(buffer).decode("ascii")
+                       if buffer is not None else None),
+        })
+        orig(self, op, buffer)
+
+    Map._emit = spy
+    try:
+        m = build()
+    finally:
+        Map._emit = orig
     state = compose_state(m)
     state.pop("coordinate_buffers", None)
     state["layers"] = [strip_added_with(l) for l in state["layers"]]
     state = json.loads(json.dumps(state, default=str))
     buffers = {key: base64.b64encode(raw).decode("ascii")
                for key, raw in m.coordinate_buffers.items()}
-    return {"state": state, "buffers": buffers}
+    ops = json.loads(json.dumps(captured, default=str))
+    return {"state": state, "buffers": buffers, "ops": ops}
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for build in SCENARIOS:
         name = build.__name__.removeprefix("scenario_")
-        golden = {"scenario": name, "doc": build.__doc__.strip(), **golden_of(build())}
+        golden = {"scenario": name, "doc": build.__doc__.strip(), **golden_of(build)}
         path = OUT / f"{name}.json"
         path.write_text(json.dumps(golden, indent=1, sort_keys=True) + "\n",
                         encoding="utf-8")

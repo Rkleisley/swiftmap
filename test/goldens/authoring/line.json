@@ -3,6 +3,81 @@
   "layer_2": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA"
  },
  "doc": "A single polyline from nested pairs.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.1,
+       -5.2
+      ]
+     ],
+     "color": "#0055ff",
+     "id": "layer_2",
+     "layer_group": "Line Group",
+     "name": "Track",
+     "opacity": 1.0,
+     "properties": {
+      "vessel": "Swift One"
+     },
+     "type": "polyline",
+     "visible": true,
+     "weight": 6
+    },
+    "op": "add"
+   }
+  }
+ ],
  "scenario": "line",
  "state": {
   "auto_sync": true,

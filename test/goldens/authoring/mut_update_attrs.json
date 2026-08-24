@@ -1,6 +1,8 @@
 {
- "buffers": {},
- "doc": "Map() alone: the seeded basemaps and their radio group.",
+ "buffers": {
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwA=="
+ },
+ "doc": "update_layer without data: the attributes set, one replace per match.",
  "ops": [
   {
    "buffer": null,
@@ -36,9 +38,81 @@
     },
     "op": "add"
    }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwA==",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.0,
+       -5.3
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Circle Markers Group",
+     "name": "Sites",
+     "opacity": 1.0,
+     "properties": {},
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "id": "layer_2",
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.0,
+       -5.3
+      ]
+     ],
+     "color": "#112233",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Circle Markers Group",
+     "name": "Sites",
+     "opacity": 1.0,
+     "properties": {},
+     "radius": 6,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "replace"
+   }
   }
  ],
- "scenario": "empty_map",
+ "scenario": "mut_update_attrs",
  "state": {
   "auto_sync": true,
   "center": [
@@ -49,10 +123,28 @@
   "draw_config": {},
   "draw_seq": 0,
   "drawings": [],
-  "fit_bounds_request": {},
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.3
+    ],
+    [
+     36.0,
+     -5.3
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 1,
+   "zoom_offset": 0
+  },
   "group_configs": {
    "Basemaps": {
     "multi_select": false
+   },
+   "Circle Markers Group": {
+    "multi_select": true
    }
   },
   "height": "",
@@ -79,6 +171,32 @@
     "type": "basemap",
     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
     "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.3
+     ],
+     [
+      36.0,
+      -5.3
+     ]
+    ],
+    "color": "#112233",
+    "fillColor": "#3388ff",
+    "fillOpacity": 0.2,
+    "id": "layer_2",
+    "layer_group": "Circle Markers Group",
+    "name": "Sites",
+    "opacity": 1.0,
+    "properties": {},
+    "radius": 6,
+    "type": "circle_markers",
+    "visible": true,
+    "weight": 3
    }
   ],
   "legend_config": {},

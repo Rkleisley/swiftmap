@@ -99,6 +99,77 @@ const SCENARIOS = {
         m.addCircleMarkers([[36.02, -5.28]], { name: "Plan B", layerGroup: "Plans" });
         return m;
     },
+
+    mut_hide_show: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2] }, { name: "Sites" });
+        m.addLine([[36.0, -5.3], [36.1, -5.2]], { name: "Track" });
+        m.hide("Sites");
+        m.hide("Track");
+        m.show("Track");
+        return m;
+    },
+
+    mut_select: () => {
+        const m = createMapModel();
+        m.addCircleMarkers([[36.0, -5.3]], { name: "A", layerGroup: "Fleet" });
+        m.addCircleMarkers([[36.1, -5.3]], { name: "B", layerGroup: "Fleet" });
+        m.addCircleMarkers([[36.2, -5.3]], { name: "C", layerGroup: "Fleet" });
+        m.select("B", { scope: "Fleet" });
+        m.select(null, { scope: "Fleet" });
+        return m;
+    },
+
+    mut_remove: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2], value: [1.0, 9.0] },
+                           { name: "Sites", colorCol: "value" });
+        m.addCircleMarkers([[36.3, -5.1]], { name: "Keep" });
+        m.removeLayer("Sites");
+        return m;
+    },
+
+    mut_update_attrs: () => {
+        const m = createMapModel();
+        m.addCircleMarkers([[36.0, -5.3]], { name: "Sites" });
+        m.updateLayer("Sites", { color: "#112233", radius: 6 });
+        return m;
+    },
+
+    mut_update_replace: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2], value: [1.0, 9.0] },
+                           { name: "Feed", colorCol: "value" });
+        m.updateLayer("Feed", { data: { lat: [36.2, 36.3, 36.4], lon: [-5.1, -5.0, -4.9],
+                                        value: [2.0, 5.0, 8.0] } });
+        return m;
+    },
+
+    mut_update_append_tail: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2], value: [10.0, 90.0] },
+                           { name: "Feed", colorCol: "value", vmin: 0, vmax: 100 });
+        m.updateLayer("Feed", { data: { lat: [36.2], lon: [-5.1], value: [50.0] },
+                                append: true });
+        return m;
+    },
+
+    mut_update_append_full: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2], value: [10.0, 90.0] },
+                           { name: "Feed", colorCol: "value" });
+        m.updateLayer("Feed", { data: { lat: [36.2], lon: [-5.1], value: [200.0] },
+                                append: true });
+        return m;
+    },
+
+    mut_update_line: () => {
+        const m = createMapModel();
+        m.addLine([[36.0, -5.3], [36.1, -5.2]], { name: "Track", color: "#0055ff",
+                                                  properties: { vessel: "Swift One" } });
+        m.updateLayer("Track", { data: [[36.0, -5.3], [36.05, -5.25], [36.2, -5.1]] });
+        return m;
+    },
 };
 
 function normalize(value) {
@@ -112,7 +183,8 @@ for (const file of readdirSync(GOLDENS).filter(f => f.endsWith(".json")).sort())
     test(`authoring conformance: ${name}`, () => {
         const build = SCENARIOS[name];
         assert.ok(build, `no JS scenario for golden "${name}" -- add it to SCENARIOS`);
-        const wire = build().wireState();
+        const model = build();
+        const wire = model.wireState();
 
         const buffers = wire.coordinate_buffers;
         delete wire.coordinate_buffers;
@@ -126,6 +198,17 @@ for (const file of readdirSync(GOLDENS).filter(f => f.endsWith(".json")).sort())
                 .toString("base64");
             assert.equal(b64, golden.buffers[key], `buffer ${key} is byte-identical`);
         }
+
+        // The wire itself: every op the model emitted, in order, buffers included.
+        const emitted = model.opLog.map(({ op, buffer }) => ({
+            op,
+            buffer: buffer
+                ? Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+                    .toString("base64")
+                : null,
+        }));
+        assert.deepEqual(normalize(emitted), golden.ops,
+            "the op stream matches Python's, op for op");
     });
 }
 

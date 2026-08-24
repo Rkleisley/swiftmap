@@ -29,12 +29,14 @@ spec.loader.exec_module(gen)
 def test_python_still_produces_the_committed_golden(build):
     name = build.__name__.removeprefix("scenario_")
     committed = json.loads((GOLDENS / f"{name}.json").read_text(encoding="utf-8"))
-    fresh = gen.golden_of(build())
+    fresh = gen.golden_of(build)
     assert fresh["state"] == committed["state"], (
         f"{name}: the authoring rules moved. If deliberate, regenerate with "
         f"`python scripts/authoring_goldens.py`, review the diff, and expect the "
         f"JS model suite to demand the same change.")
     assert fresh["buffers"] == committed["buffers"], f"{name}: buffer bytes moved"
+    assert fresh["ops"] == committed["ops"], (
+        f"{name}: the op stream moved -- the wire itself changed")
 
 
 def test_every_scenario_has_a_committed_golden():

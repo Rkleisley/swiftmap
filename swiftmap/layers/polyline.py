@@ -25,6 +25,7 @@ def add_line(
     name: Optional[str] = None,
     layer_group: Optional[str] = None,
     group_multi_select: Optional[bool] = None,
+    properties: Optional[Dict[str, Any]] = None,
     **kwargs
 ) -> "Map":
     """
@@ -80,6 +81,9 @@ def add_line(
         each line under its own status.
     group_multi_select : bool, optional
         If False, configures the parent layer group to act as mutually exclusive radio buttons.
+    properties : dict, optional
+        Feature attribute metadata dictionary for popups and tooltips; recorded, so
+        `update_layer(data=...)` keeps it.
     **kwargs
         Styling and behaviour options. Anything not listed here is forwarded to the layer
         unchanged, so custom metadata reaches the frontend; an option close to a real name
@@ -169,6 +173,13 @@ def add_line(
 
     for i, coords in enumerate(lines_coords):
         line_props = {k: v[i] for k, v in props.items()} if props else {}
+        # An explicit constant merges over parsed columns and is RECORDED, so
+        # update_layer(data=...) keeps it. It used to ride **kwargs, reach the
+        # config only because the dict literal let it override "properties", and
+        # vanish on the first data update -- caught by the authoring goldens when
+        # the JS model kept it and Python did not. add_polygon had it right.
+        if properties:
+            line_props.update(properties)
         line_name = resolve_layer_name(name, props, i, is_multi, "Line")
 
         # Coordinates travel as a binary float64 buffer under the layer's id, exactly
@@ -210,7 +221,7 @@ def add_line(
                 static_style=static_style, label=label,
                 fanned=is_multi or is_column(name, props)
                        or any(is_col for _, is_col in group_specs),
-                popup=popup, tooltip=tooltip),
+                popup=popup, tooltip=tooltip, properties=properties),
             **(feature_styles[i] if feature_styles else layer_style),
             "properties": line_props,
             "autobind_popup": bool(popup),

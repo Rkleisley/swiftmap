@@ -3,6 +3,77 @@
   "layer_2": "pHA9CtcDQkAUrkfhehQVwClcj8L1CEJA16NwPQrXFMA="
  },
  "doc": "The other point family.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "pHA9CtcDQkAUrkfhehQVwClcj8L1CEJA16NwPQrXFMA=",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.03,
+       -5.27
+      ],
+      [
+       36.07,
+       -5.21
+      ]
+     ],
+     "color": "#e61a26",
+     "id": "layer_2",
+     "layer_group": "Markers Group",
+     "name": "Pins",
+     "properties": {},
+     "type": "markers",
+     "visible": true
+    },
+    "op": "add"
+   }
+  }
+ ],
  "scenario": "pin_markers",
  "state": {
   "auto_sync": true,

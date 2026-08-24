@@ -3,6 +3,81 @@
   "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMDNzMzMzAxCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA=="
  },
  "doc": "A plain ring.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMDNzMzMzAxCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA==",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.1,
+       -5.2
+      ]
+     ],
+     "color": "#ff0000",
+     "fillColor": "#00ff00",
+     "fillOpacity": 0.5,
+     "id": "layer_2",
+     "layer_group": "Polygon Group",
+     "name": "Zone",
+     "opacity": 1.0,
+     "properties": {},
+     "type": "polygon",
+     "visible": true,
+     "weight": 5
+    },
+    "op": "add"
+   }
+  }
+ ],
  "scenario": "polygon",
  "state": {
   "auto_sync": true,

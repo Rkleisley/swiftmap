@@ -1,9 +1,10 @@
 {
  "buffers": {
-  "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTAZmZmZmYmQkAAAAAAAAAUwDMzMzMzM0JAmpmZmZmZE8A=",
-  "layer_2::colors": "DQiH/8pHeP/KR3j/8Pkh//D5If8="
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwA==",
+  "layer_3": "zczMzMwMQkAzMzMzMzMVwA==",
+  "layer_4": "mpmZmZkZQkAzMzMzMzMVwA=="
  },
- "doc": "Bin edges make discrete classes, and the legend states them.",
+ "doc": "select is declarative within its scope; None restores the scope whole.",
  "ops": [
   {
    "buffer": null,
@@ -41,16 +42,9 @@
    }
   },
   {
-   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTAZmZmZmYmQkAAAAAAAAAUwDMzMzMzM0JAmpmZmZmZE8A=",
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwA==",
    "op": {
     "id": "layer_2",
-    "op": "buffer"
-   }
-  },
-  {
-   "buffer": "DQiH/8pHeP/KR3j/8Pkh//D5If8=",
-   "op": {
-    "id": "layer_2::colors",
     "op": "buffer"
    }
   },
@@ -66,39 +60,18 @@
        -5.3
       ],
       [
-       36.4,
-       -4.9
+       36.0,
+       -5.3
       ]
      ],
      "color": "#3388ff",
      "fillColor": "#3388ff",
      "fillOpacity": 0.2,
      "id": "layer_2",
-     "layer_group": "Circle Markers Group",
-     "legend": {
-      "colors": [
-       "#0d0887",
-       "#ca4778",
-       "#f0f921"
-      ],
-      "edges": [
-       3,
-       6
-      ],
-      "field": "value",
-      "kind": "bins"
-     },
-     "name": "Classed",
+     "layer_group": "Fleet",
+     "name": "A",
      "opacity": 1.0,
-     "properties": {
-      "value": [
-       1.0,
-       3.0,
-       4.5,
-       6.0,
-       9.0
-      ]
-     },
+     "properties": {},
      "radius": 10,
      "type": "circle_markers",
      "visible": true,
@@ -106,9 +79,127 @@
     },
     "op": "add"
    }
+  },
+  {
+   "buffer": "zczMzMwMQkAzMzMzMzMVwA==",
+   "op": {
+    "id": "layer_3",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.1,
+       -5.3
+      ],
+      [
+       36.1,
+       -5.3
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_3",
+     "layer_group": "Fleet",
+     "name": "B",
+     "opacity": 1.0,
+     "properties": {},
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "mpmZmZkZQkAzMzMzMzMVwA==",
+   "op": {
+    "id": "layer_4",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.2,
+       -5.3
+      ],
+      [
+       36.2,
+       -5.3
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_4",
+     "layer_group": "Fleet",
+     "name": "C",
+     "opacity": 1.0,
+     "properties": {},
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_4",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": true
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": true
+    },
+    "id": "layer_4",
+    "op": "set"
+   }
   }
  ],
- "scenario": "color_bins",
+ "scenario": "mut_select",
  "state": {
   "auto_sync": true,
   "center": [
@@ -126,20 +217,20 @@
      -5.3
     ],
     [
-     36.4,
-     -4.9
+     36.2,
+     -5.3
     ]
    ],
    "max_zoom": 15,
    "padding": 30,
-   "seq": 1,
+   "seq": 3,
    "zoom_offset": 0
   },
   "group_configs": {
    "Basemaps": {
     "multi_select": false
    },
-   "Circle Markers Group": {
+   "Fleet": {
     "multi_select": true
    }
   },
@@ -177,39 +268,70 @@
       -5.3
      ],
      [
-      36.4,
-      -4.9
+      36.0,
+      -5.3
      ]
     ],
     "color": "#3388ff",
     "fillColor": "#3388ff",
     "fillOpacity": 0.2,
     "id": "layer_2",
-    "layer_group": "Circle Markers Group",
-    "legend": {
-     "colors": [
-      "#0d0887",
-      "#ca4778",
-      "#f0f921"
-     ],
-     "edges": [
-      3,
-      6
-     ],
-     "field": "value",
-     "kind": "bins"
-    },
-    "name": "Classed",
+    "layer_group": "Fleet",
+    "name": "A",
     "opacity": 1.0,
-    "properties": {
-     "value": [
-      1.0,
-      3.0,
-      4.5,
-      6.0,
-      9.0
+    "properties": {},
+    "radius": 10,
+    "type": "circle_markers",
+    "visible": true,
+    "weight": 3
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.1,
+      -5.3
+     ],
+     [
+      36.1,
+      -5.3
      ]
-    },
+    ],
+    "color": "#3388ff",
+    "fillColor": "#3388ff",
+    "fillOpacity": 0.2,
+    "id": "layer_3",
+    "layer_group": "Fleet",
+    "name": "B",
+    "opacity": 1.0,
+    "properties": {},
+    "radius": 10,
+    "type": "circle_markers",
+    "visible": true,
+    "weight": 3
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.2,
+      -5.3
+     ],
+     [
+      36.2,
+      -5.3
+     ]
+    ],
+    "color": "#3388ff",
+    "fillColor": "#3388ff",
+    "fillOpacity": 0.2,
+    "id": "layer_4",
+    "layer_group": "Fleet",
+    "name": "C",
+    "opacity": 1.0,
+    "properties": {},
     "radius": 10,
     "type": "circle_markers",
     "visible": true,

@@ -1,9 +1,8 @@
 {
  "buffers": {
-  "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTAZmZmZmYmQkAAAAAAAAAUwDMzMzMzM0JAmpmZmZmZE8A=",
-  "layer_2::colors": "DQiH/8pHeP/KR3j/8Pkh//D5If8="
+  "layer_3": "ZmZmZmYmQkBmZmZmZmYUwA=="
  },
- "doc": "Bin edges make discrete classes, and the legend states them.",
+ "doc": "Removing a layer drops it and every buffer keyed under its id.",
  "ops": [
   {
    "buffer": null,
@@ -41,14 +40,14 @@
    }
   },
   {
-   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTAZmZmZmYmQkAAAAAAAAAUwDMzMzMzM0JAmpmZmZmZE8A=",
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
    "op": {
     "id": "layer_2",
     "op": "buffer"
    }
   },
   {
-   "buffer": "DQiH/8pHeP/KR3j/8Pkh//D5If8=",
+   "buffer": "RAFU//3nJf8=",
    "op": {
     "id": "layer_2::colors",
     "op": "buffer"
@@ -66,8 +65,8 @@
        -5.3
       ],
       [
-       36.4,
-       -4.9
+       36.1,
+       -5.2
       ]
      ],
      "color": "#3388ff",
@@ -76,26 +75,28 @@
      "id": "layer_2",
      "layer_group": "Circle Markers Group",
      "legend": {
-      "colors": [
-       "#0d0887",
-       "#ca4778",
-       "#f0f921"
-      ],
-      "edges": [
-       3,
-       6
+      "anchors": [
+       "#440154",
+       "#482878",
+       "#3e4989",
+       "#31688e",
+       "#26828e",
+       "#1f9e89",
+       "#35b779",
+       "#6ece58",
+       "#b5de2b",
+       "#fde725"
       ],
       "field": "value",
-      "kind": "bins"
+      "kind": "ramp",
+      "vmax": 9,
+      "vmin": 1
      },
-     "name": "Classed",
+     "name": "Sites",
      "opacity": 1.0,
      "properties": {
       "value": [
        1.0,
-       3.0,
-       4.5,
-       6.0,
        9.0
       ]
      },
@@ -106,9 +107,69 @@
     },
     "op": "add"
    }
+  },
+  {
+   "buffer": "ZmZmZmYmQkBmZmZmZmYUwA==",
+   "op": {
+    "id": "layer_3",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.3,
+       -5.1
+      ],
+      [
+       36.3,
+       -5.1
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_3",
+     "layer_group": "Circle Markers Group",
+     "name": "Keep",
+     "opacity": 1.0,
+     "properties": {},
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "id": "layer_2",
+    "op": "remove"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "id": "layer_2",
+    "op": "buffer_remove"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "id": "layer_2::colors",
+    "op": "buffer_remove"
+   }
   }
  ],
- "scenario": "color_bins",
+ "scenario": "mut_remove",
  "state": {
   "auto_sync": true,
   "center": [
@@ -126,13 +187,13 @@
      -5.3
     ],
     [
-     36.4,
-     -4.9
+     36.3,
+     -5.1
     ]
    ],
    "max_zoom": 15,
    "padding": 30,
-   "seq": 1,
+   "seq": 2,
    "zoom_offset": 0
   },
   "group_configs": {
@@ -173,43 +234,22 @@
     "autobind_tooltip": true,
     "bounds": [
      [
-      36.0,
-      -5.3
+      36.3,
+      -5.1
      ],
      [
-      36.4,
-      -4.9
+      36.3,
+      -5.1
      ]
     ],
     "color": "#3388ff",
     "fillColor": "#3388ff",
     "fillOpacity": 0.2,
-    "id": "layer_2",
+    "id": "layer_3",
     "layer_group": "Circle Markers Group",
-    "legend": {
-     "colors": [
-      "#0d0887",
-      "#ca4778",
-      "#f0f921"
-     ],
-     "edges": [
-      3,
-      6
-     ],
-     "field": "value",
-     "kind": "bins"
-    },
-    "name": "Classed",
+    "name": "Keep",
     "opacity": 1.0,
-    "properties": {
-     "value": [
-      1.0,
-      3.0,
-      4.5,
-      6.0,
-      9.0
-     ]
-    },
+    "properties": {},
     "radius": 10,
     "type": "circle_markers",
     "visible": true,

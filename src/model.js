@@ -20,11 +20,17 @@
 // something changed -- what React needs, and the same invariant Python's
 // transport keeps for its own reasons.
 //
-// Stage 1 covers: circle markers, pin markers, lines, polygons; column-dict,
-// row-object and coordinate-pair inputs; default folders and group_configs;
-// multi_select radio seeding; the same-name merge promotion (the group minting
-// its own id); bounds and the auto-fit union. Data-driven colour/size, WKT and
-// GeoJSON ingestion, query/select/update and time layers are later stages.
+// Covered so far: the builders (circle markers, pin markers, lines, polygons)
+// over column-dict / row-object / coordinate-pair inputs; default folders and
+// group_configs; radio seeding; the merge promotion; bounds and the auto-fit
+// union; data-driven colour and size with their legend blocks; findLayers /
+// getLayer; hide / show / select / setLayersVisibility; removeLayers; and
+// updateLayer -- attributes, data replace, and the append delta whose wire cost
+// is the batch, not the layer. Every mutation EMITS the same ops Python's
+// transport emits (model.opLog records them; the onPatch option streams them),
+// so a live consumer can forward deltas to applyPatch and the op-stream goldens
+// pin the wire byte-for-byte. Still to come: WKT/GeoJSON ingestion,
+// labels/feature styles/highlight, time layers, the basemap catalogue.
 
 import { layersBoundsUnion } from "./utils.js";
 import { resolveColormap, dataDrivenColors, dataDrivenRadii,
@@ -158,6 +164,26 @@ export function createMapModel(options = {}) {
 
     const nextId = () => `layer_${counter++}`;
 
+    // The wire. Every mutation emits the ops Python's transport would -- adds,
+    // replaces, targeted sets, buffer (re)writes, append deltas -- in the same
+    // order. opLog keeps them all; onPatch streams them to a live consumer.
+    const opLog = [];
+    const onPatch = options.onPatch || null;
+    function emit(op, buffer = null) {
+        opLog.push({ op, buffer });
+        if (onPatch) onPatch(op, buffer);
+    }
+
+    const asBytes = (view) =>
+        new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    function bytesEqual(a, b, length = null) {
+        const ba = asBytes(a), bb = asBytes(b);
+        const n = length != null ? length : Math.max(ba.length, bb.length);
+        if (length == null && ba.length !== bb.length) return false;
+        for (let i = 0; i < n; i++) if (ba[i] !== bb[i]) return false;
+        return true;
+    }
+
     // --- the rules Python's _add_child applies -------------------------------------
 
     function ensureGroupConfig(group, multiSelect) {
@@ -201,6 +227,7 @@ export function createMapModel(options = {}) {
             && l.layer_group === layer.layer_group);
         if (twinIndex === -1) {
             state.layers = [...state.layers, layer];
+            emit({ op: "add", layer });
             return;
         }
         const twin = state.layers[twinIndex];
@@ -221,9 +248,19 @@ export function createMapModel(options = {}) {
             };
         }
         state.layers = state.layers.map((l, i) => (i === twinIndex ? group : l));
+        emit({ op: "replace", id: group.id, layer: group });
     }
 
-    function addLayer(layer, pairs, options, defaultGroup) {
+    // Swaps one top-level config, emitting a whole-layer replace -- or the given
+    // smaller ops when the change can be said in less (Python's _layers_replace).
+    function replaceInState(existing, config, emitOps = null) {
+        state.layers = state.layers.map(l => (l === existing ? config : l));
+        for (const op of emitOps || [{ op: "replace", id: config.id, layer: config }]) {
+            emit(op);
+        }
+    }
+
+    function addLayer(layer, pairs, options, defaultGroup, dataDrivenMethod = null) {
         layer.layer_group = opt(options, "layerGroup", "layer_group", defaultGroup);
         const multiSelect = opt(options, "multiSelect", "multi_select",
             opt(options, "groupMultiSelect", "group_multi_select"));
@@ -234,7 +271,7 @@ export function createMapModel(options = {}) {
             ["tooltipFields", "tooltip_fields"], ["tooltipNames", "tooltip_names"],
             ["popupTemplate", "popup_template"], ["tooltipTemplate", "tooltip_template"],
             ["popupStyle", "popup_style"], ["tooltipStyle", "tooltip_style"],
-            ["popupMaxWidth", "popup_max_width"], ["label", "label"],
+            ["popupMaxWidth", "popup_max_width"],
         ];
         for (const [camel, snake] of displayKeys) {
             const value = opt(options, camel, snake);
@@ -242,14 +279,79 @@ export function createMapModel(options = {}) {
         }
         const bounds = boundsOfPairs(pairs);
         if (bounds) layer.bounds = bounds;
+        // Emission order is Python's: the coordinate buffer, then the data-driven
+        // buffers, then the add itself.
         buffersSet(layer.id, packPairs(pairs));
+        if (dataDrivenMethod) applyDataDriven(layer, options, dataDrivenMethod);
+        recordAddedWith(layer, options, dataDrivenMethod);
         place(layer);
         autoFitExtend(bounds);
         return layer;
     }
 
+    // What each add was called with, so updateLayer(data=...) re-applies it to
+    // new data exactly as the add did. Internal, never on the wire: Python
+    // records added_with on the config; the frontend ignores it, so this side
+    // keeps it out of the state instead.
+    const addedWith = new Map();
+    function recordAddedWith(layer, options, dataDrivenMethod) {
+        const record = { parser: {}, data_opts: null, properties: null };
+        const latCol = opt(options, "latCol", "lat_col");
+        const lonCol = opt(options, "lonCol", "lon_col");
+        if (latCol) record.parser.lat_col = latCol;
+        if (lonCol) record.parser.lon_col = lonCol;
+        if (dataDrivenMethod) record.data_opts = dataOptsOf(options);
+        if (options.properties) record.properties = options.properties;
+        addedWith.set(layer.id, record);
+    }
+
     function buffersSet(key, view) {
         buffers[key] = view;
+        emit({ op: "buffer", id: key }, view);
+    }
+
+    function buffersAppend(key, tail) {
+        const head = buffers[key];
+        const joined = new Uint8Array((head ? head.byteLength : 0) + tail.byteLength);
+        if (head) joined.set(asBytes(head), 0);
+        joined.set(asBytes(tail), head ? head.byteLength : 0);
+        buffers[key] = new DataView(joined.buffer);
+        emit({ op: "buffer_append", id: key }, tail);
+    }
+
+    function buffersRemove(ids) {
+        const removed = Object.keys(buffers).filter(key =>
+            ids.some(id => id != null && (key === id || key.startsWith(`${id}::`))));
+        for (const key of removed) delete buffers[key];
+        for (const key of removed) emit({ op: "buffer_remove", id: key });
+    }
+
+    // Ships a recomputed per-point buffer as a TAIL when the head the client
+    // holds is byte-identical, in full when the values moved, gone when there is
+    // nothing left to ship -- Python's _grow_or_reset, decision and all.
+    function growOrReset(key, payload, bytesPerPoint, nOld) {
+        if (payload == null) {
+            if (buffers[key]) buffersRemove([key]);
+            return;
+        }
+        const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+        const split = nOld * bytesPerPoint;
+        const existing = buffers[key];
+        if (existing && existing.byteLength === split && bytesEqual(existing, view, split)) {
+            buffersAppend(key, new DataView(payload.buffer.slice(
+                payload.byteOffset + split, payload.byteOffset + payload.byteLength)));
+        } else {
+            buffersSet(key, view);
+        }
+    }
+
+    function setOrRemoveBuffer(key, payload) {
+        if (payload != null) {
+            const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+            if (!buffers[key] || !bytesEqual(buffers[key], view)) buffersSet(key, view);
+        } else if (buffers[key]) {
+            buffersRemove([key]);
+        }
     }
 
     // --- builders --------------------------------------------------------------------
@@ -257,8 +359,8 @@ export function createMapModel(options = {}) {
     // color_col / radius_col do three jobs in one call, exactly as in Python: the
     // buffer the GPU draws, and the legend block that describes it, from the same
     // arithmetic -- so the legend cannot disagree with the pixels (GAPS.md gap 4).
-    function applyDataDriven(layer, options, method) {
-        const dataOpts = {
+    function dataOptsOf(options) {
+        return {
             color_col: opt(options, "colorCol", "color_col") ?? null,
             colormap: resolveColormap(opt(options, "colormap", "colormap") ?? null),
             vmin: opt(options, "vmin", "vmin") ?? null,
@@ -267,6 +369,10 @@ export function createMapModel(options = {}) {
             radius_col: opt(options, "radiusCol", "radius_col") ?? null,
             radius_range: opt(options, "radiusRange", "radius_range") ?? [3.0, 18.0],
         };
+    }
+
+    function applyDataDriven(layer, options, method) {
+        const dataOpts = dataOptsOf(options);
         const colors = dataDrivenColors(layer.properties, dataOpts, layer.color, method);
         if (colors) buffersSet(`${layer.id}::colors`, new DataView(colors.buffer));
         const radii = dataDrivenRadii(layer.properties, dataOpts, method);
@@ -292,8 +398,7 @@ export function createMapModel(options = {}) {
             opacity: options.opacity !== undefined ? options.opacity : 1.0,
             properties,
         };
-        applyDataDriven(layer, options, "addCircleMarkers");
-        addLayer(layer, pairs, options, "Circle Markers Group");
+        addLayer(layer, pairs, options, "Circle Markers Group", "addCircleMarkers");
         return model;
     }
 
@@ -307,8 +412,7 @@ export function createMapModel(options = {}) {
             color: options.color || "#e61a26",
             properties,
         };
-        applyDataDriven(layer, options, "addMarkers");
-        addLayer(layer, pairs, options, "Markers Group");
+        addLayer(layer, pairs, options, "Markers Group", "addMarkers");
         return model;
     }
 
@@ -325,6 +429,7 @@ export function createMapModel(options = {}) {
             properties: options.properties || {},
         };
         addLayer(layer, pairs, options, "Line Group");
+        recordAddedWith(layer, options, null);
         return model;
     }
 
@@ -346,6 +451,373 @@ export function createMapModel(options = {}) {
         const fillColor = opt(options, "fillColor", "fill_color");
         if (fillColor !== undefined) layer.fillColor = fillColor;
         addLayer(layer, ring, options, "Polygon Group");
+        recordAddedWith(layer, options, null);
+        return model;
+    }
+
+    // --- query -----------------------------------------------------------------------
+
+    // One targeting vocabulary, shared by everything that operates on existing
+    // layers (Python's find_layers): target matches id or name; ids/name/types/
+    // excludeTypes/group narrow; groups are containers, found by their parts
+    // unless includeGroups. Collection parts inherit their wrapper's folder.
+    function findLayers(target = null, criteria = {}) {
+        const asSet = (v) => (v == null ? null
+            : new Set(typeof v === "string" ? [v] : v));
+        const identifiers = (v) => {
+            if (v == null) return new Set();
+            const items = Array.isArray(v) || v instanceof Set ? [...v] : [v];
+            const out = new Set();
+            for (const item of items) {
+                if (item && typeof item === "object") {
+                    if (item.id != null) out.add(item.id);
+                    if (item.name != null) out.add(item.name);
+                } else if (item != null) {
+                    out.add(item);
+                }
+            }
+            return out;
+        };
+        const wantedIds = new Set([...identifiers(target),
+                                   ...identifiers(criteria.ids)]);
+        const name = criteria.name ?? null;
+        const wantTypes = asSet(criteria.types);
+        const skipTypes = asSet(opt(criteria, "excludeTypes", "exclude_types")) || new Set();
+        const group = criteria.group ?? null;
+        const includeGroups = opt(criteria, "includeGroups", "include_groups", false);
+
+        const found = [];
+        const walk = (seq, inherited) => {
+            for (const layer of seq) {
+                const path = layer.layer_group || inherited;
+                if (layer.type === "group") {
+                    if (matches(layer, path)) found.push(layer);
+                    walk(layer.layers || [], path);
+                } else if (matches(layer, path, true)) {
+                    found.push(layer);
+                }
+            }
+        };
+        const matches = (layer, path, leaf = false) => {
+            if (!leaf && !includeGroups) return false;
+            if (wantedIds.size && !(wantedIds.has(layer.id) || wantedIds.has(layer.name))) return false;
+            if (name != null && layer.name !== name) return false;
+            if (wantTypes != null && !wantTypes.has(layer.type)) return false;
+            if (skipTypes.has(layer.type)) return false;
+            if (group != null && path !== group && !String(path).startsWith(group + "/")) return false;
+            return true;
+        };
+        walk(state.layers, "");
+        return found;
+    }
+
+    function getLayer(identifier, name = null) {
+        for (const l of state.layers) {
+            if (name != null) {
+                if (l.layer_group === identifier && l.name === name) return l;
+            } else if (l.id === identifier || l.name === identifier) {
+                return l;
+            }
+        }
+        return null;
+    }
+
+    // --- visibility and fields ---------------------------------------------------------
+
+    // Python's apply_to_layers: changes by id, nested layers included; a group
+    // addressed by its OWN id takes the fields itself, members still visited.
+    function applyChanges(layers, changes) {
+        const differs = (layer, fields) =>
+            fields && Object.entries(fields).some(([k, v]) => layer[k] !== v);
+        const rebuild = (layer) => {
+            if (layer.type === "group") {
+                const subs = (layer.layers || []).map(rebuild);
+                const changed = subs.some((s, i) => s !== (layer.layers || [])[i]);
+                const own = changes.get(layer.id);
+                const ownReal = differs(layer, own);
+                if (!changed && !ownReal) return layer;
+                return { ...layer, ...(ownReal ? own : {}), layers: subs };
+            }
+            const wanted = changes.get(layer.id);
+            if (!differs(layer, wanted)) return layer;
+            return { ...layer, ...wanted };
+        };
+        return layers.map(rebuild);
+    }
+
+    function setLayerFields(targets, fields) {
+        const real = targets.filter(l => l.id != null
+            && Object.entries(fields).some(([k, v]) => l[k] !== v));
+        if (!real.length) return model;
+        state.layers = applyChanges(state.layers,
+            new Map(real.map(l => [l.id, fields])));
+        for (const l of real) emit({ op: "set", id: l.id, fields: { ...fields } });
+        return model;
+    }
+
+    function hide(target = null, criteria = {}) {
+        const matched = findLayers(target, criteria);
+        if (!matched.length) {
+            console.warn("swiftmap: hide matched no layers. Nothing was hidden.");
+            return model;
+        }
+        return setLayerFields(matched, { visible: false });
+    }
+
+    function show(target = null, criteria = {}) {
+        const matched = findLayers(target, criteria);
+        if (!matched.length) {
+            console.warn("swiftmap: show matched no layers. Nothing was shown.");
+            return model;
+        }
+        return setLayerFields(matched, { visible: true });
+    }
+
+    function setLayersVisibility(visibilityMap) {
+        for (const [key, visible] of Object.entries(visibilityMap)) {
+            setLayerFields(findLayers(key), { visible: !!visible });
+        }
+        return model;
+    }
+
+    // Declarative and total within its scope: each call states the complete
+    // selection, select(null, {scope}) restores the scope whole (Python's select).
+    function select(target = null, options = {}) {
+        const { scope = null, zoom = false, ...criteria } = options;
+        const clearing = target == null && !Object.keys(criteria).length;
+        const chosen = clearing ? [] : findLayers(target, criteria);
+        if (!clearing && !chosen.length
+                && !(Array.isArray(target) && target.length === 0)) {
+            console.warn("swiftmap: select matched nothing; restoring the scope to visible.");
+        }
+        const chosenIds = new Set(chosen.map(l => l.id));
+        let pool;
+        if (scope != null) {
+            pool = findLayers(null, { group: scope });
+        } else if (chosen.length) {
+            const groups = new Set(chosen.map(l => l.layer_group));
+            pool = findLayers().filter(l => groups.has(l.layer_group));
+        } else {
+            pool = findLayers().filter(l => l.type !== "basemap");
+        }
+        if (chosenIds.size) {
+            setLayerFields(pool.filter(l => chosenIds.has(l.id)), { visible: true });
+            setLayerFields(pool.filter(l => !chosenIds.has(l.id)), { visible: false });
+        } else {
+            setLayerFields(pool, { visible: true });
+        }
+        if (zoom && chosen.length) {
+            const union = layersBoundsUnion(chosen);
+            if (union) {
+                fitSeq += 1;
+                state.fit_bounds_request = { bounds: union, zoom_offset: 0,
+                                             max_zoom: null, padding: null, seq: fitSeq };
+            }
+        }
+        return model;
+    }
+
+    // --- removal -----------------------------------------------------------------------
+
+    function removeLayers(identifiers) {
+        const ids = new Set(), names = new Set();
+        for (const item of identifiers) {
+            if (item && typeof item === "object") {
+                ids.add(item.id);
+                names.add(item.name);
+            } else {
+                ids.add(item);
+                names.add(item);
+            }
+        }
+        const kept = [], dropped = [];
+        for (const l of state.layers) {
+            (ids.has(l.id) || names.has(l.name) ? dropped : kept).push(l);
+        }
+        if (!dropped.length) return model;
+        state.layers = kept;
+        for (const l of dropped) emit({ op: "remove", id: l.id });
+        const bufferIds = [];
+        for (const l of dropped) {
+            bufferIds.push(l.id);
+            for (const sub of l.layers || []) if (sub.id) bufferIds.push(sub.id);
+        }
+        buffersRemove(bufferIds);
+        return model;
+    }
+
+    const removeLayer = (nameOrId) => removeLayers([nameOrId]);
+
+    // --- in-place data updates ---------------------------------------------------------
+
+    const deepEqual = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+    function singleTopLevel(identifier, name) {
+        const targetId = identifier && typeof identifier === "object" ? identifier.id : identifier;
+        const targetName = identifier && typeof identifier === "object" ? identifier.name : identifier;
+        for (const l of state.layers) {
+            if (name != null) {
+                if (l.layer_group === identifier && l.name === name) return l;
+            } else if (l.id === targetId || l.name === targetName) {
+                return l;
+            }
+        }
+        if (findLayers(identifier).length) {
+            console.warn(`swiftmap: updateLayer: '${identifier}' is a part inside a collection; `
+                + `updating a collection's parts in place is not supported yet. Nothing changed.`);
+        } else {
+            console.warn(`swiftmap: updateLayer: no layer named '${identifier}'. Nothing changed.`);
+        }
+        return null;
+    }
+
+    // update_layer, all three shapes: attributes; data replace; append -- the
+    // live-feed primitive, whose wire cost is the batch, never the layer.
+    function updateLayer(identifier, options = {}) {
+        const { data = null, append = false, name = null, ...restRaw } = options;
+        const rest = { ...restRaw };
+        const parser = {};
+        for (const [camel, snake] of [["latCol", "lat_col"], ["lonCol", "lon_col"]]) {
+            const v = opt(rest, camel, snake);
+            if (v !== undefined) parser[snake] = v;
+            delete rest[camel];
+            delete rest[snake];
+        }
+        if (data != null) {
+            const target = singleTopLevel(identifier, name);
+            if (!target) return model;
+            if (target.type === "group") {
+                console.warn(`swiftmap: updateLayer: '${target.name}' is a collection; update its `
+                    + `parts as flat layers, or remove and re-add it. Nothing changed.`);
+                return model;
+            }
+            if (target.type === "circle_markers" || target.type === "markers") {
+                return updatePoints(target, data, append, parser, rest);
+            }
+            if (append) {
+                console.warn(`swiftmap: updateLayer: append=true on '${target.name}', a single `
+                    + `${target.type}. Pass data without append to replace it. Nothing changed.`);
+                return model;
+            }
+            if (target.type === "polyline" || target.type === "polygon") {
+                return updateSingle(target, data, rest);
+            }
+            console.warn(`swiftmap: updateLayer: data applies to point, line and polygon layers; `
+                + `'${target.name}' is a ${target.type} layer. Nothing changed.`);
+            return model;
+        }
+        // Attribute updates: one replace per match, as Python sends them.
+        const targetId = identifier && typeof identifier === "object" ? identifier.id : identifier;
+        const targetName = identifier && typeof identifier === "object" ? identifier.name : identifier;
+        const changed = [];
+        state.layers = state.layers.map(l => {
+            const match = name != null
+                ? (l.layer_group === identifier && l.name === name)
+                : (l.id === targetId || l.name === targetName);
+            if (!match) return l;
+            const next = { ...l, ...rest };
+            changed.push(next);
+            return next;
+        });
+        for (const config of changed) emit({ op: "replace", id: config.id, layer: config });
+        return model;
+    }
+
+    function updatePoints(layer, data, append, parser, fieldKwargs) {
+        const rec = addedWith.get(layer.id) || {};
+        let parsed;
+        try {
+            parsed = normalizePoints(data, { ...(rec.parser || {}), ...parser });
+        } catch (err) {
+            console.warn(`swiftmap: updateLayer could not read the supplied data for `
+                + `'${layer.name}'. ${err.message} Nothing changed.`);
+            return model;
+        }
+        let { pairs, properties: props } = parsed;
+        if (!pairs.length) {
+            console.warn(`swiftmap: updateLayer found no points for '${layer.name}'. Nothing changed.`);
+            return model;
+        }
+        if (layer.time) {
+            console.warn(`swiftmap: updateLayer: '${layer.name}' is a time layer; time buffers `
+                + `are not re-derived by the JS model yet. Nothing changed.`);
+            return model;
+        }
+        const nNew = pairs.length;
+        let nOld = 0;
+        if (append) {
+            const old = buffers[layer.id];
+            nOld = old ? old.byteLength / 16 : 0;
+            const oldPairs = [];
+            for (let i = 0; i < nOld; i++) {
+                oldPairs.push([old.getFloat64(i * 16, true), old.getFloat64(i * 16 + 8, true)]);
+            }
+            pairs = [...oldPairs, ...pairs];
+            const oldProps = layer.properties || {};
+            const merged = {};
+            for (const k of new Set([...Object.keys(oldProps), ...Object.keys(props)])) {
+                const a = Array.isArray(oldProps[k]) ? [...oldProps[k]]
+                    : new Array(nOld).fill(oldProps[k] === undefined ? null : oldProps[k]);
+                const b = Array.isArray(props[k]) ? props[k] : new Array(nNew).fill(null);
+                merged[k] = [...a, ...b];
+            }
+            props = merged;
+        }
+        const n = pairs.length;
+        const dataOpts = rec.data_opts || dataOptsOf({});
+        const colors = dataDrivenColors(props, dataOpts, layer.color, "updateLayer");
+        const radii = dataDrivenRadii(props, dataOpts, "updateLayer");
+        const legend = dataDrivenLegend(props, dataOpts, layer.color);
+        const sizeLegend = dataDrivenSizeLegend(props, dataOpts);
+        const bounds = boundsOfPairs(pairs);
+        const coords = packPairs(pairs);
+
+        const config = { ...layer, properties: props, bounds };
+        for (const [key, value] of [["legend", legend], ["legend_size", sizeLegend]]) {
+            if (value) config[key] = value;
+            else delete config[key];
+        }
+        Object.assign(config, fieldKwargs);
+
+        if (append && nOld > 0) {
+            buffersAppend(layer.id, new DataView(coords.buffer.slice(nOld * 16)));
+            growOrReset(`${layer.id}::colors`, colors, 4, nOld);
+            growOrReset(`${layer.id}::radii`, radii, 4, nOld);
+            const fields = { bounds, ...fieldKwargs };
+            for (const [key, value] of [["legend", legend], ["legend_size", sizeLegend]]) {
+                if (!deepEqual(value || null, layer[key] || null)) fields[key] = value;
+            }
+            const tails = {};
+            for (const [k, v] of Object.entries(props)) tails[k] = v.slice(nOld);
+            replaceInState(layer, config, [
+                { op: "append", id: layer.id, base: nOld, count: nNew, properties: tails },
+                { op: "set", id: layer.id, fields },
+            ]);
+        } else {
+            buffersSet(layer.id, coords);
+            setOrRemoveBuffer(`${layer.id}::colors`, colors);
+            setOrRemoveBuffer(`${layer.id}::radii`, radii);
+            replaceInState(layer, config);
+        }
+        autoFitExtend(bounds);
+        return model;
+    }
+
+    function updateSingle(layer, data, fieldKwargs) {
+        const rec = addedWith.get(layer.id) || {};
+        const pairs = data.map(p => [Number(p[0]), Number(p[1])]);
+        if (layer.type === "polygon" && pairs.length) {
+            const [f, l] = [pairs[0], pairs[pairs.length - 1]];
+            if (f[0] !== l[0] || f[1] !== l[1]) pairs.push([f[0], f[1]]);
+        }
+        const bounds = boundsOfPairs(pairs);
+        const config = { ...layer, properties: { ...(rec.properties || {}) }, bounds };
+        delete config.parts;
+        delete config.rings;
+        Object.assign(config, fieldKwargs);
+        buffersSet(layer.id, packPairs(pairs));
+        replaceInState(layer, config);
+        autoFitExtend(bounds);
         return model;
     }
 
@@ -378,18 +850,22 @@ export function createMapModel(options = {}) {
 
     const model = {
         addCircleMarkers, addMarkers, addLine, addPolygon,
+        findLayers, getLayer,
+        hide, show, select, setLayersVisibility, setLayerFields,
+        removeLayer, removeLayers, updateLayer,
         wireState, props,
         get layers() { return state.layers; },
         get buffers() { return buffers; },
+        get opLog() { return opLog; },
     };
 
     // Every map starts from the seeded basemaps, radio-grouped, like Python's.
     if (opt(options, "basemaps", "basemaps") !== false) {
         ensureGroupConfig("Basemaps", false);
         for (const spec of DEFAULT_BASEMAPS) {
-            state.layers = [...state.layers, {
-                id: nextId(), type: "basemap", layer_group: "Basemaps", ...spec,
-            }];
+            const layer = { id: nextId(), type: "basemap", layer_group: "Basemaps", ...spec };
+            state.layers = [...state.layers, layer];
+            emit({ op: "add", layer });
         }
     }
 

@@ -1,9 +1,9 @@
 {
  "buffers": {
-  "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTAZmZmZmYmQkAAAAAAAAAUwDMzMzMzM0JAmpmZmZmZE8A=",
-  "layer_2::colors": "DQiH/8pHeP/KR3j/8Pkh//D5If8="
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
+  "layer_3": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA="
  },
- "doc": "Bin edges make discrete classes, and the legend states them.",
+ "doc": "hide by name, then by target, then show: targeted set ops, never the trait.",
  "ops": [
   {
    "buffer": null,
@@ -41,16 +41,9 @@
    }
   },
   {
-   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTAZmZmZmYmQkAAAAAAAAAUwDMzMzMzM0JAmpmZmZmZE8A=",
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
    "op": {
     "id": "layer_2",
-    "op": "buffer"
-   }
-  },
-  {
-   "buffer": "DQiH/8pHeP/KR3j/8Pkh//D5If8=",
-   "op": {
-    "id": "layer_2::colors",
     "op": "buffer"
    }
   },
@@ -66,8 +59,8 @@
        -5.3
       ],
       [
-       36.4,
-       -4.9
+       36.1,
+       -5.2
       ]
      ],
      "color": "#3388ff",
@@ -75,30 +68,9 @@
      "fillOpacity": 0.2,
      "id": "layer_2",
      "layer_group": "Circle Markers Group",
-     "legend": {
-      "colors": [
-       "#0d0887",
-       "#ca4778",
-       "#f0f921"
-      ],
-      "edges": [
-       3,
-       6
-      ],
-      "field": "value",
-      "kind": "bins"
-     },
-     "name": "Classed",
+     "name": "Sites",
      "opacity": 1.0,
-     "properties": {
-      "value": [
-       1.0,
-       3.0,
-       4.5,
-       6.0,
-       9.0
-      ]
-     },
+     "properties": {},
      "radius": 10,
      "type": "circle_markers",
      "visible": true,
@@ -106,9 +78,75 @@
     },
     "op": "add"
    }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
+   "op": {
+    "id": "layer_3",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.1,
+       -5.2
+      ]
+     ],
+     "color": "#3388ff",
+     "id": "layer_3",
+     "layer_group": "Line Group",
+     "name": "Track",
+     "opacity": 1.0,
+     "properties": {},
+     "type": "polyline",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": false
+    },
+    "id": "layer_3",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "visible": true
+    },
+    "id": "layer_3",
+    "op": "set"
+   }
   }
  ],
- "scenario": "color_bins",
+ "scenario": "mut_hide_show",
  "state": {
   "auto_sync": true,
   "center": [
@@ -126,13 +164,13 @@
      -5.3
     ],
     [
-     36.4,
-     -4.9
+     36.1,
+     -5.2
     ]
    ],
    "max_zoom": 15,
    "padding": 30,
-   "seq": 1,
+   "seq": 2,
    "zoom_offset": 0
   },
   "group_configs": {
@@ -140,6 +178,9 @@
     "multi_select": false
    },
    "Circle Markers Group": {
+    "multi_select": true
+   },
+   "Line Group": {
     "multi_select": true
    }
   },
@@ -177,8 +218,8 @@
       -5.3
      ],
      [
-      36.4,
-      -4.9
+      36.1,
+      -5.2
      ]
     ],
     "color": "#3388ff",
@@ -186,32 +227,34 @@
     "fillOpacity": 0.2,
     "id": "layer_2",
     "layer_group": "Circle Markers Group",
-    "legend": {
-     "colors": [
-      "#0d0887",
-      "#ca4778",
-      "#f0f921"
-     ],
-     "edges": [
-      3,
-      6
-     ],
-     "field": "value",
-     "kind": "bins"
-    },
-    "name": "Classed",
+    "name": "Sites",
     "opacity": 1.0,
-    "properties": {
-     "value": [
-      1.0,
-      3.0,
-      4.5,
-      6.0,
-      9.0
-     ]
-    },
+    "properties": {},
     "radius": 10,
     "type": "circle_markers",
+    "visible": false,
+    "weight": 3
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.3
+     ],
+     [
+      36.1,
+      -5.2
+     ]
+    ],
+    "color": "#3388ff",
+    "id": "layer_3",
+    "layer_group": "Line Group",
+    "name": "Track",
+    "opacity": 1.0,
+    "properties": {},
+    "type": "polyline",
     "visible": true,
     "weight": 3
    }

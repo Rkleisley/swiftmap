@@ -4,6 +4,211 @@
   "layer_2::colors": "RAFU/0QFV/9FCFr/RQxe/0UPYf9GE2T/RhZn/0caa/9HHW7/RyFx/0gkdP9IKHj/Ryt5/0Yue/9FMXz/RDR+/0Q3f/9DOYH/QjyD/0E/hP9AQob/P0WH/z5Iif89S4n/PE6K/ztRiv86VIv/OFaL/zdZjP82XIz/NV+M/zRhjf8zZI3/MWeO/zBqjv8vbI7/Lm6O/y1xjv8sc47/K3WO/yp4jv8peo7/KHyO/yd/jv8mgY7/JoOO/yWGjf8kiI3/JIuM/yONjP8ikIz/IpOL/yGVi/8hmIr/IJqK/x+dif8gn4j/IqGH/ySkhf8mpoT/KKiD/yqqgf8srID/Lq9+/zCxff8ys3v/NLZ6/ze4eP88unX/Qbxy/0a+b/9LwGz/UMJp/1XEZv9bxmP/YMhg/2XKXf9qzFr/b85X/3bQU/980U//g9NL/4nUR/+P1kP/ltc//5zYO/+j2jf/qdsz/6/dL/+23iv/vN8q/8PgKv/J4Sn/0OEp/9biKP/d4yj/4+Qn/+rlJ//w5Sb/9+Ym//3nJf8="
  },
  "doc": "color_col over the default viridis ramp, extremes from the data.\n\n    A 0..100 sweep, so the interpolation and its rounding are exercised across\n    the whole ramp -- the half-to-even cases included.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "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",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": "RAFU/0QFV/9FCFr/RQxe/0UPYf9GE2T/RhZn/0caa/9HHW7/RyFx/0gkdP9IKHj/Ryt5/0Yue/9FMXz/RDR+/0Q3f/9DOYH/QjyD/0E/hP9AQob/P0WH/z5Iif89S4n/PE6K/ztRiv86VIv/OFaL/zdZjP82XIz/NV+M/zRhjf8zZI3/MWeO/zBqjv8vbI7/Lm6O/y1xjv8sc47/K3WO/yp4jv8peo7/KHyO/yd/jv8mgY7/JoOO/yWGjf8kiI3/JIuM/yONjP8ikIz/IpOL/yGVi/8hmIr/IJqK/x+dif8gn4j/IqGH/ySkhf8mpoT/KKiD/yqqgf8srID/Lq9+/zCxff8ys3v/NLZ6/ze4eP88unX/Qbxy/0a+b/9LwGz/UMJp/1XEZv9bxmP/YMhg/2XKXf9qzFr/b85X/3bQU/980U//g9NL/4nUR/+P1kP/ltc//5zYO/+j2jf/qdsz/6/dL/+23iv/vN8q/8PgKv/J4Sn/0OEp/9biKP/d4yj/4+Qn/+rlJ//w5Sb/9+Ym//3nJf8=",
+   "op": {
+    "id": "layer_2::colors",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.1,
+       -5.2
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Circle Markers Group",
+     "legend": {
+      "anchors": [
+       "#440154",
+       "#482878",
+       "#3e4989",
+       "#31688e",
+       "#26828e",
+       "#1f9e89",
+       "#35b779",
+       "#6ece58",
+       "#b5de2b",
+       "#fde725"
+      ],
+      "field": "value",
+      "kind": "ramp",
+      "vmax": 100,
+      "vmin": 0
+     },
+     "name": "Sweep",
+     "opacity": 1.0,
+     "properties": {
+      "value": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20,
+       21,
+       22,
+       23,
+       24,
+       25,
+       26,
+       27,
+       28,
+       29,
+       30,
+       31,
+       32,
+       33,
+       34,
+       35,
+       36,
+       37,
+       38,
+       39,
+       40,
+       41,
+       42,
+       43,
+       44,
+       45,
+       46,
+       47,
+       48,
+       49,
+       50,
+       51,
+       52,
+       53,
+       54,
+       55,
+       56,
+       57,
+       58,
+       59,
+       60,
+       61,
+       62,
+       63,
+       64,
+       65,
+       66,
+       67,
+       68,
+       69,
+       70,
+       71,
+       72,
+       73,
+       74,
+       75,
+       76,
+       77,
+       78,
+       79,
+       80,
+       81,
+       82,
+       83,
+       84,
+       85,
+       86,
+       87,
+       88,
+       89,
+       90,
+       91,
+       92,
+       93,
+       94,
+       95,
+       96,
+       97,
+       98,
+       99,
+       100
+      ]
+     },
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  }
+ ],
  "scenario": "ramp_default",
  "state": {
   "auto_sync": true,

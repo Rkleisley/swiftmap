@@ -567,3 +567,14 @@ def test_a_layer_config_supports_the_dict_protocol():
     as_dict = dict(layer)
     assert as_dict == layer.to_dict()
     assert {**layer}["name"] == "Sites"
+
+
+def test_a_lines_properties_constant_survives_a_data_update():
+    # add_line(properties=...) reached the config only through **kwargs and was
+    # never recorded, so update_layer(data=...) emptied it -- add_polygon recorded
+    # its properly. Caught by the authoring conformance goldens.
+    m = Map()
+    m.add_line([[36.0, -5.3], [36.1, -5.2]], name="Track",
+               properties={"vessel": "Swift One"})
+    m.update_layer("Track", data=[[36.0, -5.3], [36.2, -5.1]])
+    assert m.find_layers("Track")[0].get("properties") == {"vessel": "Swift One"}

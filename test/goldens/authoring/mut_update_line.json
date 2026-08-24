@@ -1,6 +1,8 @@
 {
- "buffers": {},
- "doc": "Map() alone: the seeded basemaps and their radio group.",
+ "buffers": {
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcCamZmZmRlCQGZmZmZmZhTA"
+ },
+ "doc": "A single line's data replaced in place.",
  "ops": [
   {
    "buffer": null,
@@ -36,9 +38,86 @@
     },
     "op": "add"
    }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.1,
+       -5.2
+      ]
+     ],
+     "color": "#0055ff",
+     "id": "layer_2",
+     "layer_group": "Line Group",
+     "name": "Track",
+     "opacity": 1.0,
+     "properties": {
+      "vessel": "Swift One"
+     },
+     "type": "polyline",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcCamZmZmRlCQGZmZmZmZhTA",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "id": "layer_2",
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.2,
+       -5.1
+      ]
+     ],
+     "color": "#0055ff",
+     "id": "layer_2",
+     "layer_group": "Line Group",
+     "name": "Track",
+     "opacity": 1.0,
+     "properties": {
+      "vessel": "Swift One"
+     },
+     "type": "polyline",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "replace"
+   }
   }
  ],
- "scenario": "empty_map",
+ "scenario": "mut_update_line",
  "state": {
   "auto_sync": true,
   "center": [
@@ -49,10 +128,28 @@
   "draw_config": {},
   "draw_seq": 0,
   "drawings": [],
-  "fit_bounds_request": {},
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.3
+    ],
+    [
+     36.2,
+     -5.1
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 2,
+   "zoom_offset": 0
+  },
   "group_configs": {
    "Basemaps": {
     "multi_select": false
+   },
+   "Line Group": {
+    "multi_select": true
    }
   },
   "height": "",
@@ -79,6 +176,31 @@
     "type": "basemap",
     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
     "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.3
+     ],
+     [
+      36.2,
+      -5.1
+     ]
+    ],
+    "color": "#0055ff",
+    "id": "layer_2",
+    "layer_group": "Line Group",
+    "name": "Track",
+    "opacity": 1.0,
+    "properties": {
+     "vessel": "Swift One"
+    },
+    "type": "polyline",
+    "visible": true,
+    "weight": 3
    }
   ],
   "legend_config": {},
