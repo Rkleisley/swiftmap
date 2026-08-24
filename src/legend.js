@@ -109,6 +109,16 @@ function matcherHits(matcher, entry, groupName) {
     return constrained;
 }
 
+// A ramp endpoint as it should read in a legend: 10, not 10.000000001, and
+// 0.003757, not 0.0037567270919680595. Four significant figures, integers whole,
+// anything non-numeric passed through. Python rounds its side before composing
+// a block (_label_num), but legends derived or hand-built in JS arrive raw.
+export function formatBound(value) {
+    const n = Number(value);
+    if (value == null || value === "" || !isFinite(n)) return String(value);
+    return Number.isInteger(n) ? String(n) : String(Number(n.toPrecision(4)));
+}
+
 export function deriveLegendSpec(layers, groupConfigs, config) {
     const cfg = config || {};
     const groups = [];
@@ -213,8 +223,8 @@ function rampRow(entry) {
     }));
     const ends = div({ display: "flex", justifyContent: "space-between", width: "120px",
                        fontSize: "11px", color: "#555" });
-    ends.appendChild(div({}, String(entry.vmin)));
-    ends.appendChild(div({}, String(entry.vmax)));
+    ends.appendChild(div({}, formatBound(entry.vmin)));
+    ends.appendChild(div({}, formatBound(entry.vmax)));
     row.appendChild(ends);
     return row;
 }
@@ -265,7 +275,7 @@ function sizesRow(entry) {
     const row = div({ display: "flex", alignItems: "center", marginTop: "5px" });
     row.appendChild(div({ marginRight: "6px", flex: "none", color: "#666" }, "●"));
     const range = entry.vmin != null && entry.vmax != null
-        ? ` (${entry.vmin} – ${entry.vmax})` : "";
+        ? ` (${formatBound(entry.vmin)} – ${formatBound(entry.vmax)})` : "";
     row.appendChild(div({}, `size ∝ ${entry.field || entry.label}${range}`));
     return row;
 }

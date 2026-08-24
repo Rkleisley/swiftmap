@@ -1,4 +1,5 @@
 import { L, provideLeaflet, requireLeaflet } from "./libs.js";
+import { warnLayerProblems } from "./validate.js";
 import { renderSidebarControls, normalizeRadioLayers, sidebarCollapseState } from "./sidebar.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
@@ -563,6 +564,11 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         const layers = layerState;
         const groupConfigs = host.get("group_configs") || {};
         const coordinateBuffers = bufferState;
+
+        // Authoring guardrails, once per config object: where Python warns at add
+        // time, a hand-built JS config used to fail silently -- a blank or subtly
+        // wrong map with nothing in the console (src/validate.js).
+        for (const layer of layers) warnLayerProblems(layer, coordinateBuffers);
 
         // Enforce mutually exclusive radio group visibility before collecting or rendering WebGL layers.
         // Written back as targeted flips, never the layers trait -- the full write was

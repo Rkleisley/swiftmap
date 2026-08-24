@@ -126,6 +126,14 @@ function appendRows(layer, op) {
     const count = op.count || 0;
     const incoming = op.properties || {};
     const props = { ...(layer.properties || {}) };
+    // `base` must equal the layer's current row count: off by one and every
+    // property desyncs from its coordinates permanently, with nothing on screen
+    // to say so. Python computes base for its ops; hand-built feeds get told.
+    const off = Object.keys(props).find(k => Array.isArray(props[k]) && props[k].length !== base);
+    if (off !== undefined) {
+        console.warn(`swiftmap: append to ${layer.id}: base ${base} does not match `
+            + `property "${off}"'s ${props[off].length} rows -- rows will desync`);
+    }
     for (const key of new Set([...Object.keys(props), ...Object.keys(incoming)])) {
         const head = Array.isArray(props[key]) ? props[key]
             : new Array(base).fill(props[key] === undefined ? null : props[key]);

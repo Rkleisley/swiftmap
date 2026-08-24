@@ -1,4 +1,21 @@
 import { L } from "./libs.js";
+
+// The union of every layer's recorded bounds, groups included -- the same box
+// Python's auto-fit grows per add. Layers without bounds (basemaps) contribute
+// nothing; null when nothing carries any.
+export function layersBoundsUnion(layers, acc = null) {
+    for (const layer of layers || []) {
+        const b = layer && layer.bounds;
+        if (Array.isArray(b) && b.length === 2) {
+            acc = acc
+                ? [[Math.min(acc[0][0], b[0][0]), Math.min(acc[0][1], b[0][1])],
+                   [Math.max(acc[1][0], b[1][0]), Math.max(acc[1][1], b[1][1])]]
+                : [[b[0][0], b[0][1]], [b[1][0], b[1][1]]];
+        }
+        if (layer && Array.isArray(layer.layers)) acc = layersBoundsUnion(layer.layers, acc);
+    }
+    return acc;
+}
 export function loadCSS(id, url) {
     if (!document.getElementById(id)) {
         const link = document.createElement("link");

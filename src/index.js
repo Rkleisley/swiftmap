@@ -16,13 +16,15 @@ export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers,
 export { renderLayer, renderMergedGlLayer, styleFor, getIndexedProperties } from "./layers.js";
 export { renderSidebarControls, normalizeRadioLayers, getLayerBounds,
          sidebarCollapseState } from "./sidebar.js";
-export { deriveLegendSpec, renderLegend } from "./legend.js";
+export { deriveLegendSpec, renderLegend, formatBound } from "./legend.js";
+export { collectLayerProblems, warnLayerProblems } from "./validate.js";
 export { collectLabels, renderLabels } from "./labels.js";
 export { pinShader } from "./shaders.js";
 export { parsePeriod, addPeriod, generateTicks, windowFor, featureInWindow,
          timesFor, layerInWindow, collectTimeExtent, hasTimeLayers,
          renderTimeControl } from "./timecontrol.js";
 export {
+    layersBoundsUnion,
     parseColor,
     escapeHtml,
     safeUrl,

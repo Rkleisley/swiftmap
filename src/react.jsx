@@ -21,6 +21,7 @@ import glify from "leaflet.glify";
 import "@geoman-io/leaflet-geoman-free";
 import { createSwiftMap } from "./core.js";
 import { createHostStub } from "./host.js";
+import { layersBoundsUnion } from "./utils.js";
 
 // glify attaches itself to window.L at import when Leaflet is already there
 // (Leaflet's own UMD sets window.L even under a bundler); belt and braces for a
@@ -54,7 +55,9 @@ const PROP_NAMES = Object.keys(PROP_KEYS);
 
 const DEFAULTS = {
     layers: [], coordinate_buffers: {}, group_configs: {},
-    center: [36.0, -5.35], zoom: 10, crs: "EPSG:3857", height: "",
+    // A neutral opening view; a map given data and no view auto-fits instead
+    // (below), matching Python's Map().
+    center: [0, 0], zoom: 2, crs: "EPSG:3857", height: "",
     auto_sync: true, sync_trigger: 0,
     show_logo: false, logo_config: {}, show_legend: false, legend_config: {},
     show_scale: false, scale_config: {}, show_draw: false, draw_config: {},
@@ -68,6 +71,16 @@ function stateFromProps(props) {
     const state = { ...DEFAULTS };
     for (const [prop, key] of Object.entries(PROP_KEYS)) {
         if (props[prop] !== undefined) state[key] = props[prop];
+    }
+    // Python's Map() auto-fits when built with no explicit view; this host
+    // matches it. No center, no zoom, no fit of your own -> open on the data,
+    // with the same request shape and ceilings the Python side sends.
+    if (props.center === undefined && props.zoom === undefined
+            && props.fitBoundsRequest === undefined) {
+        const union = layersBoundsUnion(state.layers);
+        if (union) {
+            state.fit_bounds_request = { bounds: union, max_zoom: 15, padding: 30, seq: 1 };
+        }
     }
     return state;
 }
