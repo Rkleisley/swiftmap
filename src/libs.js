@@ -3,7 +3,8 @@
 // module imports it from here and sees whatever provideLeaflet set.
 //
 // Two kinds of host. The widget and a static export fetch Leaflet, glify and
-// Geoman at runtime (src/loader.js), because their page has no bundler; an npm
+// Geoman at runtime (src/loader.js, the CDN fallback the no-Node rebuild
+// uses), because their page has no bundler; an npm
 // consumer imports them as real dependencies and passes the result in. Either
 // way the ORDER is fixed by construction: Geoman attaches map.pm through a
 // Leaflet init hook that only runs for maps created after the plugin exists

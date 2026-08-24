@@ -291,15 +291,15 @@ function swatchRow(entry) {
 // collapsedPaths at module level and two maps on one page share it -- a filed bug
 // this deliberately does not inherit. Keyed by group name, surviving the full
 // re-render every sync performs.
-const collapsedByContainer = new WeakMap();
+const legendCollapsedByContainer = new WeakMap();
 
 export function renderLegend(container, spec, options = {}) {
     container.innerHTML = "";
     const dimHidden = options.dimHidden !== false;
-    let collapsed = collapsedByContainer.get(container);
+    let collapsed = legendCollapsedByContainer.get(container);
     if (!collapsed) {
         collapsed = new Set();
-        collapsedByContainer.set(container, collapsed);
+        legendCollapsedByContainer.set(container, collapsed);
     }
     container.appendChild(div({
         fontSize: "13px", fontWeight: "bold", borderBottom: "2px solid #eee",

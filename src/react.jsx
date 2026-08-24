@@ -18,7 +18,11 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle,
                useReducer, useRef } from "react";
 import L from "leaflet";
-import glify from "leaflet.glify";
+// glify ships two builds and they are NOT equivalent: dist/glify.js (the
+// package main) renders no vector pixels under our wiring, while
+// dist/glify-browser.js -- the file the CDN always served -- draws correctly.
+// Import the proven artifact by path, everywhere swiftmap bundles it.
+import glify from "leaflet.glify/dist/glify-browser.js";
 import "@geoman-io/leaflet-geoman-free";
 import { createSwiftMap } from "./core.js";
 import { createHostStub } from "./host.js";

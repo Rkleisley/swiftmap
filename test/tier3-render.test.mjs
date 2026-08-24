@@ -77,6 +77,17 @@ const suite = chromium ? test : test.skip;
 
 suite("the widget renders a Leaflet map with the expected panes", async () => {
     await withPage(async (page, errors) => {
+        // The bundle carries Leaflet, glify and Geoman inside it: rendering must
+        // touch NO CDN -- the closed-network requirement, asserted here so a
+        // regression to runtime fetching cannot land quietly. (Basemap tiles are
+        // runtime content and the fixture's basemap starts hidden.)
+        const external = await page.evaluate(() =>
+            performance.getEntriesByType("resource")
+                .map(e => e.name)
+                .filter(u => !u.startsWith("http://127.0.0.1")
+                    && !u.startsWith("data:") && !u.startsWith("blob:")));
+        assert.deepEqual(external.filter(u => !u.includes("tile")), [],
+            "no script, stylesheet or font left the test server");
         assert.equal(await page.locator(".leaflet-container").count(), 1,
             "Leaflet initialised inside the widget element");
         for (const pane of ["polygons", "polylines", "points"]) {

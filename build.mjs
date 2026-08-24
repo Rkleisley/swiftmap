@@ -21,12 +21,22 @@ const shared = {
 const builds = [
     // Framework-agnostic core, for npm consumers.
     { ...shared, entryPoints: ["src/index.js"], outfile: "dist/index.js" },
-    // anywidget entry: what the Python widget loads.
-    { ...shared, entryPoints: ["src/anywidget.js"], outfile: "dist/anywidget.js" },
-    // Same anywidget bundle, written where the Python package ships it from.
-    // anywidget inlines this file as a string, so a sibling .map is never fetchable --
-    // inline the sourcemap instead of emitting a dead reference.
-    { ...shared, entryPoints: ["src/anywidget.js"], outfile: "swiftmap/static/widget.js", sourcemap: "inline" },
+    // anywidget entry: what the Python widget loads. Leaflet, glify, Geoman and
+    // every stylesheet ride INSIDE (images as data URIs), so the widget and the
+    // static export need no network -- the closed-network requirement, and what
+    // makes the browser test tiers hermetic. This unminified build with an
+    // external sourcemap is the debuggable twin the fixtures drive.
+    { ...shared, entryPoints: ["src/anywidget.js"], outfile: "dist/anywidget.js",
+      loader: { ".png": "dataurl", ".svg": "dataurl" } },
+    // Same bundle where the Python package ships it from. anywidget inlines the
+    // file as a string, and with the libraries aboard an inline sourcemap would
+    // triple a megabyte-scale payload -- so this one is minified with no map;
+    // debug against dist/anywidget.js. Its .css lands beside it as widget.css
+    // (map.css + leaflet.css + geoman.css combined), which _widget_css_path
+    // serves and the export inlines.
+    { ...shared, entryPoints: ["src/anywidget.js"], outfile: "swiftmap/static/widget.js",
+      minify: true, sourcemap: false,
+      loader: { ".png": "dataurl", ".svg": "dataurl" } },
     // The React component. react and the three rendering libraries are PEERS: the
     // consumer's bundler owns them, so they stay external here and plain-JS
     // consumers of dist/index.js never pull React.
@@ -64,7 +74,6 @@ if (watch) {
     console.log("watching...");
 } else {
     await Promise.all(builds.map(cfg => esbuild.build(cfg)));
-    copyFileSync("src/map.css", "swiftmap/static/widget.css");
     copyFileSync("src/map.css", "dist/swiftmap.css");
     copyFileSync("src/streamlit.html", "swiftmap/streamlit/frontend/index.html");
     console.log("build complete");

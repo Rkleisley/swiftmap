@@ -558,6 +558,35 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         try { instance.remove(); } catch (err) { /* already gone */ }
     }
 
+    // A lost WebGL context leaves a bucket's canvas permanently blank, and
+    // browsers lose contexts for real reasons: GPU pressure evicts them, GPU
+    // process restarts take every context at once (headless SwiftShader bounces
+    // its GPU process moments after startup, which is how the test tiers found
+    // this the day the libraries were bundled and rendering stopped waiting on
+    // the network). Recovery is a rebuild: retire the dead instance, clear the
+    // bucket's caches, and let the next sync build fresh canvases on a live
+    // context.
+    function armContextLossRecovery(type, wrapper) {
+        for (const gl of [wrapper.glPoints, wrapper.glLines, wrapper.glShapes]) {
+            const canvas = gl && gl.layer && gl.layer.canvas;
+            if (!canvas || canvas._swiftmapLossArmed) continue;
+            canvas._swiftmapLossArmed = true;
+            canvas.addEventListener("webglcontextlost", (event) => {
+                event.preventDefault();
+                if (destroyed) return;
+                const state = glStates[type];
+                if (state.layer === wrapper) {
+                    retireGl(state.layer);
+                    state.layer = null;
+                    state.ids = "";
+                    state.meta = "";
+                    state.visKey = null;
+                    queueSync();
+                }
+            });
+        }
+    }
+
     async function syncMapState() {
         console.time("[Performance] syncMapState Total");
         updateTimeDimension();
@@ -720,6 +749,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                     state.layer = built;
                     if (state.layer) {
                         state.layer.addTo(map);
+                        armContextLossRecovery(type, state.layer);
                     }
                 } else {
                     state.layer = null;

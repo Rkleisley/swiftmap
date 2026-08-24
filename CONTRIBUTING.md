@@ -66,6 +66,7 @@ npm run build        # or: npm run build:watch
 | `swiftmap/static/widget.js` | the Python widget (committed, so `pip install` never needs Node) |
 | `dist/anywidget.js` | the same bundle for npm consumers |
 | `dist/index.js` | `swiftmap-core` — the framework-agnostic entry point for vanilla JS |
+| `swiftmap/static/widget.js` + `.css` | the anywidget bundle, Leaflet/glify/Geoman and all styles INSIDE (offline; minified, no sourcemap — debug against `dist/anywidget.js`) |
 | `dist/react.js` | `swiftmap-core/react` — the `<SwiftMap>` component; react and the rendering libraries are peer dependencies |
 | `examples/react/dist/` | the React example app, bundled whole (gitignored); tier 3 drives it |
 | `swiftmap/streamlit/frontend/` | the Streamlit component — the React host under Streamlit's protocol, bundled whole with React, Leaflet, glify, Geoman and CSS; shipped in the wheel and committed like `static/` |
@@ -80,15 +81,19 @@ the two never drift apart.
 python tools/bundle.py
 ```
 
-For environments where `src/` can be obtained but `node_modules` cannot — an isolated
-network, or anywhere the 180 KB bundle is impractical to move as a file. It rebuilds
-`swiftmap/static/` from `src/` using only the standard library.
+For environments where `src/` can be obtained but `node_modules` cannot. It rebuilds
+`swiftmap/static/` from `src/` using only the standard library — **building the CDN
+variant** (`src/anywidget-cdn.js`), not the canonical offline widget.
 
-This works because the widget bundle imports nothing from npm: the core receives Leaflet
-(with glify and Geoman attached) from its host through `provideLeaflet` in `src/libs.js`,
-and the widget and export hosts fetch those three from the CDN at runtime with
-`loadLibraries` (`src/loader.js`) before constructing the map. The bundle is only
-swiftmap's own modules, so flattening them is a question of ordering, not resolution.
+The canonical `swiftmap/static/widget.js` BUNDLES Leaflet, glify and Geoman (with their
+stylesheets, images as data URIs) so the widget and the static export run with no network
+— the closed-network requirement — and that needs esbuild. glify note: the bundle imports
+`leaflet.glify/dist/glify-browser.js` by path; the package main is a different build.
+The no-Node fallback instead flattens only swiftmap's own modules and keeps the runtime
+loader (`src/loader.js`), whose CDN URLs a receiving network's patcher rewrites — so a
+rebuild without Node still yields a working widget, at the price of the libraries loading
+from wherever the patcher points. Running `tools/bundle.py` therefore REPLACES the
+offline widget with the CDN variant; run `npm run build` to restore it.
 An npm consumer instead imports `leaflet`, `leaflet.glify` and Geoman itself and passes
 the namespace in -- the bundler owns the dependencies there.
 

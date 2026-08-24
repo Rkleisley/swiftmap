@@ -1,13 +1,14 @@
 """
-Static HTML export: one self-contained file, no Python, no kernel, no server.
+Static HTML export: one self-contained file, no Python, no kernel, no server --
+and since the widget bundle carries Leaflet, glify and Geoman inside it, no
+network either: the file opens from disk on a closed network as-is.
 
 The tier-3 test fixtures proved this shape long before it was a feature: the real
 widget bundle driven by a stubbed model renders everything -- WebGL layers, the
 sidebar, time playback -- entirely client-side. An export is that pattern with the
 map's actual state baked in: the layer configs as JSON, every coordinate/time/style
 buffer base64-encoded, the bundle and its CSS inlined, and a model stub whose
-write-backs go nowhere. Leaflet and glify still load from unpkg at view time, the
-same way the live widget loads them.
+write-backs go nowhere.
 
 `to_html()` returns the document as a string -- the static Streamlit embed,
 `st.components.v1.html(m.to_html(), height=600)` -- and `save()` writes it to disk.
@@ -95,10 +96,11 @@ def to_html(self, title: str = "SwiftMap") -> str:
 
     Everything the map holds ships inside the file: layer configs, coordinate and
     time buffers (base64, so expect roughly 4/3 of their binary size), data-driven
-    colours and sizes, the widget bundle and its CSS. The result opens from disk or
-    a static file host with no backend at all; time playback and the sidebar work
-    fully client-side. Leaflet and glify load from unpkg when the file is opened,
-    so viewing needs internet (or your own vendored bundle).
+    colours and sizes, and the widget bundle with its CSS -- Leaflet, glify and
+    Geoman included, so the file opens from disk or a static host with no backend
+    and NO NETWORK at all (basemap tiles remain the one runtime fetch, from
+    whatever servers the map's basemap configs name). Time playback and the
+    sidebar work fully client-side.
 
     For a static Streamlit embed: `st.components.v1.html(m.to_html(), height=600)`;
     for a bidirectional map in Streamlit, `swiftmap.streamlit.st_swiftmap`.
