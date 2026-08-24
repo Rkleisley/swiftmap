@@ -1,0 +1,105 @@
+{
+ "buffers": {
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMDNzMzMzAxCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA=="
+ },
+ "doc": "A plain ring.",
+ "scenario": "polygon",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.3
+    ],
+    [
+     36.1,
+     -5.2
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 1,
+   "zoom_offset": 0
+  },
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Polygon Group": {
+    "multi_select": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 20,
+    "max_zoom": 22,
+    "name": "Dark Matter",
+    "subdomains": "abcd",
+    "type": "basemap",
+    "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.3
+     ],
+     [
+      36.1,
+      -5.2
+     ]
+    ],
+    "color": "#ff0000",
+    "fillColor": "#00ff00",
+    "fillOpacity": 0.5,
+    "id": "layer_2",
+    "layer_group": "Polygon Group",
+    "name": "Zone",
+    "opacity": 1.0,
+    "properties": {},
+    "type": "polygon",
+    "visible": true,
+    "weight": 5
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {},
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

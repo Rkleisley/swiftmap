@@ -252,3 +252,19 @@ Parsing is dispatched dynamically using `GeometryParserRegistry` strategy broker
    a plain lat/lon table stays out.
 
 5. **Add test cases** to `tests/test_basic.py` verifying that `add_markers()`, `add_line()`, and `add_polygon()` work end-to-end with your new data source. Follow the shape of an existing test like `test_geopandas_points_and_lines` or `test_polars_and_dict_lines_polygons` — build a small sample of your format, call the public `Map` method, and assert on the resulting layer rather than calling your parser functions directly.
+
+## Authoring conformance: one rulebook, two implementations
+
+`createMapModel` (src/model.js) is the authoring surface in JS -- the builders,
+the merge rule, bounds, the auto-fit union, the buffer packing -- with Python's
+`Map` as its specification. There is no runtime bridge between the two (the
+server has no JS engine, the browser no Python), so the rules exist twice and are
+held together by golden fixtures instead: `scripts/authoring_goldens.py` builds
+canonical scenarios through the real Python Map and commits their exact state and
+buffers under `test/goldens/authoring/`. `tests/test_authoring_goldens.py` keeps
+Python matching the committed files; `test/tier1-model.test.mjs` builds the same
+scenarios through the JS model and demands byte-identical buffers and equal
+configs. Changing an authoring rule on either side breaks that side's suite; the
+fix is to regenerate the goldens, review the diff, and bring the other side with
+you -- never to loosen a comparison. New authoring behaviour lands with a new
+scenario in both lists (the suites fail if the lists differ).

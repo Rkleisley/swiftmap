@@ -7,6 +7,7 @@
 // pieces it is built from, for consumers that compose their own.
 
 export { createSwiftMap, sendLayerWrite } from "./core.js";
+export { createMapModel, DEFAULT_BASEMAPS } from "./model.js";
 export { createHostStub } from "./host.js";
 export { decodeBase64Buffers, decodeBase64BuffersReusing } from "./transport.js";
 export { provideLeaflet, requireLeaflet } from "./libs.js";
