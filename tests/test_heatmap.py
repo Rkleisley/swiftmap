@@ -156,6 +156,82 @@ def test_make_time_layer_animates_data_path_heat():
     assert len(times) == 6                      # three [start, end] pairs
 
 
+h3 = pytest.importorskip("h3")
+
+
+def expected_bins(df, resolution, weights=None):
+    sums = {}
+    for i, (lat, lon) in enumerate(zip(df["lat"], df["lon"])):
+        cell = h3.latlng_to_cell(lat, lon, resolution)
+        sums[cell] = sums.get(cell, 0.0) + (weights[i] if weights else 1.0)
+    return sums
+
+
+def test_hex_mode_bins_and_ships_rings_plus_values():
+    m = Map()
+    m.add_heatmap(DF, cells="h3", resolution=7, name="HexHeat")
+    (layer,) = heat_layers(m)
+    assert layer.cells == "h3"
+    assert layer.resolution == 7
+    assert layer.opacity == 0.75
+    sums = expected_bins(DF, 7)
+    assert layer.properties["h3"] == list(sums.keys())
+    assert sum(layer.cell_counts) * 2 == len(
+        np.frombuffer(m.coordinate_buffers[layer.id], dtype=np.float64))
+    values = np.frombuffer(m.coordinate_buffers[f"{layer.id}::values"],
+                           dtype=np.float64)
+    assert values.tolist() == list(sums.values())
+
+
+def test_hex_mode_sums_weights_per_cell():
+    df = pd.DataFrame({"lat": [36.01, 36.0101], "lon": [-5.31, -5.3101],
+                       "reading": [4.0, 2.5]})
+    m = Map()
+    m.add_heatmap(df, cells="h3", resolution=5, weight_col="reading")
+    (layer,) = heat_layers(m)
+    values = np.frombuffer(m.coordinate_buffers[f"{layer.id}::values"],
+                           dtype=np.float64)
+    assert len(values) == 1 and values[0] == 6.5      # one coarse cell, summed
+
+
+def test_hex_mode_bins_a_source_layer_snapshot():
+    m = Map()
+    m.add_circle_markers(DF, name="Sites")
+    m.add_heatmap("Sites", cells="h3", resolution=7, weight_col="reading")
+    (layer,) = heat_layers(m)
+    assert getattr(layer, "source", None) is None      # a snapshot, not a reference
+    sums = expected_bins(DF, 7, weights=[4.0, 9.5, 2.25])
+    values = np.frombuffer(m.coordinate_buffers[f"{layer.id}::values"],
+                           dtype=np.float64)
+    assert values.tolist() == list(sums.values())
+
+
+def test_hex_mode_pins_with_vmin_vmax():
+    m = Map()
+    m.add_heatmap(DF, cells="h3", vmin=0, vmax=100)
+    (layer,) = heat_layers(m)
+    assert layer.vmin == 0 and layer.vmax == 100
+
+
+def test_kernel_knobs_warn_across_modes():
+    m = Map()
+    with pytest.warns(Warning, match="radius sizes the blob kernel"):
+        m.add_heatmap(DF, cells="h3", radius=30)
+    with pytest.warns(Warning, match="resolution applies to cells='h3'"):
+        m.add_heatmap(DF, resolution=7)
+    with pytest.warns(Warning, match="max_intensity pins the blob scale"):
+        m.add_heatmap(DF, cells="h3", max_intensity=5)
+
+
+def test_hex_mode_without_the_lib_warns_and_adds_nothing(monkeypatch):
+    import swiftmap.parsers.sources._utils as _utils
+    monkeypatch.setattr(_utils, "_h3_module", None)
+    m = Map()
+    with pytest.warns(Warning, match="pip install h3"):
+        m.add_heatmap(DF, cells="h3")
+    assert heat_layers(m) == []
+
+
 def test_export_carries_the_heat_layer():
     m = Map()
     m.add_heatmap(DF, name="Density")

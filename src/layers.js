@@ -132,7 +132,9 @@ function renderImageLayer(map, layer, coordBuffer) {
 // here must recreate the instance, exactly like imageMetaKey above.
 export function heatMetaKey(layer) {
     return JSON.stringify([layer.radius, layer.opacity, layer.max_intensity,
-        layer.ramp, layer.source || null]);
+        layer.ramp, layer.source || null,
+        layer.cells || null, layer.vmin ?? null, layer.vmax ?? null,
+        layer.cell_counts || null]);
 }
 
 // A layer by id, descending into groups -- a heat source may be a merged
@@ -180,12 +182,15 @@ function renderHeatLayer(map, layer, coordinateBuffers, allLayers, timeState) {
             * durationSeconds(timeCfg.duration, periodMs);
         timeOpts = { timesView, durationSec };
     }
-    const instance = createHeatLayer(L, layer, coordView, weightsView, timeOpts);
+    const valuesView = coordinateBuffers[`${layer.id}::values`] || null;
+    const instance = createHeatLayer(L, layer, coordView, weightsView, timeOpts,
+        valuesView);
     instance.addTo(map);
     instance.layerType = layer.type;
     instance.heatMeta = heatMetaKey(layer);
     instance.heatCoordSource = coordView;
     instance.heatWeightSource = weightsView;
+    instance.heatValuesSource = valuesView;
     instance.heatTimesSource = timesView;
     instance.heatTimeKey = heatTimeKey(layer, sourceLayer, timeState);
     return instance;

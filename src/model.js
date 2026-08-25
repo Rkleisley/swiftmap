@@ -759,6 +759,17 @@ export function createMapModel(options = {}) {
     // layer's own buffer without re-uploading it. Python's add_heatmap, held to
     // it by the conformance goldens.
     function addHeatmap(data, options = {}) {
+        const cellsOpt = opt(options, "cells", "cells");
+        if (cellsOpt && cellsOpt !== "blobs") {
+            // Documented asymmetry, like imagery and column fan-out: hex heat
+            // needs H3 binning, which is Python-side breadth. The renderer
+            // draws hand-built hex configs fine; the MODEL cannot author them.
+            console.warn("swiftmap: addHeatmap: cells='h3' binning needs H3, "
+                + "which swiftmap keeps Python-side. Author hex heat in Python, "
+                + "or bin upstream and paint with addPolygon(df, { colorCol }). "
+                + "No layer was added.");
+            return model;
+        }
         let radius = 25;
         if (options.radius !== undefined) {
             if (typeof options.radius === "number" && Number.isFinite(options.radius)

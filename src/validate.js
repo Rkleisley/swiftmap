@@ -69,6 +69,20 @@ export function collectLayerProblems(layer, buffers = {}) {
                 + `${Math.floor(weights.byteLength / 4)} float32 entries for `
                 + `${points} points`);
         }
+        if (layer.cells === "h3") {
+            const counts = Array.isArray(layer.cell_counts) ? layer.cell_counts : [];
+            const total = counts.reduce((a, b) => a + b, 0);
+            if (src && total * 16 !== src.byteLength) {
+                problems.push(`layer ${id}: cell_counts sum to ${total} vertices `
+                    + `but the buffer holds ${Math.floor(src.byteLength / 16)}`);
+            }
+            const cellValues = buffers[`${layer.id}::values`];
+            if (cellValues && cellValues.byteLength !== 8 * counts.length) {
+                problems.push(`layer ${id}: values buffer holds `
+                    + `${Math.floor(cellValues.byteLength / 8)} float64 entries for `
+                    + `${counts.length} cells`);
+            }
+        }
     }
 
     const times = buffers[`${layer.id}::times`];

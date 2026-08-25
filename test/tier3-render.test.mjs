@@ -145,8 +145,8 @@ suite("the layers put visible pixels on the map", async () => {
 
 suite("the heatmap accumulates and colours pixels on its own pane", async () => {
     await withPage(async (page, errors) => {
-        assert.equal(await page.locator(".leaflet-swiftmap-heat-pane canvas").count(), 2,
-            "each heatmap layer draws on its own canvas in the heat pane");
+        assert.equal(await page.locator(".leaflet-swiftmap-heat-pane canvas").count(), 3,
+            "each heatmap layer -- blob and hex alike -- draws on its own canvas");
 
         // Past the initial normalise debounce AND headless Chromium's early GPU
         // bounce (the context-loss recovery re-inits the renderer).
@@ -167,6 +167,28 @@ suite("the heatmap accumulates and colours pixels on its own pane", async () => 
             "hiding the heat folder must change the screen -- both the own-buffer "
             + "blob and the source-derived one draw real pixels");
         assert.deepEqual(errors, [], "no console errors from the heat pipeline");
+    }, "widget-heat.html");
+});
+
+suite("hex heat draws real polygons that vanish with their folder", async () => {
+    await withPage(async (page, errors) => {
+        await page.waitForTimeout(900);
+        const container = page.locator(".swiftmap-container");
+        const withHexes = await container.screenshot();
+
+        await page.evaluate(() => {
+            const box = [...document.querySelectorAll(".swiftmap-sidebar input")]
+                .find(i => i.name === "group_Hexes");
+            box.checked = false;
+            box.dispatchEvent(new Event("change"));
+        });
+        await page.waitForTimeout(900);
+        const withoutHexes = await container.screenshot();
+
+        assert.notEqual(Buffer.compare(withHexes, withoutHexes), 0,
+            "hiding the Hexes folder must change the screen -- the triangulated "
+            + "cells draw real pixels through their own pass");
+        assert.deepEqual(errors, [], "no console errors from the hex pipeline");
     }, "widget-heat.html");
 });
 

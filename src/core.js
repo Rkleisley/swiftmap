@@ -718,6 +718,8 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                             !== (coordinateBuffers[layer.source || layer.id] || null)
                         || existing.heatWeightSource
                             !== (coordinateBuffers[`${layer.id}::weights`] || null)
+                        || existing.heatValuesSource
+                            !== (coordinateBuffers[`${layer.id}::values`] || null)
                         || existing.heatTimesSource
                             !== (coordinateBuffers[`${layer.source || layer.id}::times`] || null)
                         || existing.heatTimeKey !== heatTimeKey(layer,

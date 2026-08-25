@@ -415,12 +415,236 @@ export function createHeatRenderer(canvas, options = {}) {
     };
 }
 
+// --- the hex kernel ---------------------------------------------------------
+//
+// cells="h3": real hexagon polygons at a fixed resolution, sums computed
+// upstream (Python bins at add time -- the painter boundary holds). The ONLY
+// dynamic thing is the colouring: on every settled view the ramp re-stretches
+// to the extremes of the hexes on screen, so three hexes in view span the
+// whole ramp. vmin/vmax pin it off. Geometry uploads once as triangulated
+// fans; a recolour is a per-vertex colour upload over a few thousand cells.
+
+const HEX_VS = `
+attribute vec2 aOffset;
+attribute vec4 aColor;
+uniform vec2 uAnchorPx;
+uniform float uScale;
+uniform vec2 uViewport;
+varying vec4 vColor;
+void main() {
+    vec2 px = uAnchorPx + aOffset * uScale;
+    vec2 clip = px / uViewport * 2.0 - 1.0;
+    gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
+    vColor = aColor;
+}`;
+
+const HEX_FS = `
+precision mediump float;
+varying vec4 vColor;
+uniform float uOpacity;
+void main() {
+    float a = vColor.a * uOpacity;
+    gl_FragColor = vec4(vColor.rgb * a, a);
+}`;
+
+// Cell rings (flat [lat, lon], `cellCounts` vertices each) into anchor-offset
+// fan triangles -- hexes are convex, so the fan is exact -- plus a per-cell
+// bounding box in the same offset space for the visibility scan.
+export function projectHexCells(latlonView, cellCounts, crs, L) {
+    const f64 = new Float64Array(
+        latlonView.buffer, latlonView.byteOffset, latlonView.byteLength / 8);
+    const mercator = !crs || !L || crs === L.CRS.EPSG3857;
+    const counts = cellCounts || [];
+    let triVerts = 0;
+    for (const n of counts) triVerts += Math.max(0, n - 2) * 3;
+
+    const tris = new Float32Array(triVerts * 2);
+    const cellTriVerts = new Array(counts.length);
+    const bboxes = new Float64Array(counts.length * 4);
+    let anchorX = null, anchorY = null;
+    let src = 0, out = 0;
+    counts.forEach((n, c) => {
+        const ring = new Float64Array(n * 2);
+        for (let i = 0; i < n; i++) {
+            const lat = f64[(src + i) * 2];
+            const lon = f64[(src + i) * 2 + 1];
+            let x, y;
+            if (mercator) {
+                x = mercatorX(lon);
+                y = mercatorY(lat);
+            } else {
+                const p = crs.latLngToPoint(L.latLng(lat, lon), 0);
+                x = p.x;
+                y = p.y;
+            }
+            if (anchorX === null) { anchorX = x; anchorY = y; }
+            ring[i * 2] = x - anchorX;
+            ring[i * 2 + 1] = y - anchorY;
+        }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (let i = 0; i < n; i++) {
+            const x = ring[i * 2], y = ring[i * 2 + 1];
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+        bboxes.set([minX, minY, maxX, maxY], c * 4);
+        for (let i = 1; i + 1 < n; i++) {
+            tris.set([ring[0], ring[1]], out);
+            tris.set([ring[i * 2], ring[i * 2 + 1]], out + 2);
+            tris.set([ring[(i + 1) * 2], ring[(i + 1) * 2 + 1]], out + 4);
+            out += 6;
+        }
+        cellTriVerts[c] = Math.max(0, n - 2) * 3;
+        src += n;
+    });
+    return { tris, cellTriVerts, bboxes, count: counts.length,
+             vertCount: triVerts, anchorX: anchorX ?? 0, anchorY: anchorY ?? 0 };
+}
+
+// The extremes of the cells whose boxes touch the view rect (offset space).
+// Falls back to the whole dataset when nothing intersects -- a map panned off
+// the data should keep its last sensible scale, not divide by nothing.
+export function hexVisibleExtremes(bboxes, values, rect) {
+    let lo = Infinity, hi = -Infinity;
+    for (let c = 0; c < values.length; c++) {
+        const minX = bboxes[c * 4], minY = bboxes[c * 4 + 1];
+        const maxX = bboxes[c * 4 + 2], maxY = bboxes[c * 4 + 3];
+        if (maxX < rect.minX || minX > rect.maxX
+            || maxY < rect.minY || minY > rect.maxY) continue;
+        const v = values[c];
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+    }
+    if (lo === Infinity) {
+        for (const v of values) {
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+        }
+    }
+    return { lo, hi };
+}
+
+// Per-cell RGBA through the SAME arithmetic color_col uses. A single-valued
+// view takes the top of the ramp: alone on screen, a cell is its own maximum.
+export function hexCellColors(values, anchors, lo, hi) {
+    const list = Array.from(values);
+    return lo === hi
+        ? mapColors(list, anchors, lo - 1, lo)
+        : mapColors(list, anchors, lo, hi);
+}
+
+export function createHexHeatRenderer(canvas, options = {}) {
+    const opacity = options.opacity ?? 0.75;
+    const anchors = options.anchors || COLORMAPS[DEFAULT_COLORMAP];
+    const pinLo = options.vmin ?? null;
+    const pinHi = options.vmax ?? null;
+
+    const gl = canvas.getContext("webgl2", { antialias: true, depth: false, alpha: true })
+        || canvas.getContext("webgl", { antialias: true, depth: false, alpha: true });
+    if (!gl) return null;
+
+    const program = compileProgram(gl, HEX_VS, HEX_FS);
+    const triBuf = gl.createBuffer();
+    const colorBuf = gl.createBuffer();
+
+    let data = null;      // { tris, cellTriVerts, bboxes, count, vertCount, ... }
+    let values = null;    // Float64Array, one per cell
+
+    function recolor(lo, hi) {
+        if (!data || !values) return;
+        const cellColors = hexCellColors(values, anchors,
+            pinLo ?? lo, pinHi ?? hi);
+        const perVertex = new Uint8Array(data.vertCount * 4);
+        let out = 0;
+        for (let c = 0; c < data.count; c++) {
+            for (let v = 0; v < data.cellTriVerts[c]; v++) {
+                perVertex.set(cellColors.subarray(c * 4, c * 4 + 4), out);
+                out += 4;
+            }
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, perVertex, gl.STATIC_DRAW);
+    }
+
+    function globalExtremes() {
+        let lo = Infinity, hi = -Infinity;
+        for (const v of values) {
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+        }
+        return { lo, hi };
+    }
+
+    return {
+        setData(projected, cellValues) {
+            data = projected;
+            values = cellValues;
+            gl.bindBuffer(gl.ARRAY_BUFFER, triBuf);
+            gl.bufferData(gl.ARRAY_BUFFER, projected.tris, gl.STATIC_DRAW);
+            if (values && values.length) {
+                const { lo, hi } = globalExtremes();
+                recolor(lo, hi);
+            }
+        },
+        render(view) {
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            if (!data || !data.vertCount) return;
+            gl.useProgram(program);
+            gl.disable(gl.BLEND);
+            const px = view.dpr;
+            gl.uniform2f(gl.getUniformLocation(program, "uAnchorPx"),
+                view.anchorPxX * px, view.anchorPxY * px);
+            gl.uniform1f(gl.getUniformLocation(program, "uScale"), view.scale * px);
+            gl.uniform2f(gl.getUniformLocation(program, "uViewport"),
+                canvas.width, canvas.height);
+            gl.uniform1f(gl.getUniformLocation(program, "uOpacity"), opacity);
+            const offLoc = gl.getAttribLocation(program, "aOffset");
+            gl.bindBuffer(gl.ARRAY_BUFFER, triBuf);
+            gl.vertexAttribPointer(offLoc, 2, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(offLoc);
+            const colLoc = gl.getAttribLocation(program, "aColor");
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf);
+            gl.vertexAttribPointer(colLoc, 4, gl.UNSIGNED_BYTE, true, 0, 0);
+            gl.enableVertexAttribArray(colLoc);
+            gl.drawArrays(gl.TRIANGLES, 0, data.vertCount);
+        },
+        // The defining move: re-stretch the ramp to the hexes on screen. The
+        // view rect converts to offset space, the visible extremes re-map the
+        // colours, and the same frame repaints -- a pan across quiet water
+        // re-lights the local structure.
+        normalize(view) {
+            if (data && values && values.length) {
+                const cssW = canvas.width / view.dpr;
+                const cssH = canvas.height / view.dpr;
+                const rect = {
+                    minX: (0 - view.anchorPxX) / view.scale,
+                    maxX: (cssW - view.anchorPxX) / view.scale,
+                    minY: (0 - view.anchorPxY) / view.scale,
+                    maxY: (cssH - view.anchorPxY) / view.scale,
+                };
+                const { lo, hi } = hexVisibleExtremes(data.bboxes, values, rect);
+                recolor(lo, hi);
+            }
+            this.render(view);
+        },
+        destroy() {
+            const lose = gl.getExtension("WEBGL_lose_context");
+            if (lose) lose.loseContext();
+        },
+    };
+}
+
 // The Leaflet layer: a viewport-sized canvas in a dedicated pane between the
 // tiles and the vector panes, fully redrawn on every move -- the redraw is two
 // draw calls, so tracking the map beats transform bookkeeping.
 // `timeOpts` ({ timesView, durationSec }) makes the heat a time layer: the
 // core pushes the slider's window through the `_swiftmapHeatTime` handle.
-export function createHeatLayer(L, layer, latlonView, weightsView, timeOpts = null) {
+export function createHeatLayer(L, layer, latlonView, weightsView, timeOpts = null,
+                                valuesView = null) {
     const HeatLayer = L.Layer.extend({
         onAdd(map) {
             this._map = map;
@@ -478,22 +702,41 @@ export function createHeatLayer(L, layer, latlonView, weightsView, timeOpts = nu
         },
 
         _initGL() {
-            this._renderer = createHeatRenderer(this._canvas, {
-                radius: layer.radius,
-                opacity: layer.opacity,
-                maxIntensity: layer.max_intensity,
-                anchors: layer.ramp,
-                durationSec: timeOpts ? timeOpts.durationSec : undefined,
-            });
+            if (layer.cells === "h3") {
+                this._renderer = createHexHeatRenderer(this._canvas, {
+                    opacity: layer.opacity,
+                    anchors: layer.ramp,
+                    vmin: layer.vmin,
+                    vmax: layer.vmax,
+                });
+            } else {
+                this._renderer = createHeatRenderer(this._canvas, {
+                    radius: layer.radius,
+                    opacity: layer.opacity,
+                    maxIntensity: layer.max_intensity,
+                    anchors: layer.ramp,
+                    durationSec: timeOpts ? timeOpts.durationSec : undefined,
+                });
+            }
             if (!this._renderer) {
                 console.warn("[SwiftMap] heatmap: WebGL unavailable; layer "
                     + `${layer.name || layer.id} will not render.`);
                 return;
             }
-            this._projected = projectHeatPoints(
-                latlonView, weightsView, timeOpts ? timeOpts.timesView : null,
-                this._map.options.crs, L);
-            this._renderer.setData(this._projected);
+            if (layer.cells === "h3") {
+                this._projected = projectHexCells(
+                    latlonView, layer.cell_counts, this._map.options.crs, L);
+                const values = valuesView
+                    ? new Float64Array(valuesView.buffer, valuesView.byteOffset,
+                                       valuesView.byteLength / 8)
+                    : new Float64Array(0);
+                this._renderer.setData(this._projected, values);
+            } else {
+                this._projected = projectHeatPoints(
+                    latlonView, weightsView, timeOpts ? timeOpts.timesView : null,
+                    this._map.options.crs, L);
+                this._renderer.setData(this._projected);
+            }
         },
 
         _resize() {

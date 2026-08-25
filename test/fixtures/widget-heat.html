@@ -30,12 +30,27 @@ const siteTimes = new Float64Array([
   Date.UTC(2026, 0, 3), Date.UTC(2026, 0, 3),
 ]);
 
+// Two hand-made "hex" cells for the cells="h3" renderer -- any convex ring
+// works, H3 itself never enters the frontend. Values 1 and 10, so with both
+// on screen the ramp spans them.
+const hexRings = new Float64Array([
+  35.99, -5.335, 35.99, -5.325, 35.995, -5.32, 36.00, -5.325, 36.00, -5.335, 35.995, -5.34,
+  35.99, -5.275, 35.99, -5.265, 35.995, -5.26, 36.00, -5.265, 36.00, -5.275, 35.995, -5.28,
+]);
+const hexValues = new Float64Array([1, 10]);
+
 const model = makeModel({
   layers: [
     { id: "sites", type: "circle_markers", name: "Sites", layer_group: "Points",
       visible: true, radius: 6, color: "#3388ff",
       properties: { reading: [1, 8, 3] },
       time: { field: "reading", duration: "period" } },
+    { id: "hexheat", type: "heatmap", cells: "h3", name: "Hex Density",
+      layer_group: "Hexes", visible: true, opacity: 0.9,
+      ramp: ["#440154", "#21918c", "#fde725"],
+      cell_counts: [6, 6],
+      properties: { h3: ["fake-a", "fake-b"] },
+      bounds: [[35.99, -5.34], [36.00, -5.26]] },
     { id: "heat1", type: "heatmap", name: "Cluster Heat", layer_group: "Heat",
       visible: true, radius: 30, opacity: 1,
       ramp: ["#440154", "#21918c", "#fde725"],
@@ -51,6 +66,8 @@ const model = makeModel({
     "sites::times": new DataView(siteTimes.buffer),
     "heat1": new DataView(cluster.buffer),
     "heat2::weights": new DataView(weights.buffer),
+    "hexheat": new DataView(hexRings.buffer),
+    "hexheat::values": new DataView(hexValues.buffer),
   },
   center: [36.03, -5.30], zoom: 12, crs: "EPSG:3857",
   auto_sync: true, sync_trigger: 0, show_logo: false,
