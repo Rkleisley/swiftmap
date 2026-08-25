@@ -20,6 +20,7 @@ from .layers.polygon import add_polygon, add_polygons, add_shape, add_shapes
 from .layers.collection import add_collection, add_geojson, add_geostructures
 from .layers.circle import add_circle
 from .layers.imagery import add_imagery
+from .layers.heatmap import add_heatmap
 from .export import to_html, save, STATE_KEYS
 
 # Import method families (see mapops/__init__.py)
@@ -124,6 +125,7 @@ class Map(anywidget.AnyWidget):
     add_geostructures = add_geostructures
     add_circle = add_circle
     add_imagery = add_imagery
+    add_heatmap = add_heatmap
     to_html = to_html
     save = save
 

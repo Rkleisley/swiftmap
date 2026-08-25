@@ -1,0 +1,333 @@
+{
+ "buffers": {
+  "layer_2": "4XoUrkcBQkA9CtejcD0VwGZmZmZmBkJAAAAAAAAAFcDsUbgehQtCQMP1KFyPwhTA",
+  "layer_3::weights": "AACAQAAAGEEAABBA"
+ },
+ "doc": "Heat derived from an existing point layer, weighted by its own column.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "4XoUrkcBQkA9CtejcD0VwGZmZmZmBkJAAAAAAAAAFcDsUbgehQtCQMP1KFyPwhTA",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.01,
+       -5.31
+      ],
+      [
+       36.09,
+       -5.19
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Circle Markers Group",
+     "name": "Sites",
+     "opacity": 1.0,
+     "properties": {
+      "reading": [
+       4.0,
+       9.5,
+       2.25
+      ]
+     },
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AACAQAAAGEEAABBA",
+   "op": {
+    "id": "layer_3::weights",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "bounds": [
+      [
+       36.01,
+       -5.31
+      ],
+      [
+       36.09,
+       -5.19
+      ]
+     ],
+     "id": "layer_3",
+     "layer_group": "Analysis",
+     "legend": {
+      "anchors": [
+       "#30123b",
+       "#4145ab",
+       "#4675ed",
+       "#39a2fc",
+       "#1bcfd4",
+       "#24eca6",
+       "#61fc6c",
+       "#a4fc3b",
+       "#d1e834",
+       "#f3c63a",
+       "#fe9b2d",
+       "#f36315",
+       "#d93806",
+       "#b11901",
+       "#7a0402"
+      ],
+      "field": "reading",
+      "kind": "ramp",
+      "vmax": "high",
+      "vmin": "low"
+     },
+     "max_intensity": 12,
+     "name": "Heatmap",
+     "opacity": 1.0,
+     "radius": 30,
+     "ramp": [
+      "#30123b",
+      "#4145ab",
+      "#4675ed",
+      "#39a2fc",
+      "#1bcfd4",
+      "#24eca6",
+      "#61fc6c",
+      "#a4fc3b",
+      "#d1e834",
+      "#f3c63a",
+      "#fe9b2d",
+      "#f36315",
+      "#d93806",
+      "#b11901",
+      "#7a0402"
+     ],
+     "source": "layer_2",
+     "type": "heatmap",
+     "visible": true
+    },
+    "op": "add"
+   }
+  }
+ ],
+ "scenario": "heatmap_weighted_from_layer",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.01,
+     -5.31
+    ],
+    [
+     36.09,
+     -5.19
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 2,
+   "zoom_offset": 0
+  },
+  "group_configs": {
+   "Analysis": {
+    "multi_select": true
+   },
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Circle Markers Group": {
+    "multi_select": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 20,
+    "max_zoom": 22,
+    "name": "Dark Matter",
+    "subdomains": "abcd",
+    "type": "basemap",
+    "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.01,
+      -5.31
+     ],
+     [
+      36.09,
+      -5.19
+     ]
+    ],
+    "color": "#3388ff",
+    "fillColor": "#3388ff",
+    "fillOpacity": 0.2,
+    "id": "layer_2",
+    "layer_group": "Circle Markers Group",
+    "name": "Sites",
+    "opacity": 1.0,
+    "properties": {
+     "reading": [
+      4.0,
+      9.5,
+      2.25
+     ]
+    },
+    "radius": 10,
+    "type": "circle_markers",
+    "visible": true,
+    "weight": 3
+   },
+   {
+    "bounds": [
+     [
+      36.01,
+      -5.31
+     ],
+     [
+      36.09,
+      -5.19
+     ]
+    ],
+    "id": "layer_3",
+    "layer_group": "Analysis",
+    "legend": {
+     "anchors": [
+      "#30123b",
+      "#4145ab",
+      "#4675ed",
+      "#39a2fc",
+      "#1bcfd4",
+      "#24eca6",
+      "#61fc6c",
+      "#a4fc3b",
+      "#d1e834",
+      "#f3c63a",
+      "#fe9b2d",
+      "#f36315",
+      "#d93806",
+      "#b11901",
+      "#7a0402"
+     ],
+     "field": "reading",
+     "kind": "ramp",
+     "vmax": "high",
+     "vmin": "low"
+    },
+    "max_intensity": 12,
+    "name": "Heatmap",
+    "opacity": 1.0,
+    "radius": 30,
+    "ramp": [
+     "#30123b",
+     "#4145ab",
+     "#4675ed",
+     "#39a2fc",
+     "#1bcfd4",
+     "#24eca6",
+     "#61fc6c",
+     "#a4fc3b",
+     "#d1e834",
+     "#f3c63a",
+     "#fe9b2d",
+     "#f36315",
+     "#d93806",
+     "#b11901",
+     "#7a0402"
+    ],
+    "source": "layer_2",
+    "type": "heatmap",
+    "visible": true
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {},
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

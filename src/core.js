@@ -3,7 +3,7 @@ import { warnLayerProblems } from "./validate.js";
 import { renderSidebarControls, normalizeRadioLayers, sidebarCollapseState } from "./sidebar.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
-import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey } from "./layers.js";
+import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey, heatMetaKey } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
          collectDurationsMs, POSITIONS, timesFor, windowFor, featureInWindow,
@@ -706,7 +706,16 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 const staleImage = layer.type === "image"
                     && (existing.imageMeta !== imageMetaKey(layer)
                         || existing.imageSource !== (coordinateBuffers[layer.id] || null));
-                if (existing.layerType !== layer.type || staleImage) {
+                // Heat reads its own buffers -- or a SOURCE layer's -- so a swap
+                // of either view (a live feed's update_layer) recreates the
+                // instance the same way a stale image does.
+                const staleHeat = layer.type === "heatmap"
+                    && (existing.heatMeta !== heatMetaKey(layer)
+                        || existing.heatCoordSource
+                            !== (coordinateBuffers[layer.source || layer.id] || null)
+                        || existing.heatWeightSource
+                            !== (coordinateBuffers[`${layer.id}::weights`] || null));
+                if (existing.layerType !== layer.type || staleImage || staleHeat) {
                     existing.remove();
                     delete activeOverlayLayers[layer.id];
                 } else {

@@ -34,7 +34,8 @@
 
 import { layersBoundsUnion } from "./utils.js";
 import { resolveColormap, dataDrivenColors, dataDrivenRadii,
-         dataDrivenLegend, dataDrivenSizeLegend } from "./colormaps.js";
+         dataDrivenLegend, dataDrivenSizeLegend,
+         COLORMAPS, DEFAULT_COLORMAP } from "./colormaps.js";
 import { isValidPeriod, normalizeLayerTimes } from "./times.js";
 import { XYZ, ALIASES as BASEMAP_ALIASES, PRESETS, WMS,
          DEFAULT_BASEMAPS, queryKey } from "./basemap-catalog.js";
@@ -716,6 +717,124 @@ export function createMapModel(options = {}) {
         }
         if (lines.length) addLine(fc(lines), options);
         if (polys.length) addPolygon(fc(polys), options);
+        return model;
+    }
+
+    // The heat ramp's anchors: any continuous colormap spec, resolved through
+    // the same machinery color_col uses so Python's config and this one carry
+    // identical hex lists. Categorical mappings are refused -- heat is a ramp.
+    function heatAnchors(spec) {
+        if (spec == null) return [...COLORMAPS[DEFAULT_COLORMAP]];
+        const resolved = resolveColormap(spec);
+        if (resolved && typeof resolved === "object" && !Array.isArray(resolved)) {
+            console.warn("swiftmap: addHeatmap: a {value: color} mapping is "
+                + "categorical, and heat is a continuous ramp. Using the default "
+                + "colormap.");
+            return [...COLORMAPS[DEFAULT_COLORMAP]];
+        }
+        const anchors = Array.isArray(resolved) ? resolved.map(String)
+            : (typeof resolved === "string"
+                ? COLORMAPS[resolved.toLowerCase()] : null);
+        return anchors ? [...anchors] : [...COLORMAPS[DEFAULT_COLORMAP]];
+    }
+
+    function heatWeights(values, count, weightCol, origin) {
+        if (values == null) {
+            console.warn(`swiftmap: addHeatmap: ${origin} has no '${weightCol}' `
+                + `column; every point will weigh 1.`);
+            return null;
+        }
+        const arr = Float32Array.from(values, v => Number(v));
+        if (arr.length !== count) {
+            console.warn(`swiftmap: addHeatmap: '${weightCol}' has ${arr.length} `
+                + `values for ${count} points; every point will weigh 1.`);
+            return null;
+        }
+        return arr;
+    }
+
+    // The blob heatmap: weights summed into screen-space cells, view-relative
+    // colour. `data` is a point dataset OR the name/id of a point layer already
+    // on the map -- the "too many points" workflow derives heat from that
+    // layer's own buffer without re-uploading it. Python's add_heatmap, held to
+    // it by the conformance goldens.
+    function addHeatmap(data, options = {}) {
+        let radius = 25;
+        if (options.radius !== undefined) {
+            if (typeof options.radius === "number" && Number.isFinite(options.radius)
+                    && options.radius > 0) {
+                radius = options.radius;
+            } else {
+                console.warn(`swiftmap: addHeatmap: radius must be a positive `
+                    + `number of pixels, got ${options.radius}. Using 25.`);
+            }
+        }
+        const anchors = heatAnchors(opt(options, "colormap", "colormap") ?? null);
+        const weightCol = opt(options, "weightCol", "weight_col") ?? null;
+        const maxIntensity = opt(options, "maxIntensity", "max_intensity") ?? null;
+        const opacity = options.opacity !== undefined ? options.opacity : 1.0;
+
+        let sourceId = null;
+        let weights = null;
+        let bounds = null;
+        let pairs = null;
+        const sourceLayer = typeof data === "string" ? getLayer(data) : null;
+        if (sourceLayer) {
+            if (sourceLayer.type !== "circle_markers" && sourceLayer.type !== "markers") {
+                console.warn(`swiftmap: addHeatmap: layer '${data}' is a `
+                    + `${sourceLayer.type} layer; heat derives from point layers. `
+                    + `No layer was added.`);
+                return model;
+            }
+            sourceId = sourceLayer.id;
+            const raw = buffers[sourceId];
+            const count = raw ? Math.floor(raw.byteLength / 16) : 0;
+            bounds = sourceLayer.bounds ?? null;
+            if (weightCol != null) {
+                weights = heatWeights((sourceLayer.properties || {})[weightCol],
+                    count, weightCol, `layer '${data}'`);
+            }
+        } else {
+            const { pairs: p, properties } = normalizePoints(data, options);
+            if (!p.length) {
+                console.warn("swiftmap: addHeatmap found no point geometry in the "
+                    + "supplied data. No layer was added.");
+                return model;
+            }
+            pairs = p;
+            if (weightCol != null) {
+                weights = heatWeights(properties[weightCol], p.length, weightCol,
+                    "the supplied data");
+            }
+            bounds = boundsOfPairs(pairs);
+        }
+
+        const specs = buildGroupSpecs(opt(options, "layerGroup", "layer_group"), null);
+        const layer = {
+            id: nextId(), type: "heatmap",
+            name: options.name || "Heatmap",
+            layer_group: staticGroupPath(specs, "Heatmap Group"),
+            visible: options.visible !== undefined ? options.visible : true,
+            radius, opacity,
+            max_intensity: maxIntensity,
+            ramp: [...anchors],
+            ...(sourceId ? { source: sourceId } : {}),
+            ...(bounds ? { bounds } : {}),
+            legend: { kind: "ramp", field: weightCol || "density",
+                      anchors: [...anchors], vmin: "low", vmax: "high" },
+        };
+        const multiSelect = opt(options, "multiSelect", "multi_select",
+            opt(options, "groupMultiSelect", "group_multi_select"));
+        ensureGroupConfig(layer.layer_group, multiSelect);
+        radioAdjust(layer);
+        if (pairs) buffersSet(layer.id, packPairs(pairs));
+        if (weights) {
+            buffersSet(`${layer.id}::weights`,
+                new DataView(weights.buffer, weights.byteOffset, weights.byteLength));
+        }
+        recordAddedWith(layer, options, null, false);
+        place(layer);
+        autoFitExtend(bounds);
         return model;
     }
 
@@ -1632,6 +1751,7 @@ export function createMapModel(options = {}) {
 
     const model = {
         addCircleMarkers, addMarkers, addLine, addPolygon, addCircle, addCollection,
+        addHeatmap,
         addBasemap, listBasemaps, subscribe,
         configureLegend, configureScale, configureDraw, configureLogo,
         configureGroup, clearDrawings, fitBounds,

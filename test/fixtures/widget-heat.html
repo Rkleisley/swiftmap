@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>html,body,#host{margin:0;height:100%;width:100%}</style>
+<link rel="stylesheet" href="/swiftmap/static/widget.css">
+<div id="host"></div>
+<script type="module">
+// Two heatmap layers: one from its own coordinate buffer (a tight cluster at
+// the map centre, so the blob is unmissable in a screenshot), and one derived
+// from a point layer's buffer through `source`, weighted by that layer's own
+// column -- the "too many points" workflow with no re-upload.
+import widget, { createHostStub } from "/dist/anywidget.js";
+
+const makeModel = (state) => createHostStub(state, { comm: { comm_id: "test" } });
+
+// 200 points jittered deterministically around the centre.
+const N = 200;
+const cluster = new Float64Array(N * 2);
+for (let i = 0; i < N; i++) {
+  cluster[i * 2] = 36.03 + 0.004 * Math.sin(i * 12.9898);
+  cluster[i * 2 + 1] = -5.30 + 0.004 * Math.sin(i * 78.233);
+}
+
+const sites = new Float64Array([36.10, -5.30, 36.101, -5.301, 36.102, -5.299]);
+const weights = new Float32Array([1, 8, 3]);
+
+const model = makeModel({
+  layers: [
+    { id: "sites", type: "circle_markers", name: "Sites", layer_group: "Points",
+      visible: true, radius: 6, color: "#3388ff",
+      properties: { reading: [1, 8, 3] } },
+    { id: "heat1", type: "heatmap", name: "Cluster Heat", layer_group: "Heat",
+      visible: true, radius: 30, opacity: 1,
+      ramp: ["#440154", "#21918c", "#fde725"],
+      bounds: [[36.026, -5.304], [36.034, -5.296]] },
+    { id: "heat2", type: "heatmap", name: "Site Heat", layer_group: "Heat",
+      visible: true, radius: 25, opacity: 1, source: "sites",
+      ramp: ["#000004", "#b73779", "#fcfdbf"],
+      bounds: [[36.10, -5.301], [36.102, -5.299]] },
+  ],
+  group_configs: {},
+  coordinate_buffers: {
+    "sites": new DataView(sites.buffer),
+    "heat1": new DataView(cluster.buffer),
+    "heat2::weights": new DataView(weights.buffer),
+  },
+  center: [36.03, -5.30], zoom: 12, crs: "EPSG:3857",
+  auto_sync: true, sync_trigger: 0, show_logo: false,
+});
+
+window.__model = model;
+await widget.render({ model, el: document.getElementById("host") });
+window.__ready = true;
+</script>

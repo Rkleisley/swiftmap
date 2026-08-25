@@ -30,9 +30,23 @@ test("a well-formed layer raises no problems", () => {
 });
 
 test("an unknown type is named, and nothing else is piled on", () => {
-    const problems = collectLayerProblems({ id: "a", type: "heatmap" }, {});
+    const problems = collectLayerProblems({ id: "a", type: "hologram" }, {});
     assert.equal(problems.length, 1);
-    assert.match(problems[0], /unknown type "heatmap"/);
+    assert.match(problems[0], /unknown type "hologram"/);
+});
+
+test("a heatmap with a dangling source or misaligned weights is called out", () => {
+    const dangling = collectLayerProblems(
+        { id: "h", type: "heatmap", source: "gone" }, {});
+    assert.equal(dangling.length, 1);
+    assert.match(dangling[0], /source layer "gone" with no coordinate buffer/);
+
+    const coords = new DataView(new ArrayBuffer(2 * 16));
+    const weights = new DataView(new ArrayBuffer(3 * 4));
+    const misaligned = collectLayerProblems(
+        { id: "h", type: "heatmap" }, { h: coords, "h::weights": weights });
+    assert.equal(misaligned.length, 1);
+    assert.match(misaligned[0], /weights buffer holds 3 float32 entries for 2 points/);
 });
 
 test("every buffer length mismatch is called out against the point count", () => {

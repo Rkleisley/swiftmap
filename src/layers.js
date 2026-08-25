@@ -5,6 +5,7 @@ import { windowFor, featureInWindow, timesFor, layerInWindow, effectiveDuration,
          periodToMs } from "./timecontrol.js";
 import { buildTimeAttributes, attachTimeToInstance, timeVertexShader,
          gpuTimeAvailable, buildVectorTimeMeta, attachTimeToVectorInstance } from "./gputime.js";
+import { createHeatLayer } from "./heat.js";
 
 function setupGlifyProjection(glInstance) {
     if (glInstance && glInstance.layer) {
@@ -126,9 +127,38 @@ function renderImageLayer(map, layer, coordBuffer) {
     return overlay;
 }
 
+// Everything the heat draw depends on besides the buffers themselves: a change
+// here must recreate the instance, exactly like imageMetaKey above.
+export function heatMetaKey(layer) {
+    return JSON.stringify([layer.radius, layer.opacity, layer.max_intensity,
+        layer.ramp, layer.source || null]);
+}
+
+function renderHeatLayer(map, layer, coordinateBuffers) {
+    const coordView = coordinateBuffers[layer.source || layer.id] || null;
+    if (!coordView) {
+        if (layer.source) {
+            console.warn(`[SwiftMap] heatmap ${layer.name || layer.id}: source `
+                + `layer ${layer.source} has no coordinate buffer; nothing to draw.`);
+        }
+        return null;
+    }
+    const weightsView = coordinateBuffers[`${layer.id}::weights`] || null;
+    const instance = createHeatLayer(L, layer, coordView, weightsView);
+    instance.addTo(map);
+    instance.layerType = layer.type;
+    instance.heatMeta = heatMetaKey(layer);
+    instance.heatCoordSource = coordView;
+    instance.heatWeightSource = weightsView;
+    return instance;
+}
+
 // A non-GL layer (image overlay, or a group of them) as a Leaflet layer. Takes the
 // LIVE buffer map the core keeps -- patches land there, never in a host trait.
 export async function renderLayer(map, layer, coordBuffer, coordinateBuffers = {}) {
+    if (layer.type === "heatmap") {
+        return renderHeatLayer(map, layer, coordinateBuffers);
+    }
     if (layer.type === "image") {
         return renderImageLayer(map, layer, coordBuffer);
     }

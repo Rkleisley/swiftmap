@@ -604,6 +604,27 @@ def scenario_radio_merge():
     return m
 
 
+def scenario_heatmap_basic():
+    """A blob heatmap straight from data, default ramp."""
+    m = Map(show_logo=False)
+    m.add_heatmap(
+        {"lat": [36.01, 36.05, 36.09], "lon": [-5.31, -5.25, -5.19]},
+        name="Density")
+    return m
+
+
+def scenario_heatmap_weighted_from_layer():
+    """Heat derived from an existing point layer, weighted by its own column."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.01, 36.05, 36.09], "lon": [-5.31, -5.25, -5.19],
+         "reading": [4.0, 9.5, 2.25]},
+        name="Sites")
+    m.add_heatmap("Sites", weight_col="reading", radius=30, colormap="turbo",
+                  max_intensity=12, layer_group="Analysis")
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -659,6 +680,8 @@ SCENARIOS = [
     scenario_mut_merged_visibility,
     scenario_select_zoom,
     scenario_radio_merge,
+    scenario_heatmap_basic,
+    scenario_heatmap_weighted_from_layer,
 ]
 
 

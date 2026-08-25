@@ -9,7 +9,7 @@
 // they never throw and never change what renders.
 const KNOWN_TYPES = new Set([
     "basemap", "circle_markers", "markers", "polyline", "polygon", "circle",
-    "image", "group",
+    "image", "group", "heatmap",
 ]);
 
 // The problems with one layer, as sentences. Exported bare for tests and for
@@ -53,6 +53,21 @@ export function collectLayerProblems(layer, buffers = {}) {
                     + `rows for ${n} points -- popups and clicks will desync`);
                 break;
             }
+        }
+    }
+
+    if (type === "heatmap") {
+        const src = buffers[layer.source || layer.id];
+        if (layer.source && !src) {
+            problems.push(`layer ${id}: heatmap references source layer `
+                + `"${layer.source}" with no coordinate buffer -- nothing will draw`);
+        }
+        const weights = buffers[`${layer.id}::weights`];
+        const points = src ? Math.floor(src.byteLength / 16) : 0;
+        if (src && weights && weights.byteLength !== 4 * points) {
+            problems.push(`layer ${id}: weights buffer holds `
+                + `${Math.floor(weights.byteLength / 4)} float32 entries for `
+                + `${points} points`);
         }
     }
 

@@ -19,6 +19,21 @@ const GOLDENS = join(dirname(fileURLToPath(import.meta.url)), "goldens", "author
 const SCENARIOS = {
     empty_map: () => createMapModel(),
 
+    heatmap_basic: () => createMapModel().addHeatmap(
+        { lat: [36.01, 36.05, 36.09], lon: [-5.31, -5.25, -5.19] },
+        { name: "Density" }),
+
+    heatmap_weighted_from_layer: () => {
+        const m = createMapModel();
+        m.addCircleMarkers(
+            { lat: [36.01, 36.05, 36.09], lon: [-5.31, -5.25, -5.19],
+              reading: [4.0, 9.5, 2.25] },
+            { name: "Sites" });
+        m.addHeatmap("Sites", { weightCol: "reading", radius: 30, colormap: "turbo",
+                                maxIntensity: 12, layerGroup: "Analysis" });
+        return m;
+    },
+
     points_defaults: () => createMapModel().addCircleMarkers(
         { lat: [36.01, 36.05, 36.09], lon: [-5.31, -5.25, -5.19],
           site: ["Alpha", "Bravo", "Charlie"], value: [10, 55, 90] },
