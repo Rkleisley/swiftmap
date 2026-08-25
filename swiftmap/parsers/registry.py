@@ -16,18 +16,25 @@ def _coerce_geometry_input(data: Any) -> Any:
     """
     The bare-geometry front door: forms that state their geometry plainly read
     as naturally as the wrapped ones. A WKT string becomes the one-column table
-    the tabular parser already reads; a shapely geometry becomes its
-    __geo_interface__ GeoJSON; a list of shapely geometries becomes a
-    FeatureCollection. The JS model accepted all three first (its addPolygon
-    takes "POLYGON ((...))" directly), and the asymmetry was the gap.
+    the tabular parser already reads; an H3 cell id -- or a list of them --
+    becomes the one-column table the H3 tier reads, cells resolved to rings
+    before transport; a shapely geometry becomes its __geo_interface__ GeoJSON;
+    a list of shapely geometries becomes a FeatureCollection. The JS model
+    accepted WKT and GeoJSON first (its addPolygon takes "POLYGON ((...))"
+    directly), and the asymmetry was the gap; H3 stays Python-side breadth.
     Everything else passes through untouched.
     """
     if isinstance(data, str):
         text = data.strip()
         if text and not text.startswith(("{", "[")):
-            from .sources._utils import wkt_kind
+            from .sources._utils import wkt_kind, h3_cell_str, h3_module, is_h3_cell, warn_h3_missing
             if wkt_kind(text):
                 return {"geometry": [data]}
+            if h3_cell_str(text):
+                if h3_module() is None:
+                    warn_h3_missing("The supplied string")
+                elif is_h3_cell(text):
+                    return {"h3": [text]}
         return data
     module = type(data).__module__ or ""
     if module.startswith("shapely") and hasattr(data, "__geo_interface__"):
@@ -38,6 +45,13 @@ def _coerce_geometry_input(data: Any) -> Any:
         return {"type": "FeatureCollection",
                 "features": [{"type": "Feature", "geometry": item.__geo_interface__,
                               "properties": {}} for item in data]}
+    if isinstance(data, (list, tuple)) and len(data) > 0:
+        from .sources._utils import h3_cell_str, h3_module, is_h3_cell, warn_h3_missing
+        if all(isinstance(item, str) and h3_cell_str(item) for item in data):
+            if h3_module() is None:
+                warn_h3_missing("The supplied list")
+            elif is_h3_cell(data[0]):
+                return {"h3": list(data)}
     return data
 
 
@@ -68,8 +82,8 @@ class GeometryParserRegistry:
         baffling, so that case is named separately.
         """
         origin = type(data).__module__.split(".")[0]
-        supported = ("GeoJSON, geostructures, GeoPandas, Pandas, Polars, or plain "
-                     "coordinate lists and dicts")
+        supported = ("GeoJSON, WKT or H3 cell strings, geostructures, GeoPandas, Pandas, "
+                     "Polars, or plain coordinate lists and dicts")
 
         if origin in _SOURCE_PACKAGES:
             return (

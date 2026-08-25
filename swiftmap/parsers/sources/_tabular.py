@@ -14,6 +14,11 @@ from ._utils import (
     detect_coord_order_multi,
     apply_coord_order,
     as_pair_block,
+    h3_cell_str,
+    h3_cell_ring,
+    h3_module,
+    is_h3_cell,
+    warn_h3_missing,
 )
 
 # Multi-row grouping (tier 3 of lines/polygons parsing) is intentionally NOT
@@ -77,6 +82,91 @@ def find_wkt_column(data: Any) -> Optional[str]:
         if wkt_kind(row[column]):
             return column
     return None
+
+
+H3_COL_CANDIDATES = ['h3', 'h3_cell', 'h3_index', 'h3_id', 'hex_id', 'hex', 'cell_id', 'cell', 'hexagon']
+
+
+def find_h3_column(data: Any, id_col: Optional[str] = None) -> Optional[str]:
+    """
+    Returns the name of a column holding H3 cell ids, or None.
+
+    Mirrors the WKT pair above: `shape_id_col` may point at a column the name-guess
+    would miss, and a likely name is not enough on its own -- 'cell' may hold tower
+    ids -- so at least one of the first few non-null values must actually validate.
+    Validation is structural (is_h3_cell checks the id's bit layout), so junk cannot
+    qualify a column; but one corrupt value must not disqualify a feed's column
+    either, so invalid rows are left for the parser's skip-and-count. A value that
+    is not even hex-shaped rejects the column outright: that is a data column.
+    """
+    try:
+        cols = list(data.columns)
+    except AttributeError:
+        return None
+
+    candidates = [id_col] if id_col and id_col in cols else []
+    guessed = find_column_or_key(cols, H3_COL_CANDIDATES)
+    if guessed and guessed not in candidates:
+        candidates.append(guessed)
+
+    for column in candidates:
+        shaped = 0
+        valid = 0
+        ok = True
+        for checked, row in enumerate(iter_row_dicts(data)):
+            if checked >= 10:
+                break
+            val = row.get(column)
+            if val is None:
+                continue
+            if h3_cell_str(val) is None:
+                ok = False
+                break
+            shaped += 1
+            if is_h3_cell(val):
+                valid += 1
+        if not ok or not shaped:
+            continue
+        if h3_module() is None:
+            warn_h3_missing(f"Column {column!r}")
+            return None
+        if valid:
+            return column
+    return None
+
+
+def parse_tabular_polygons_by_h3_column(
+    data: Any, cols: List[str], shape_id_col: Optional[str] = None
+) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:
+    """
+    Tier 1b: a column of H3 cell ids, one hexagon per row. None if not applicable.
+
+    Unlike a WKT column, the cell column survives into the properties: a cell id is
+    data -- the join key an aggregated table carries and the id a popup should show --
+    where a WKT blob is only a spelling of the geometry.
+    """
+    column = find_h3_column(data, shape_id_col)
+    if not column:
+        return None
+
+    polygons, props_list, skipped, total = [], [], 0, 0
+    for row in iter_row_dicts(data):
+        total += 1
+        ring = h3_cell_ring(row.get(column))
+        if ring is None:
+            skipped += 1
+            continue
+        polygons.append(ring)
+        props_list.append({c: row.get(c) for c in cols})
+
+    if skipped:
+        warnings.warn(
+            f"[SwiftMap] Skipped {skipped} of {total} row(s) whose {column!r} value is "
+            f"not a valid H3 cell.",
+            stacklevel=4,
+        )
+    props = {c: [p.get(c) for p in props_list] for c in cols} if props_list else {}
+    return polygons, props
 
 
 class _Column:

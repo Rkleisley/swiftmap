@@ -11,6 +11,7 @@ from ._tabular import (
     parse_tabular_lines_by_coord_column,
     parse_tabular_lines_by_wide_columns,
     parse_tabular_polygons_by_coord_column,
+    parse_tabular_polygons_by_h3_column,
     parse_tabular_polygons_by_wide_columns,
 )
 
@@ -186,6 +187,11 @@ def _parse_rows(
                           view, id_col, "polygon" if close_rings else "line"))
     if result is not None:
         return result
+
+    if close_rings:
+        result = parse_tabular_polygons_by_h3_column(view, cols, shape_id_col)
+        if result is not None:
+            return result
 
     result = by_wide(view, cols, lat_col, lon_col)
     if result is not None:

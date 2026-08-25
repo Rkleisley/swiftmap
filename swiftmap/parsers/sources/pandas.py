@@ -14,6 +14,7 @@ from ._tabular import (
     parse_tabular_lines_by_coord_column,
     parse_tabular_lines_by_wide_columns,
     parse_tabular_polygons_by_coord_column,
+    parse_tabular_polygons_by_h3_column,
     parse_tabular_polygons_by_wide_columns,
 )
 
@@ -159,6 +160,10 @@ def parse_pandas_polygons(
     result = parse_tabular_polygons_by_coord_column(
         data, cols, lat_col, lon_col, coord_order,
         coord_col=explicit_wkt_column(data, shape_id_col, "polygon"))
+    if result is not None:
+        return result
+
+    result = parse_tabular_polygons_by_h3_column(data, cols, shape_id_col)
     if result is not None:
         return result
 

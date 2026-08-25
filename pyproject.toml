@@ -61,6 +61,12 @@ imagery = [
 streamlit = [
     "streamlit>=1.30",
 ]
+# H3 cell ids as a geometry input: a bare cell string, a list of them, or a
+# table column becomes hexagon polygons. Optional so the core stays pure-Python;
+# only H3 ingest needs the bindings.
+h3 = [
+    "h3>=4",
+]
 
 # The parser suite covers every supported data source, so running it in full needs
 # them all installed. They stay optional at runtime: each test module skips itself
@@ -72,6 +78,7 @@ test = [
     "geopandas",
     "shapely",
     "geostructures",
+    "h3>=4",
 ]
 
 [tool.setuptools.packages.find]

@@ -140,12 +140,15 @@ Every `add_*` method accepts the same range of inputs:
 - **Pandas / Polars DataFrames** — lat/lon columns found by name; long format via
   `shape_id_col`/`line_id_col` + `order_col`; WKT geometry columns recognised by value
   (point at one explicitly via `shape_id_col`/`line_id_col` when its name would not be
-  guessed); wide vertex columns (`lat1, lon1, lat2, lon2, ...`)
+  guessed); H3 cell-id columns, each cell drawn as its hexagon — an aggregated
+  table needs nothing but the cell and value columns it already has (requires
+  `h3`, optional); wide vertex columns (`lat1, lon1, lat2, lon2, ...`)
 - **GeoPandas** GeoDataFrames and GeoSeries
 - **geostructures** shapes, `FeatureCollection`s, and `Track`s
 - **GeoJSON** dicts or strings
-- **A bare geometry** — a WKT string (`m.add_polygon("POLYGON ((...))")`), a shapely
-  geometry, or a geostructures shape — straight in, no table around it
+- **A bare geometry** — a WKT string (`m.add_polygon("POLYGON ((...))")`), an H3 cell
+  id or a list of them, a shapely geometry, or a geostructures shape — straight in,
+  no table around it
 - **Raw lists and dicts** of coordinates, with a range-based heuristic for axis order
   (`coord_order="lat_lon"`/`"lon_lat"` to state it explicitly; WKT and GeoJSON declare
   their own order and are never guessed at)

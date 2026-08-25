@@ -1,4 +1,5 @@
 import re
+import warnings
 import numpy as np
 from typing import Optional, List, Any, Iterable, Sequence, Tuple
 
@@ -291,3 +292,76 @@ def _parse_polygon_wkt_string(val: str, coord_order: str = "auto") -> Any:
     if pairs is None:
         return resolved if isinstance(resolved, PolygonGeom) else _ensure_closed_ring(resolved)
     return _ensure_closed_ring(apply_coord_order(pairs, detect_coord_order(pairs, coord_order)))
+
+
+# --- H3 cell ids -------------------------------------------------------------
+
+_H3_STRING = re.compile(r'^[0-9a-fA-F]{15}$')
+_h3_module: Any = False   # False = not probed yet; None = probed and unavailable
+
+
+def h3_module():
+    """The h3 package, imported on first use, or None when it is not installed."""
+    global _h3_module
+    if _h3_module is False:
+        try:
+            import h3
+            _h3_module = h3
+        except ImportError:
+            _h3_module = None
+    return _h3_module
+
+
+def h3_cell_str(val: Any) -> Optional[str]:
+    """
+    The 15-hex-char string form of a possible H3 cell id, or None.
+
+    Shape only, no validation -- this is the prefilter that works without the h3
+    package. Integer ids share the string form exactly (the string id IS the hex
+    of the 64-bit id), so both spellings normalise here.
+    """
+    if isinstance(val, str):
+        return val if _H3_STRING.match(val) else None
+    if isinstance(val, (int, np.integer)):
+        text = format(int(val), "x")
+        return text if _H3_STRING.match(text) else None
+    return None
+
+
+def is_h3_cell(val: Any) -> bool:
+    """
+    True when `val` is a valid H3 cell id, in either string or integer spelling.
+
+    Validation is structural -- h3.is_valid_cell checks the id's bit layout, not
+    just its shape -- so a hex-shaped string that is not a cell stays data.
+    False when the h3 package is not installed.
+    """
+    text = h3_cell_str(val)
+    h3 = h3_module()
+    if text is None or h3 is None:
+        return False
+    try:
+        return bool(h3.is_valid_cell(text.lower()))
+    except (TypeError, ValueError):
+        return False
+
+
+def h3_cell_ring(val: Any) -> Optional[List[List[float]]]:
+    """A cell's boundary as a closed [lat, lon] ring, or None for a non-cell."""
+    text = h3_cell_str(val)
+    h3 = h3_module()
+    if text is None or h3 is None:
+        return None
+    try:
+        boundary = h3.cell_to_boundary(text.lower())
+    except (TypeError, ValueError):
+        return None
+    return _ensure_closed_ring([[float(lat), float(lon)] for lat, lon in boundary])
+
+
+def warn_h3_missing(context: str) -> None:
+    warnings.warn(
+        f"[SwiftMap] {context} looks like H3 cell ids, but the h3 package is not "
+        f"installed, so the cells cannot become polygons. pip install h3",
+        stacklevel=4,
+    )
