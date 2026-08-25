@@ -18,8 +18,9 @@ import { parsePeriod, periodToMs, timesFor } from "./timecontrol.js";
 // hopeless at that precision, so times are rebased to the bucket's earliest start and
 // expressed in seconds: exact to ~194 days of span, and a 2s rounding beyond that is
 // invisible at any zoom a time slider makes sense at.
-const ALWAYS = 6.3e8;   // ~20 years, in seconds: the "duration" of cumulative layers,
-                        // and the span half-width of points with no readable time.
+export const ALWAYS = 6.3e8;   // ~20 years, in seconds: the "duration" of cumulative
+                               // layers, and the span half-width of timeless points.
+                               // Exported: the heat pass shares the encoding.
 
 // Per-bucket layer-visibility slots in the vertex shader. Each float array element
 // occupies a full uniform vector in ES GLSL packing, and the spec guarantees only 128
@@ -84,7 +85,8 @@ void main() {
 
 // Per-layer duration in seconds: null accumulates, "period" is the shared interval,
 // an ISO string is itself; anything unparseable falls back to the interval.
-function durationSeconds(spec, periodMs) {
+// Exported for the heat pass, whose one layer per instance makes it a uniform.
+export function durationSeconds(spec, periodMs) {
     if (spec === null || spec === undefined) return ALWAYS;
     if (spec === "period") return (periodMs || 24 * 3600 * 1000) / 1000;
     const ms = periodToMs(parsePeriod(spec));

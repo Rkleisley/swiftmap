@@ -625,6 +625,18 @@ def scenario_heatmap_weighted_from_layer():
     return m
 
 
+def scenario_heatmap_time():
+    """Data-path heat animated by its own timestamp column, fading."""
+    m = Map(show_logo=False)
+    m.add_heatmap(
+        {"lat": [36.01, 36.05, 36.09], "lon": [-5.31, -5.25, -5.19],
+         "timestamp": ["2026-01-01T00:00:00", "2026-01-01T01:00:00",
+                       "2026-01-01T02:00:00"]},
+        name="Density")
+    m.make_time_layer("Density", period="PT1H", duration="PT2H", fade=True)
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -682,6 +694,7 @@ SCENARIOS = [
     scenario_radio_merge,
     scenario_heatmap_basic,
     scenario_heatmap_weighted_from_layer,
+    scenario_heatmap_time,
 ]
 
 

@@ -6,6 +6,7 @@ import { windowFor, featureInWindow, timesFor, layerInWindow, effectiveDuration,
 import { buildTimeAttributes, attachTimeToInstance, timeVertexShader,
          gpuTimeAvailable, buildVectorTimeMeta, attachTimeToVectorInstance } from "./gputime.js";
 import { createHeatLayer } from "./heat.js";
+import { durationSeconds } from "./gputime.js";
 
 function setupGlifyProjection(glInstance) {
     if (glInstance && glInstance.layer) {
@@ -134,7 +135,31 @@ export function heatMetaKey(layer) {
         layer.ramp, layer.source || null]);
 }
 
-function renderHeatLayer(map, layer, coordinateBuffers) {
+// A layer by id, descending into groups -- a heat source may be a merged
+// collection's member.
+export function findLayerById(layers, id) {
+    for (const layer of layers || []) {
+        if (layer.id === id) return layer;
+        if (layer.type === "group" && Array.isArray(layer.layers)) {
+            const hit = findLayerById(layer.layers, id);
+            if (hit) return hit;
+        }
+    }
+    return null;
+}
+
+// The time inputs a heat instance bakes at build: its own time config -- or
+// its SOURCE layer's, so heat over an animated layer animates with it --
+// plus the shared period the "period" duration resolves against. A change in
+// any of these recreates the instance, like the GL buckets' meta key.
+export function heatTimeKey(layer, sourceLayer, timeState) {
+    return JSON.stringify([
+        layer.time ?? (sourceLayer ? sourceLayer.time : null) ?? null,
+        timeState && timeState.period ? timeState.period : null,
+    ]);
+}
+
+function renderHeatLayer(map, layer, coordinateBuffers, allLayers, timeState) {
     const coordView = coordinateBuffers[layer.source || layer.id] || null;
     if (!coordView) {
         if (layer.source) {
@@ -144,20 +169,34 @@ function renderHeatLayer(map, layer, coordinateBuffers) {
         return null;
     }
     const weightsView = coordinateBuffers[`${layer.id}::weights`] || null;
-    const instance = createHeatLayer(L, layer, coordView, weightsView);
+    const sourceLayer = layer.source ? findLayerById(allLayers, layer.source) : null;
+    const timeCfg = layer.time ?? (sourceLayer ? sourceLayer.time : null) ?? null;
+    const timesView = coordinateBuffers[`${layer.source || layer.id}::times`] || null;
+    let timeOpts = null;
+    if (timeCfg && timesView) {
+        const periodMs = timeState && timeState.period
+            ? periodToMs(timeState.period) : null;
+        const durationSec = (timeCfg.fade ? -1 : 1)
+            * durationSeconds(timeCfg.duration, periodMs);
+        timeOpts = { timesView, durationSec };
+    }
+    const instance = createHeatLayer(L, layer, coordView, weightsView, timeOpts);
     instance.addTo(map);
     instance.layerType = layer.type;
     instance.heatMeta = heatMetaKey(layer);
     instance.heatCoordSource = coordView;
     instance.heatWeightSource = weightsView;
+    instance.heatTimesSource = timesView;
+    instance.heatTimeKey = heatTimeKey(layer, sourceLayer, timeState);
     return instance;
 }
 
 // A non-GL layer (image overlay, or a group of them) as a Leaflet layer. Takes the
 // LIVE buffer map the core keeps -- patches land there, never in a host trait.
-export async function renderLayer(map, layer, coordBuffer, coordinateBuffers = {}) {
+export async function renderLayer(map, layer, coordBuffer, coordinateBuffers = {},
+                                  allLayers = [], timeState = null) {
     if (layer.type === "heatmap") {
-        return renderHeatLayer(map, layer, coordinateBuffers);
+        return renderHeatLayer(map, layer, coordinateBuffers, allLayers, timeState);
     }
     if (layer.type === "image") {
         return renderImageLayer(map, layer, coordBuffer);
@@ -168,7 +207,8 @@ export async function renderLayer(map, layer, coordBuffer, coordinateBuffers = {
             if (sub.type === "circle_markers" || sub.type === "markers" || sub.type === "polyline" || sub.type === "polygon" || sub.type === "circle") {
                 continue;
             }
-            const instance = await renderLayer(map, sub, coordinateBuffers[sub.id], coordinateBuffers);
+            const instance = await renderLayer(map, sub, coordinateBuffers[sub.id],
+                coordinateBuffers, allLayers, timeState);
             if (instance) {
                 group.addLayer(instance);
             }

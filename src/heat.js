@@ -18,6 +18,7 @@
 // heatmap plugins (per-point 2D draws) die at exactly the scale swiftmap
 // exists for.
 import { COLORMAPS, DEFAULT_COLORMAP, mapColors } from "./colormaps.js";
+import { ALWAYS } from "./gputime.js";
 
 const DOWNSAMPLE = 2;          // accumulation runs at 1/2 canvas resolution
 const NORMALIZE_DELAY = 150;   // ms after the last move before re-normalising
@@ -36,8 +37,11 @@ function mercatorY(lat) {
 // Zoom-0 pixel offsets from an anchor, plus the anchor itself: float32 holds a
 // city-sized extent to sub-pixel precision at any zoom, where absolute world
 // coordinates in float32 jitter visibly past zoom ~12. Rows with unreadable
-// coordinates drop, and their weights drop with them so the arrays stay aligned.
-export function projectHeatPoints(latlonView, weightsView, crs, L) {
+// coordinates drop, and their weights AND time spans drop with them so every
+// per-point array stays aligned. Times use gputime's encoding -- rebased to
+// the earliest start and expressed in float32 seconds -- so a timeless point
+// (NaN) gets a span visible at every tick.
+export function projectHeatPoints(latlonView, weightsView, timesView, crs, L) {
     const f64 = new Float64Array(
         latlonView.buffer, latlonView.byteOffset, latlonView.byteLength / 8);
     const n = f64.length / 2;
@@ -45,10 +49,24 @@ export function projectHeatPoints(latlonView, weightsView, crs, L) {
         ? new Float32Array(weightsView.buffer, weightsView.byteOffset,
                            weightsView.byteLength / 4)
         : null;
+    let t64 = timesView
+        ? new Float64Array(timesView.buffer, timesView.byteOffset,
+                           timesView.byteLength / 8)
+        : null;
+    if (t64 && t64.length !== n * 2) t64 = null;  // misaligned: the validator speaks
+    let base = 0;
+    if (t64) {
+        base = Infinity;
+        for (let i = 0; i < t64.length; i += 2) {
+            if (!Number.isNaN(t64[i]) && t64[i] < base) base = t64[i];
+        }
+        if (base === Infinity) base = 0;
+    }
     const mercator = !crs || !L || crs === L.CRS.EPSG3857;
 
     const offsets = new Float32Array(n * 2);
     const weights = new Float32Array(n);
+    const spans = t64 ? new Float32Array(n * 2) : null;
     let anchorX = null, anchorY = null;
     let kept = 0;
     for (let i = 0; i < n; i++) {
@@ -69,31 +87,56 @@ export function projectHeatPoints(latlonView, weightsView, crs, L) {
         offsets[kept * 2 + 1] = y - anchorY;
         const w = w32 ? w32[i] : 1;
         weights[kept] = Number.isFinite(w) ? w : 0;
+        if (spans) {
+            const s = t64[i * 2];
+            if (Number.isNaN(s)) {
+                spans[kept * 2] = -ALWAYS;
+                spans[kept * 2 + 1] = ALWAYS;
+            } else {
+                spans[kept * 2] = (s - base) / 1000;
+                spans[kept * 2 + 1] = (t64[i * 2 + 1] - base) / 1000;
+            }
+        }
         kept++;
     }
     return {
         offsets: offsets.subarray(0, kept * 2),
         weights: weights.subarray(0, kept),
+        spans: spans ? spans.subarray(0, kept * 2) : null,
+        base,
         anchorX: anchorX ?? 0,
         anchorY: anchorY ?? 0,
         count: kept,
     };
 }
 
+// The window test and fade are gputime's semantics verbatim -- half-open
+// (tick - dur, tick], fade riding the duration's sign -- except that heat's
+// one-layer-per-instance shape makes the duration a uniform, and fade scales
+// the WEIGHT: a dimming blob is "activity going quiet", where dimming the
+// layer's opacity would say "high activity, but shyly".
 const SPLAT_VS = `
 attribute vec2 aOffset;
 attribute float aWeight;
+attribute vec2 aTimeSpan;
 uniform vec2 uAnchorPx;
 uniform float uScale;
 uniform vec2 uViewport;
 uniform float uSize;
+uniform float uTick;
+uniform float uOverride;
+uniform float uDur;
 varying float vWeight;
 void main() {
+    bool fades = uDur < 0.0;
+    float dur = uOverride >= 0.0 ? uOverride : abs(uDur);
+    bool tvis = aTimeSpan.y > (uTick - dur) && aTimeSpan.x <= uTick;
     vec2 px = uAnchorPx + aOffset * uScale;
     vec2 clip = px / uViewport * 2.0 - 1.0;
-    gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
-    gl_PointSize = uSize;
-    vWeight = aWeight;
+    gl_Position = tvis ? vec4(clip.x, -clip.y, 0.0, 1.0) : vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = tvis ? uSize : 0.0;
+    float age = fades ? clamp(1.0 - (uTick - aTimeSpan.y) / dur, 0.0, 1.0) : 1.0;
+    vWeight = aWeight * age;
 }`;
 
 const SPLAT_FS = `
@@ -166,6 +209,8 @@ export function createHeatRenderer(canvas, options = {}) {
     const radius = Math.max(1, options.radius ?? 25);
     const pinnedMax = options.maxIntensity ?? null;
     const anchors = options.anchors || COLORMAPS[DEFAULT_COLORMAP];
+    // Signed, seconds: negative means the layer fades (gputime's encoding).
+    const durSec = options.durationSec ?? ALWAYS;
 
     let gl = canvas.getContext("webgl2",
         { antialias: false, depth: false, alpha: true });
@@ -181,6 +226,7 @@ export function createHeatRenderer(canvas, options = {}) {
 
     const offsetBuf = gl.createBuffer();
     const weightBuf = gl.createBuffer();
+    const spanBuf = gl.createBuffer();
     const quadBuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
     gl.bufferData(gl.ARRAY_BUFFER,
@@ -205,6 +251,10 @@ export function createHeatRenderer(canvas, options = {}) {
 
     let count = 0;
     let currentMax = 0;
+    let hasSpans = false;
+    let dataBase = 0;
+    let tickSec = ALWAYS;
+    let overrideSec = -1;
 
     function ensureFbo() {
         const w = Math.max(1, Math.floor(canvas.width / DOWNSAMPLE));
@@ -231,10 +281,16 @@ export function createHeatRenderer(canvas, options = {}) {
 
     function setData(projected) {
         count = projected.count;
+        dataBase = projected.base || 0;
+        hasSpans = !!projected.spans;
         gl.bindBuffer(gl.ARRAY_BUFFER, offsetBuf);
         gl.bufferData(gl.ARRAY_BUFFER, projected.offsets, gl.STATIC_DRAW);
         gl.bindBuffer(gl.ARRAY_BUFFER, weightBuf);
         gl.bufferData(gl.ARRAY_BUFFER, projected.weights, gl.STATIC_DRAW);
+        if (hasSpans) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, spanBuf);
+            gl.bufferData(gl.ARRAY_BUFFER, projected.spans, gl.STATIC_DRAW);
+        }
     }
 
     // view: {anchorPxX, anchorPxY, scale, dpr} -- anchor position in CSS pixels
@@ -264,6 +320,20 @@ export function createHeatRenderer(canvas, options = {}) {
         gl.bindBuffer(gl.ARRAY_BUFFER, weightBuf);
         gl.vertexAttribPointer(wLoc, 1, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(wLoc);
+        // Timeless data binds a CONSTANT always-visible span instead of a
+        // buffer, so the one shader serves both without a per-point upload.
+        const spanLoc = gl.getAttribLocation(splat, "aTimeSpan");
+        if (hasSpans) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, spanBuf);
+            gl.vertexAttribPointer(spanLoc, 2, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(spanLoc);
+        } else {
+            gl.disableVertexAttribArray(spanLoc);
+            gl.vertexAttrib2f(spanLoc, -ALWAYS, ALWAYS);
+        }
+        gl.uniform1f(gl.getUniformLocation(splat, "uTick"), tickSec);
+        gl.uniform1f(gl.getUniformLocation(splat, "uOverride"), overrideSec);
+        gl.uniform1f(gl.getUniformLocation(splat, "uDur"), durSec);
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE);
         gl.drawArrays(gl.POINTS, 0, count);
@@ -328,6 +398,16 @@ export function createHeatRenderer(canvas, options = {}) {
             computeMax();
             colorizePass();
         },
+        // A tick costs three uniforms and a redraw -- and deliberately NO
+        // re-normalisation: within one view the scale holds still across
+        // playback, so tick-to-tick colours are comparable. Re-normalising per
+        // tick would make every moment look equally hot.
+        setWindow(tickMs, overrideMs, view) {
+            tickSec = tickMs === null ? ALWAYS : (tickMs - dataBase) / 1000;
+            overrideSec = overrideMs === null ? -1 : overrideMs / 1000;
+            splatPass(view);
+            colorizePass();
+        },
         destroy() {
             const lose = gl.getExtension("WEBGL_lose_context");
             if (lose) lose.loseContext();
@@ -338,7 +418,9 @@ export function createHeatRenderer(canvas, options = {}) {
 // The Leaflet layer: a viewport-sized canvas in a dedicated pane between the
 // tiles and the vector panes, fully redrawn on every move -- the redraw is two
 // draw calls, so tracking the map beats transform bookkeeping.
-export function createHeatLayer(L, layer, latlonView, weightsView) {
+// `timeOpts` ({ timesView, durationSec }) makes the heat a time layer: the
+// core pushes the slider's window through the `_swiftmapHeatTime` handle.
+export function createHeatLayer(L, layer, latlonView, weightsView, timeOpts = null) {
     const HeatLayer = L.Layer.extend({
         onAdd(map) {
             this._map = map;
@@ -360,6 +442,15 @@ export function createHeatLayer(L, layer, latlonView, weightsView) {
             });
 
             this._initGL();
+            if (timeOpts) {
+                this._swiftmapHeatTime = {
+                    setWindow: (tickMs, overrideMs) => {
+                        if (this._renderer && this._map) {
+                            this._renderer.setWindow(tickMs, overrideMs, this._view());
+                        }
+                    },
+                };
+            }
             map.on("move", this._onMove, this);
             map.on("moveend zoomend", this._onMoveEnd, this);
             map.on("resize", this._onResize, this);
@@ -392,6 +483,7 @@ export function createHeatLayer(L, layer, latlonView, weightsView) {
                 opacity: layer.opacity,
                 maxIntensity: layer.max_intensity,
                 anchors: layer.ramp,
+                durationSec: timeOpts ? timeOpts.durationSec : undefined,
             });
             if (!this._renderer) {
                 console.warn("[SwiftMap] heatmap: WebGL unavailable; layer "
@@ -399,7 +491,8 @@ export function createHeatLayer(L, layer, latlonView, weightsView) {
                 return;
             }
             this._projected = projectHeatPoints(
-                latlonView, weightsView, this._map.options.crs, L);
+                latlonView, weightsView, timeOpts ? timeOpts.timesView : null,
+                this._map.options.crs, L);
             this._renderer.setData(this._projected);
         },
 

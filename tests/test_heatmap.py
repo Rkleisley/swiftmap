@@ -128,6 +128,34 @@ def test_heat_survives_a_source_update():
     assert len(m.coordinate_buffers[source.id]) == 2 * 16
 
 
+def test_data_path_heat_keeps_its_columns():
+    m = Map()
+    m.add_heatmap(DF, name="Density")
+    (layer,) = heat_layers(m)
+    assert layer.properties["reading"] == [4.0, 9.5, 2.25]
+
+
+def test_source_path_heat_carries_no_columns_of_its_own():
+    m = Map()
+    m.add_circle_markers(DF, name="Sites")
+    m.add_heatmap("Sites")
+    (layer,) = heat_layers(m)
+    assert getattr(layer, "properties", None) is None
+
+
+def test_make_time_layer_animates_data_path_heat():
+    df = DF.assign(timestamp=pd.to_datetime(
+        ["2026-01-01T00:00", "2026-01-01T01:00", "2026-01-01T02:00"]))
+    m = Map()
+    m.add_heatmap(df, name="Density")
+    m.make_time_layer("Density", period="PT1H", duration="PT2H", fade=True)
+    (layer,) = heat_layers(m)
+    assert layer.time == {"field": "timestamp", "duration": "PT2H", "fade": True}
+    times = np.frombuffer(m.coordinate_buffers[f"{layer.id}::times"],
+                          dtype=np.float64)
+    assert len(times) == 6                      # three [start, end] pairs
+
+
 def test_export_carries_the_heat_layer():
     m = Map()
     m.add_heatmap(DF, name="Density")

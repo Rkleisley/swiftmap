@@ -3,7 +3,8 @@ import { warnLayerProblems } from "./validate.js";
 import { renderSidebarControls, normalizeRadioLayers, sidebarCollapseState } from "./sidebar.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
-import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey, heatMetaKey } from "./layers.js";
+import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey,
+         heatMetaKey, heatTimeKey, findLayerById } from "./layers.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
          collectDurationsMs, POSITIONS, timesFor, windowFor, featureInWindow,
@@ -708,13 +709,20 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                         || existing.imageSource !== (coordinateBuffers[layer.id] || null));
                 // Heat reads its own buffers -- or a SOURCE layer's -- so a swap
                 // of either view (a live feed's update_layer) recreates the
-                // instance the same way a stale image does.
+                // instance the same way a stale image does. The time inputs
+                // (own or source time config, the ::times view, the period)
+                // are baked at build, so they recreate too.
                 const staleHeat = layer.type === "heatmap"
                     && (existing.heatMeta !== heatMetaKey(layer)
                         || existing.heatCoordSource
                             !== (coordinateBuffers[layer.source || layer.id] || null)
                         || existing.heatWeightSource
-                            !== (coordinateBuffers[`${layer.id}::weights`] || null));
+                            !== (coordinateBuffers[`${layer.id}::weights`] || null)
+                        || existing.heatTimesSource
+                            !== (coordinateBuffers[`${layer.source || layer.id}::times`] || null)
+                        || existing.heatTimeKey !== heatTimeKey(layer,
+                            layer.source ? findLayerById(layers, layer.source) : null,
+                            timeState));
                 if (existing.layerType !== layer.type || staleImage || staleHeat) {
                     existing.remove();
                     delete activeOverlayLayers[layer.id];
@@ -723,7 +731,8 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 }
             }
 
-            const instance = await renderLayer(map, layer, coordinateBuffers[layer.id], coordinateBuffers);
+            const instance = await renderLayer(map, layer, coordinateBuffers[layer.id],
+                coordinateBuffers, layers, timeState);
             // A host may destroy the map while a sync is in flight (an unmount, or
             // React strict mode's throwaway mount): nothing past this point may
             // touch a map that no longer has panes.
@@ -857,6 +866,20 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                     handle.setLayerVisibility(vis);
                 }
             }
+            if (timeState) {
+                const overrideMs = timeState.window
+                    ? periodToMs(parsePeriod(timeState.window)) : null;
+                handle.setWindow(timeState.tick, overrideMs);
+            } else {
+                handle.setWindow(null, null);
+            }
+        }
+
+        // Heat instances take the same window: three uniforms and a redraw per
+        // tick, exactly like the GL point buckets above.
+        for (const instance of Object.values(activeOverlayLayers)) {
+            const handle = instance._swiftmapHeatTime;
+            if (!handle) continue;
             if (timeState) {
                 const overrideMs = timeState.window
                     ? periodToMs(parsePeriod(timeState.window)) : null;

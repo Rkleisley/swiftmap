@@ -778,6 +778,7 @@ export function createMapModel(options = {}) {
         let weights = null;
         let bounds = null;
         let pairs = null;
+        let props = null;
         const sourceLayer = typeof data === "string" ? getLayer(data) : null;
         if (sourceLayer) {
             if (sourceLayer.type !== "circle_markers" && sourceLayer.type !== "markers") {
@@ -802,6 +803,7 @@ export function createMapModel(options = {}) {
                 return model;
             }
             pairs = p;
+            props = properties;
             if (weightCol != null) {
                 weights = heatWeights(properties[weightCol], p.length, weightCol,
                     "the supplied data");
@@ -819,6 +821,9 @@ export function createMapModel(options = {}) {
             max_intensity: maxIntensity,
             ramp: [...anchors],
             ...(sourceId ? { source: sourceId } : {}),
+            // Data-path heat keeps its columns so makeTimeLayer can probe them;
+            // source-referenced heat animates through its source layer's time.
+            ...(sourceId ? {} : { properties: props || {} }),
             ...(bounds ? { bounds } : {}),
             legend: { kind: "ramp", field: weightCol || "density",
                       anchors: [...anchors], vmin: "low", vmax: "high" },

@@ -146,6 +146,10 @@ def add_heatmap(
         "max_intensity": max_intensity,
         "ramp": anchors,
         **({"source": source_id} if source_id else {}),
+        # Data-path heat keeps its columns: that is what lets make_time_layer
+        # probe a timestamp column and animate the blobs. A source-referenced
+        # heat animates through its SOURCE layer's time instead.
+        **({"properties": props} if source_id is None else {}),
         **({"bounds": bounds} if bounds else {}),
         # The ramp reads low -> high by design: the scale is view-relative, so
         # numbers on it would be a lie that changes with every pan.
