@@ -192,6 +192,36 @@ suite("hex heat draws real polygons that vanish with their folder", async () => 
     }, "widget-heat.html");
 });
 
+suite("a zoom's re-normalisation reaches the screen without needing a pan", async () => {
+    await withPage(async (page, errors) => {
+        // The bug this pins: computeMax left the accumulation framebuffer
+        // bound, so the colorize that followed painted into the FBO instead of
+        // the canvas -- the zoom DID re-normalise, but the screen kept the old
+        // scale until the next pan redrew. So: zoom, settle, screenshot; pan
+        // away and back to the exact same view, settle, screenshot. Identical
+        // views must show identical pixels -- if the first is stale, they differ.
+        await page.waitForTimeout(900);
+        await page.evaluate(() => window.__model.set("zoom", 13));
+        await page.waitForTimeout(1200);
+        // Clipped to the map's centre, where the blob lives: DOM chrome (sidebar
+        // text, controls) antialiases with +/-1 jitter and is not under test.
+        const clip = { clip: { x: 280, y: 180, width: 340, height: 340 } };
+        const afterZoom = await page.screenshot(clip);
+
+        await page.evaluate(() => window.__model.set("center", [36.05, -5.28]));
+        await page.waitForTimeout(600);
+        await page.evaluate(() => window.__model.set("center", [36.03, -5.30]));
+        await page.waitForTimeout(1200);
+        const afterRoundTrip = await page.screenshot(clip);
+
+        assert.equal(Buffer.compare(afterZoom, afterRoundTrip), 0,
+            "the same view must render the same pixels whether reached by zoom "
+            + "or by pan -- a difference means the zoom's normalisation never "
+            + "reached the canvas");
+        assert.deepEqual(errors, [], "no console errors across the round trip");
+    }, "widget-heat.html");
+});
+
 suite("heat follows the time slider through its source layer", async () => {
     await withPage(async (page, errors) => {
         // The source points sit one per day, so each tick lights a different
