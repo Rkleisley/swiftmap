@@ -143,6 +143,25 @@ suite("the layers put visible pixels on the map", async () => {
     });
 });
 
+suite("the coordinate readout can be dismissed", async () => {
+    await withPage(async page => {
+        // Every empty-map click replaces this popup, so its close button is
+        // the ONLY route to a popup-free screenshot. It shipped without one.
+        await page.evaluate(() => window.__model.set("show_click_coordinates", true));
+        await page.locator(".swiftmap-container").click({ position: { x: 30, y: 250 } });
+        await page.waitForTimeout(400);
+        assert.equal(await page.locator(".swiftmap-coords-popup").count(), 1,
+            "an empty-map click shows the readout");
+        assert.equal(
+            await page.locator(".swiftmap-coords-popup .leaflet-popup-close-button").count(),
+            1, "the readout carries a close button");
+        await page.click(".swiftmap-coords-popup .leaflet-popup-close-button");
+        await page.waitForTimeout(200);
+        assert.equal(await page.locator(".swiftmap-coords-popup").count(), 0,
+            "the close button actually removes it");
+    });
+});
+
 suite("the heatmap accumulates and colours pixels on its own pane", async () => {
     await withPage(async (page, errors) => {
         assert.equal(await page.locator(".leaflet-swiftmap-heat-pane canvas").count(), 3,

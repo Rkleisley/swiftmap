@@ -233,10 +233,17 @@
     display: none;
 }
 
-/* The empty-click coordinate readout: small, mono, selectable for copying. */
+/* The empty-click coordinate readout: small, mono, selectable for copying,
+   with a compact close button sized to the readout it dismisses. */
 .swiftmap-coords-popup .leaflet-popup-content {
     font-family: ui-monospace, Consolas, monospace;
     font-size: 12px;
-    margin: 6px 10px;
+    margin: 6px 22px 6px 10px;
     user-select: text;
+}
+.swiftmap-coords-popup .leaflet-popup-close-button {
+    font-size: 14px;
+    width: 18px;
+    height: 18px;
+    padding: 2px 2px 0 0;
 }

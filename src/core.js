@@ -1124,7 +1124,11 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 host.save_changes();
             } catch (err) { /* no live backend */ }
             if (host.get("show_click_coordinates")) {
-                L.popup({ className: "swiftmap-coords-popup", closeButton: false })
+                // The close button is the only exit: every empty-map click
+                // replaces the popup, so without it there is no popup-free
+                // state to screenshot -- closing meant clicking a feature and
+                // dismissing THAT popup instead.
+                L.popup({ className: "swiftmap-coords-popup" })
                     .setLatLng(e.latlng)
                     .setContent(`${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`)
                     .openOn(map);
