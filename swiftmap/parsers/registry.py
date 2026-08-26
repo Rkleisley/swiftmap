@@ -1,4 +1,4 @@
-from typing import Any, Tuple, List, Dict
+from typing import Any, Optional, Tuple, List, Dict
 
 # =============================================================================
 # 1. REGISTRY BROKER CLASS & GLOBAL INSTANCES
@@ -12,7 +12,7 @@ _SOURCE_PACKAGES = frozenset({
 })
 
 
-def _coerce_geometry_input(data: Any) -> Any:
+def _coerce_geometry_input(data: Any, kwargs: Optional[dict] = None) -> Any:
     """
     The bare-geometry front door: forms that state their geometry plainly read
     as naturally as the wrapped ones. A WKT string becomes the one-column table
@@ -24,12 +24,18 @@ def _coerce_geometry_input(data: Any) -> Any:
     directly), and the asymmetry was the gap; H3 stays Python-side breadth.
     Everything else passes through untouched.
     """
+    geohash_base = (kwargs or {}).get("geohash_base")
     if isinstance(data, str):
         text = data.strip()
         if text and not text.startswith(("{", "[")):
             from .sources._utils import wkt_kind, h3_cell_str, h3_module, is_h3_cell, warn_h3_missing
             if wkt_kind(text):
                 return {"geometry": [data]}
+            # A stated base makes a bare hash unambiguous; without one a short
+            # string could be a geohash in three different places, so it never
+            # coerces (the tabular tier owns the explanation).
+            if geohash_base is not None:
+                return {"geohash": [text]}
             if h3_cell_str(text):
                 if h3_module() is None:
                     warn_h3_missing("The supplied string")
@@ -45,9 +51,12 @@ def _coerce_geometry_input(data: Any) -> Any:
         return {"type": "FeatureCollection",
                 "features": [{"type": "Feature", "geometry": item.__geo_interface__,
                               "properties": {}} for item in data]}
-    if isinstance(data, (list, tuple)) and len(data) > 0:
+    if isinstance(data, (list, tuple)) and len(data) > 0 \
+            and all(isinstance(item, str) for item in data):
+        if geohash_base is not None:
+            return {"geohash": list(data)}
         from .sources._utils import h3_cell_str, h3_module, is_h3_cell, warn_h3_missing
-        if all(isinstance(item, str) and h3_cell_str(item) for item in data):
+        if all(h3_cell_str(item) for item in data):
             if h3_module() is None:
                 warn_h3_missing("The supplied list")
             elif is_h3_cell(data[0]):
@@ -65,7 +74,7 @@ class GeometryParserRegistry:
         self._parsers.append((check_func, parse_func))
 
     def parse(self, data: Any, *args, **kwargs):
-        data = _coerce_geometry_input(data)
+        data = _coerce_geometry_input(data, kwargs)
         for check, parse_fn in self._parsers:
             if check(data):
                 return parse_fn(data, *args, **kwargs)

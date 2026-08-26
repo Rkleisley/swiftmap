@@ -22,6 +22,8 @@ def add_polygon(
     shape_id_col: Optional[str] = None,
     order_col: Optional[str] = None,
     coord_order: str = "auto",
+    geohash_col: Optional[str] = None,
+    geohash_base: Optional[int] = None,
     name: Optional[str] = None,
     layer_group: Optional[str] = None,
     group_multi_select: Optional[bool] = None,
@@ -130,6 +132,8 @@ def add_polygon(
             shape_id_col=shape_id_col,
             order_col=order_col,
             coord_order=coord_order,
+            geohash_col=geohash_col,
+            geohash_base=geohash_base,
             **kwargs
         )
     except TypeError as exc:
@@ -196,7 +200,8 @@ def add_polygon(
             "added_with": record_added_with(
                 "add_polygon",
                 parser={"lat_col": lat_col, "lon_col": lon_col, "shape_id_col": shape_id_col,
-                        "order_col": order_col, "coord_order": coord_order},
+                        "order_col": order_col, "coord_order": coord_order,
+                        "geohash_col": geohash_col, "geohash_base": geohash_base},
                 data_opts=data_opts, explicit_style=explicit_style,
                 static_style=static_style, label=label,
                 fanned=is_multi or is_column(name, props)

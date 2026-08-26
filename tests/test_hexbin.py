@@ -97,3 +97,26 @@ def test_missing_lib_raises_with_the_install_hint(monkeypatch):
     monkeypatch.setattr(_utils, "_h3_module", None)
     with pytest.raises(ImportError, match="pip install h3"):
         hexbin(frame([A]), resolution=8)
+
+
+# --- geohash_bin: the sibling with the other cell family ------------------------
+
+def test_geohash_bin_counts_and_composes():
+    from swiftmap import geohash_bin
+    import swiftmap._niemeyer as nm
+    df = frame([A, A, B])
+    out = geohash_bin(df, length=6, base=32)
+    assert isinstance(out, pd.DataFrame)
+    got = dict(zip(out["geohash"], out["count"]))
+    assert got == {nm.encode(*A, 6, 32): 2, nm.encode(*B, 6, 32): 1}
+    m = Map()
+    m.add_polygon(out, geohash_base=32, name="Cells", color_col="count")
+    assert len(m.find_layers(types="polygon")) == 2
+
+
+def test_geohash_bin_requires_a_real_base_and_length():
+    from swiftmap import geohash_bin
+    with pytest.raises(ValueError, match="one of"):
+        geohash_bin(frame([A]), length=6, base=10)
+    with pytest.raises(ValueError, match="positive integer"):
+        geohash_bin(frame([A]), length=0, base=32)

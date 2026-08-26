@@ -1,6 +1,6 @@
 from .map import Map
 from ._colormaps import register_colormap
-from .hexbin import hexbin
+from .hexbin import hexbin, geohash_bin
 
 # Read from the installed package's own metadata, so this can never disagree with
 # the wheel it shipped in; the fallback covers a source tree that was never
@@ -15,5 +15,6 @@ __all__ = [
     "Map",
     "register_colormap",
     "hexbin",
+    "geohash_bin",
     "__version__",
 ]

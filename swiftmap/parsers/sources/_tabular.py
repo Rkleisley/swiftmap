@@ -86,6 +86,91 @@ def find_wkt_column(data: Any) -> Optional[str]:
 
 H3_COL_CANDIDATES = ['h3', 'h3_cell', 'h3_index', 'h3_id', 'hex_id', 'hex', 'cell_id', 'cell', 'hexagon']
 
+GEOHASH_COL_CANDIDATES = ['geohash', 'niemeyer', 'gh']
+
+
+def parse_tabular_polygons_by_geohash_column(
+    data: Any, cols: List[str],
+    geohash_col: Optional[str] = None, geohash_base: Optional[int] = None,
+) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:
+    """
+    Tier 1a: a column of Niemeyer geohashes, one rectangle per row. None if
+    not applicable.
+
+    The same string is a valid hash in every base whose alphabet contains its
+    characters -- decoding to a DIFFERENT rectangle in each -- so unlike WKT
+    and H3 there is no value-verification that could make guessing safe: this
+    tier only fires when `geohash_base` states the base, mirroring
+    geostructures' NiemeyerHasher, which has no default either. Without the
+    base, a candidate-named column earns a hint, not a guess. The hash column
+    survives into the properties, like H3's cell ids: it is the join key.
+    """
+    from ..._niemeyer import BASES, cell_ring, valid_geohash
+
+    if geohash_base is None:
+        if geohash_col is not None:
+            warnings.warn(
+                f"[SwiftMap] geohash_col={geohash_col!r} was given without "
+                f"geohash_base. A Niemeyer hash cannot state its own base -- "
+                f"pass geohash_base=16, 32 or 64. The column was left as data.",
+                stacklevel=4,
+            )
+            return None
+        hinted = find_column_or_key(cols, GEOHASH_COL_CANDIDATES)
+        has_latlon = (find_column_or_key(cols, LAT_CANDIDATES)
+                      and find_column_or_key(cols, LON_CANDIDATES))
+        if hinted and not has_latlon and not find_wkt_column(data):
+            warnings.warn(
+                f"[SwiftMap] Column {hinted!r} looks like Niemeyer geohashes, "
+                f"but the base cannot be read from the strings themselves -- "
+                f"pass geohash_base=16, 32 or 64 to draw them.",
+                stacklevel=4,
+            )
+        return None
+
+    if geohash_base not in BASES:
+        warnings.warn(
+            f"[SwiftMap] geohash_base must be one of {BASES}, got "
+            f"{geohash_base!r}. Nothing was parsed.",
+            stacklevel=4,
+        )
+        return None
+    if geohash_col is not None and geohash_col not in cols:
+        warnings.warn(
+            f"[SwiftMap] geohash_col={geohash_col!r} is not a column of the "
+            f"supplied data. Nothing was parsed.",
+            stacklevel=4,
+        )
+        return None
+    column = geohash_col or find_column_or_key(cols, GEOHASH_COL_CANDIDATES)
+    if not column:
+        warnings.warn(
+            f"[SwiftMap] geohash_base was given but no geohash column was "
+            f"found (looked for {', '.join(GEOHASH_COL_CANDIDATES)}); point "
+            f"at one with geohash_col=. Nothing was parsed.",
+            stacklevel=4,
+        )
+        return None
+
+    polygons, props_list, skipped, total = [], [], 0, 0
+    for row in iter_row_dicts(data):
+        total += 1
+        value = row.get(column)
+        if not valid_geohash(value, geohash_base):
+            skipped += 1
+            continue
+        polygons.append(cell_ring(value, geohash_base))
+        props_list.append({c: row.get(c) for c in cols})
+
+    if skipped:
+        warnings.warn(
+            f"[SwiftMap] Skipped {skipped} of {total} row(s) whose {column!r} "
+            f"value is not a valid base-{geohash_base} geohash.",
+            stacklevel=4,
+        )
+    props = {c: [p.get(c) for p in props_list] for c in cols} if props_list else {}
+    return polygons, props
+
 
 def find_h3_column(data: Any, id_col: Optional[str] = None) -> Optional[str]:
     """

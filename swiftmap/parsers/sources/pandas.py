@@ -14,6 +14,7 @@ from ._tabular import (
     parse_tabular_lines_by_coord_column,
     parse_tabular_lines_by_wide_columns,
     parse_tabular_polygons_by_coord_column,
+    parse_tabular_polygons_by_geohash_column,
     parse_tabular_polygons_by_h3_column,
     parse_tabular_polygons_by_wide_columns,
 )
@@ -153,9 +154,18 @@ def parse_pandas_polygons(
     shape_id_col: Optional[str] = None,
     order_col: Optional[str] = None,
     coord_order: str = "auto",
+    geohash_col: Optional[str] = None,
+    geohash_base: Optional[int] = None,
     **kwargs
 ) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
     cols = list(data.columns)
+
+    # An explicit base is a stated intent, so the geohash tier outranks every
+    # guessed one; without a base it only ever hints, never parses.
+    result = parse_tabular_polygons_by_geohash_column(
+        data, cols, geohash_col, geohash_base)
+    if result is not None:
+        return result
 
     result = parse_tabular_polygons_by_coord_column(
         data, cols, lat_col, lon_col, coord_order,

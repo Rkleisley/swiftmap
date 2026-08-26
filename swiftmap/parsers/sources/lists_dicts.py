@@ -11,6 +11,7 @@ from ._tabular import (
     parse_tabular_lines_by_coord_column,
     parse_tabular_lines_by_wide_columns,
     parse_tabular_polygons_by_coord_column,
+    parse_tabular_polygons_by_geohash_column,
     parse_tabular_polygons_by_h3_column,
     parse_tabular_polygons_by_wide_columns,
 )
@@ -164,6 +165,8 @@ def _parse_rows(
     shape_id_col: Optional[str] = None,
     order_col: Optional[str] = None,
     coord_order: str = "auto",
+    geohash_col: Optional[str] = None,
+    geohash_base: Optional[int] = None,
     **kwargs
 ) -> Tuple[List[List[List[float]]], Dict[str, List[Any]]]:
     """
@@ -175,6 +178,12 @@ def _parse_rows(
     """
     view = RowsView(data)
     cols = view.columns
+
+    if close_rings:
+        result = parse_tabular_polygons_by_geohash_column(
+            view, cols, geohash_col, geohash_base)
+        if result is not None:
+            return result
 
     by_coord = (parse_tabular_polygons_by_coord_column if close_rings
                 else parse_tabular_lines_by_coord_column)

@@ -82,3 +82,52 @@ def hexbin(
         import pandas as pd
         return pd.DataFrame({"h3": cells, "count": values})
     return {"h3": cells, "count": values}
+
+
+def geohash_bin(
+    data: Any,
+    length: int,
+    base: int,
+    lat_col: Optional[str] = None,
+    lon_col: Optional[str] = None,
+    coord_order: str = "auto",
+):
+    """
+    Bins point data into Niemeyer geohash cells: a `geohash` + `count` table.
+
+    hexbin's sibling with the other cell family, and the same boundary:
+    counting is the only aggregation, the result is plain data in the input's
+    own flavour, and painting it is `add_polygon(out, geohash_base=base,
+    color_col="count")` -- the base restated there because a Niemeyer hash
+    cannot carry it. `length` and `base` mirror geostructures'
+    NiemeyerHasher(length, base), base always explicit, never defaulted:
+    the same string decodes to a different rectangle in every base whose
+    alphabet contains it. Needs no third-party package -- the codec is pure
+    arithmetic, held character-identical to geostructures by the parity suite.
+    """
+    from ._niemeyer import BASES, encode
+
+    if base not in BASES:
+        raise ValueError(f"geohash_bin base must be one of {BASES}, got {base!r}.")
+    if isinstance(length, bool) or not isinstance(length, int) or length < 1:
+        raise ValueError(f"geohash_bin length must be a positive integer, "
+                         f"got {length!r}.")
+
+    lats, lons, _props = parse_points(
+        data, lat_col=lat_col, lon_col=lon_col, coord_order=coord_order)
+
+    counts = Counter(
+        encode(lat, lon, length, base)
+        for lat, lon in zip(lats.tolist(), lons.tolist())
+    )
+    cells = list(counts.keys())
+    values = [counts[c] for c in cells]
+
+    module = type(data).__module__ or ""
+    if module.startswith("polars"):
+        import polars as pl
+        return pl.DataFrame({"geohash": cells, "count": values})
+    if module.startswith(("pandas", "geopandas")):
+        import pandas as pd
+        return pd.DataFrame({"geohash": cells, "count": values})
+    return {"geohash": cells, "count": values}
