@@ -350,3 +350,20 @@ footer.site {
 }
 footer.site .wrap { display: flex; flex-wrap: wrap; gap: 18px; align-items: baseline; }
 footer.site .built { margin-left: auto; font-family: var(--mono); font-size: 12px; }
+
+/* "Where it misses, honestly" -- the gaps grid. Deliberately quieter than the
+   comparison table above it: these are facts to be read, not sold. */
+.gaps {
+    display: grid; gap: 1px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft); border-radius: 12px;
+    overflow: hidden;
+}
+.gaps .gap { background: var(--bg-raised); padding: 20px 22px; }
+.gaps .gap h3 {
+    margin: 0 0 8px; font-size: 14px; font-weight: 600;
+    letter-spacing: .01em; color: var(--ink);
+}
+.gaps .gap p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-faint); }
+.gaps .gap code { font-family: var(--mono); font-size: 12.5px; }

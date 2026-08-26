@@ -552,9 +552,9 @@ APPS = [
               "them and nothing is loaded twice.",
          href=f"{REPO}/tree/main/examples/react"),
     dict(name="Streamlit", files="examples/streamlit/",
-         body="A bidirectional component that ships inside the wheel -- nothing "
-              "is fetched at view time, which is the one stack that works with "
-              "no network at all.",
+         body="A bidirectional component, its frontend bundled inside the wheel "
+              "like the widget and the export -- clicks, draws and the viewport "
+              "come back to Python on every rerun.",
          href=f"{REPO}/tree/main/examples/streamlit"),
     dict(name="Notebooks", files="examples/*.ipynb",
          body="Fourteen notebooks that are the long-form version of the gallery "
@@ -868,8 +868,55 @@ def page_html(cards, tiers, hero_bytes, stamp, version):
               <td class="me-col me">everything inside the wheel</td></tr>
           <tr><td>Static share</td><td>one HTML file</td><td>one HTML file</td>
               <td class="me-col me">one HTML file, sidebar and time included</td></tr>
+          <tr><td>3D &mdash; extrusions, terrain</td><td>no</td><td>yes</td>
+              <td class="me-col">not yet</td></tr>
         </tbody>
       </table>
+    </div>
+
+
+    <div class="sec-head" style="margin-top:56px">
+      <h2>Where it misses, honestly</h2>
+      <p>
+        A comparison table that wins every row is a pitch, not an analysis. These are the
+        places another library is the better answer today. They are known, they are on the
+        list, and this section shrinks as they land &mdash; it has already lost density,
+        raster imagery, WMS and offline since it was first written.
+      </p>
+    </div>
+
+    <div class="gaps">
+      <div class="gap">
+        <h3>3D</h3>
+        <p>No extrusions, no terrain, no camera pitch. deck.gl owns this, and a
+        Leaflet-shaped library will always be a step behind it here.</p>
+      </div>
+      <div class="gap">
+        <h3>Vector tiles</h3>
+        <p>XYZ raster and WMS are covered; MVT is not, so a basemap or dataset served as
+        vector tiles has to come in another way.</p>
+      </div>
+      <div class="gap">
+        <h3>Marker clustering</h3>
+        <p>Density answers &ldquo;where is it thick&rdquo;; it does not answer
+        &ldquo;collapse these into countable groups&rdquo;. <code>hexbin</code> is the
+        nearest thing today.</p>
+      </div>
+      <div class="gap">
+        <h3>Earth-observation catalogues</h3>
+        <p><code>add_imagery</code> warps a raster you already have. STAC, COG and Earth
+        Engine integration is leafmap's territory, not this library's.</p>
+      </div>
+      <div class="gap">
+        <h3>Line direction</h3>
+        <p>Tracks animate and carry per-segment time, but there are no arrowheads or dash
+        patterns yet, so a paused track does not show which way it was going.</p>
+      </div>
+      <div class="gap">
+        <h3>First paint at the top end</h3>
+        <p>Millions of points drag smoothly once they are there. Getting them there still
+        costs more than it should on the very largest maps.</p>
+      </div>
     </div>
 
     <div class="sec-head" style="margin-top:56px">
