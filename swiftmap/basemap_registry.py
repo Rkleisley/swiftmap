@@ -79,6 +79,7 @@ ALIASES = {
     "CartoDB dark_matter": "CartoDB.DarkMatter",
     "Positron": "CartoDB.Positron",
     "CartoDB positron": "CartoDB.Positron",
+    "World Gray Canvas": "Esri.WorldGrayCanvas",
 }
 
 # WMS services callable by name, mirroring StructMap's WmsProviders structure
@@ -115,7 +116,12 @@ SERVICES = build_services()
 # entries on a network where those are the primary source. A CRS with no row
 # falls back to the EPSG:3857 row.
 DEFAULT_BASEMAPS = {
-    "EPSG:3857": [("Open Street Map", True), ("Dark Matter", False)],
+    # Dark Matter left the defaults 2026-08: Carto now stamps "API KEY
+    # REQUIRED" across key-less tiles (HTTP 200, so nothing errors -- the
+    # watermark just ships on every bare Map()). Esri's gray canvas is the
+    # key-less dark-neutral verified in its place; asking for "Dark Matter"
+    # by name still works, that choice being the caller's to make.
+    "EPSG:3857": [("Open Street Map", True), ("World Gray Canvas", False)],
     "EPSG:4326": [("Esri WGS84", True)],
 }
 

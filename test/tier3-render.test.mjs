@@ -1590,6 +1590,60 @@ suite("a whole-map GPU loss rebuilds every bucket in one rung", async () => {
     }, "widget.html");
 });
 
+suite("destroying a map mid-zoom-animation throws nothing later", async () => {
+    // Leaflet arms a bare setTimeout(_onZoomTransitionEnd, 250) when a zoom
+    // animation starts, and map.remove() does not clear it -- so a map torn
+    // down mid-zoom (StrictMode's double mount, a Shiny re-render, a gallery
+    // eviction) took an exception from a timer firing into removed panes. The
+    // opening auto-fit IS a zoom animation, so mount-then-quick-unmount hits
+    // it reliably; destroy() now disarms the flag the handler guards on.
+    await withPage(async (page, errors) => {
+        await page.evaluate(async () => {
+            const m = await import("/dist/anywidget.js");
+            const el = document.createElement("div");
+            el.style.height = "300px";
+            document.body.appendChild(el);
+            const state = { ...window.__model.state };
+            const cleanup = await m.default.render({
+                model: m.createHostStub(state, { comm: null }), el });
+            await new Promise(r => setTimeout(r, 50));   // zoom anim under way
+            cleanup();
+            await new Promise(r => setTimeout(r, 700));  // past Leaflet's 250ms timer
+        });
+        assert.deepEqual(errors, [],
+            "the zoom-transition timer must not fire into the dead map");
+    });
+});
+
+suite("an initial time_current is honoured, not silently dropped", async () => {
+    // m.time_current = X before the view attaches -- or baked into m.save() --
+    // is state by the time the tick series first builds, so change:time_current
+    // never fires for it. The first build now reads it once, exactly the
+    // fit_bounds_request pattern; without that, every export saved mid-playback
+    // opened back at tick 0.
+    await withPage(async (page, errors) => {
+        const labels = await page.evaluate(async () => {
+            const m = await import("/dist/anywidget.js");
+            const el = document.createElement("div");
+            el.style.height = "300px";
+            document.body.appendChild(el);
+            const state = { ...window.__model.state,
+                            time_current: Date.UTC(2026, 0, 3, 12) };
+            await m.default.render({
+                model: m.createHostStub(state, { comm: null }), el });
+            await new Promise(r => setTimeout(r, 400));
+            const read = root =>
+                (root.querySelector(".swiftmap-time-label") || {}).textContent || "";
+            return { main: read(document.querySelector(".swiftmap-container")),
+                     second: read(el) };
+        });
+        assert.ok(labels.second, "the second map renders a time control");
+        assert.notEqual(labels.second, labels.main,
+            "the preset playhead must not open at the main map's tick 0");
+        assert.deepEqual(errors, [], "no errors honouring the initial playhead");
+    }, "widget-time.html");
+});
+
 suite("destroying a map while its first sync is in flight leaves nothing behind", async () => {
     // The hazard the React host surfaced: a host may tear the map down (an
     // unmount, a throwaway mount) before the initial sync has added its GL layers.

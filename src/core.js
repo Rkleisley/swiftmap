@@ -380,7 +380,18 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
             // a chosen viewport -- so it snaps to the nearest tick of the new
             // series and never resets to the start, paused or playing (playback
             // simply continues from the snapped index).
-            const moment = timeUI.ticks.length ? timeUI.ticks[timeUI.index] : null;
+            let moment = timeUI.ticks.length ? timeUI.ticks[timeUI.index] : null;
+            // On the FIRST build there is no previous playhead -- but the host
+            // may have arrived carrying one. A `m.time_current = ...` set before
+            // this view attached is already state by now, so `change:time_current`
+            // will never fire for it, and the playhead used to silently open at
+            // tick 0: a static export saved mid-playback lost its moment. Exactly
+            // the gap fit_bounds_request had, and the same fix -- read it once,
+            // here, and let the snap-to-nearest-tick below do the rest.
+            if (moment === null) {
+                const initial = host.get("time_current");
+                if (typeof initial === "number" && isFinite(initial)) moment = initial;
+            }
             timeUI.key = key;
             timeUI.ticks = generateTicks(extent.min, extent.max, period);
             timeUI.index = moment === null ? 0 : nearestTickIndex(timeUI.ticks, moment);
@@ -1394,6 +1405,17 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 }
             }
         }
+        // Leaflet arms a bare `setTimeout(_onZoomTransitionEnd, 250)` whenever
+        // it starts a zoom animation (its webkit transitionend workaround), and
+        // map.remove() does not clear it -- so a map torn down mid-zoom throws
+        // from a timer that outlived it: _onZoomTransitionEnd -> _move ->
+        // _getMapPanePos on a pane that no longer exists. Its own first line is
+        // an `_animatingZoom` guard, so clearing the flag is enough to make the
+        // late timer a no-op. Harmless where a map lives as long as its page;
+        // visible as a console stack trace in any host that mounts and unmounts
+        // maps freely -- React's StrictMode double mount, a Shiny re-render, the
+        // demo site's card gallery.
+        map._animatingZoom = false;
         try {
             map.remove();
         } catch (err) { /* already torn down */ }

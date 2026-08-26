@@ -26,15 +26,14 @@
    "buffer": null,
    "op": {
     "layer": {
-     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "attribution": "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
      "id": "layer_1",
      "layer_group": "Basemaps",
-     "max_native_zoom": 20,
+     "max_native_zoom": 16,
      "max_zoom": 22,
-     "name": "Dark Matter",
-     "subdomains": "abcd",
+     "name": "World Gray Canvas",
      "type": "basemap",
-     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
      "visible": false
     },
     "op": "add"
@@ -178,15 +177,14 @@
     "visible": true
    },
    {
-    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+    "attribution": "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
     "id": "layer_1",
     "layer_group": "Basemaps",
-    "max_native_zoom": 20,
+    "max_native_zoom": 16,
     "max_zoom": 22,
-    "name": "Dark Matter",
-    "subdomains": "abcd",
+    "name": "World Gray Canvas",
     "type": "basemap",
-    "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
     "visible": false
    },
    {

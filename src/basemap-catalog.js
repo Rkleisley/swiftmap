@@ -106,7 +106,8 @@ export const ALIASES = {
  "DarkMatter": "CartoDB.DarkMatter",
  "Open Street Map": "OpenStreetMap.Mapnik",
  "OpenStreetMap": "OpenStreetMap.Mapnik",
- "Positron": "CartoDB.Positron"
+ "Positron": "CartoDB.Positron",
+ "World Gray Canvas": "Esri.WorldGrayCanvas"
 };
 
 // Hand-defined tiles the catalogue cannot supply (the EPSG:4326 imagery).
@@ -173,7 +174,7 @@ export const DEFAULT_BASEMAPS = {
    true
   ],
   [
-   "Dark Matter",
+   "World Gray Canvas",
    false
   ]
  ],

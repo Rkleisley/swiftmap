@@ -85,8 +85,8 @@ instead of quietly serving OpenStreetMap.
 
 ## The other network-specific fact: view-time JavaScript
 
-Leaflet, glify, and Leaflet-Geoman load from unpkg when a map (or a static
-export) is *viewed*. Networks without that reach need their delivery mechanism
-to rewrite or serve those URLs — the same arrangement that already covers any
-web application's CDN dependencies on such a network. Tile and WMS traffic
-goes wherever the registry points it, which is the point of this file.
+There isn't one. Leaflet, glify, and Leaflet-Geoman ride inside the bundle
+that ships in the wheel — the widget, the Streamlit component, and every
+static export carry them — so viewing a map fetches no JavaScript from
+anywhere. The only network traffic a map generates is tiles and WMS, and
+that goes wherever the registry points it, which is the point of this file.

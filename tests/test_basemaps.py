@@ -215,3 +215,12 @@ def test_list_basemaps_search_filters_case_insensitively():
     assert "CartoDB.DarkMatter" in hits
     assert "Dark Matter" in hits
     assert all("dark" in n.lower() for n in hits)
+
+
+def test_bare_map_seeds_keyless_defaults():
+    # Dark Matter left the defaults when Carto began watermarking key-less
+    # tiles; the seeded pair must be usable with no account anywhere.
+    m = Map()
+    seeded = [l.name for l in m.layers if l.type == "basemap"]
+    assert seeded == ["Open Street Map", "World Gray Canvas"]
+    assert "dark_all" not in (_find(m, "World Gray Canvas")["url"] or "")
