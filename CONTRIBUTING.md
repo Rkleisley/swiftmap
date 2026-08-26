@@ -124,6 +124,25 @@ environment is the acceptance test; `Map().to_html()` proves the static assets l
 from the installed location. Runtime dependencies are anywidget, traitlets and numpy
 only — pandas/polars/geopandas stay optional and are detected at parse time.
 
+### Publishing the npm package
+
+```bash
+npm run publish:npm
+```
+
+Builds, stages the package in `npmpkg/`, and publishes from there. The staging step
+exists for one reason: npm publishes the `README.md` sitting beside `package.json`, and
+this repo's root README is the Python package's — the one PyPI renders. Rather than
+swapping the two files around a publish (which leaves the repo wrong if the publish
+fails), `scripts/stage-npm.mjs` assembles the package somewhere else: `README.npm.md`
+becomes the staged `README.md`, `devDependencies` and `scripts` are dropped from the
+staged manifest (a staged prepublish hook would re-enter the publish), and nothing in
+the working tree moves. It refuses to stage against a missing `dist/`, and refuses to
+leave a staging directory whose README is not the npm one.
+
+`npm run stage:npm` does the assembly alone; `cd npmpkg && npm pack --dry-run` shows
+exactly what would ship.
+
 ### Testing the JavaScript
 
 ```bash

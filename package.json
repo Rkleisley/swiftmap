@@ -14,8 +14,7 @@
   },
   "files": [
     "dist",
-    "src",
-    "README.npm.md"
+    "src"
   ],
   "scripts": {
     "build": "node build.mjs",
@@ -23,7 +22,9 @@
     "wheel": "node build.mjs && python -m build --outdir pydist",
     "test": "node --test",
     "test:watch": "node --test --watch",
-    "test:unit": "node --test test/tier1-logic.test.mjs test/tier2-sidebar.test.mjs"
+    "test:unit": "node --test test/tier1-logic.test.mjs test/tier2-sidebar.test.mjs",
+    "stage:npm": "node scripts/stage-npm.mjs",
+    "publish:npm": "node build.mjs && node scripts/stage-npm.mjs && npm publish ./npmpkg"
   },
   "devDependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",

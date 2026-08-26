@@ -181,3 +181,6 @@ examples/*.tif
 
 # The React example's bundle; `npm run build` produces it.
 examples/react/dist/
+
+# The staged npm package; `npm run stage:npm` produces it.
+npmpkg/
