@@ -22,6 +22,8 @@ static HTML file that opens with no backend at all — see
 that ships in the wheel, so nothing is fetched when a map is viewed — on an air-gapped
 network the wheel is the whole story.
 
+**Contents** &nbsp;·&nbsp; [Installation](#installation) &nbsp;·&nbsp; [Quick start (notebook)](#quick-start-notebook) &nbsp;·&nbsp; [Quick start (Shiny)](#quick-start-shiny) &nbsp;·&nbsp; [What you can plot](#what-you-can-plot) &nbsp;·&nbsp; [Basemaps](#basemaps) &nbsp;·&nbsp; [Imagery](#imagery) &nbsp;·&nbsp; [Styling](#styling) &nbsp;·&nbsp; [Color and size from data](#color-and-size-from-data) &nbsp;·&nbsp; [Density](#density) &nbsp;·&nbsp; [The legend](#the-legend) &nbsp;·&nbsp; [Scale bar](#scale-bar) &nbsp;·&nbsp; [Logo card](#logo-card) &nbsp;·&nbsp; [The sidebar: hierarchy from your data](#the-sidebar-hierarchy-from-your-data) &nbsp;·&nbsp; [Acting on layers after they exist](#acting-on-layers-after-they-exist) &nbsp;·&nbsp; [Drawing & AOIs](#drawing--aois) &nbsp;·&nbsp; [Time layers](#time-layers) &nbsp;·&nbsp; [Popups & Tooltips](#popups--tooltips) &nbsp;·&nbsp; [Labels](#labels) &nbsp;·&nbsp; [React](#react) &nbsp;·&nbsp; [Streamlit](#streamlit) &nbsp;·&nbsp; [Sharing a map: one static file](#sharing-a-map-one-static-file) &nbsp;·&nbsp; [Performance notes](#performance-notes)
+
 ---
 
 ## Installation
@@ -73,52 +75,30 @@ Three things worth noticing:
 
 ## Quick start (Shiny)
 
+Build the map **once**, and drive it from effects:
+
 ```python
-from shiny import App, ui
-from shinywidgets import output_widget, render_widget
-from swiftmap import Map
-from swiftmap.shiny import map_effect
-import polars as pl
+@render_widget
+def map_widget():
+    m = Map()                                   # no input.* in here, ever
+    m.add_markers(df, name="name", layer_group=["Points", "status"])
+    return m
 
-app_ui = ui.page_fluid(
-    ui.h2("Swiftmap"),
-    ui.input_select("status", "Status", ["All", "Active", "Inactive"]),
-    output_widget("map_widget"),
-)
-
-def server(input, output, session):
-    df = pl.DataFrame({
-        "lat": [36.01, 36.02, 36.03],
-        "lon": [-5.36, -5.35, -5.34],
-        "name": ["A", "B", "C"],
-        "status": ["Active", "Inactive", "Active"],
-    })
-
-    @render_widget
-    def map_widget():
-        # Built once. Depends on nothing reactive -- see the note below.
-        m = Map()                      # no view given: it fits itself to the data
-        m.add_markers(df, name="name", layer_group=["Points", "status"])
-        m.configure_group("Points", collapsed=False)
-        return m
-
-    @map_effect(map_widget)
-    def filter_points(m):
-        if input.status() == "All":
-            m.select(None, scope="Points")
-        else:
-            m.select(group=f"Points/{input.status()}", scope="Points")
-
-app = App(app_ui, server)
+@map_effect(map_widget)
+def filter_points(m):
+    m.select(group=f"Points/{input.status()}", scope="Points")
 ```
 
 **The one Shiny rule:** the `@render_widget` function must depend on nothing reactive.
-`@render_widget` rebuilds the widget whenever a dependency invalidates, which throws the
-map away and re-uploads every coordinate buffer. Build the map once; make every update
-through `@map_effect`, which resolves the live widget, skips quietly if it has not
-rendered yet, and batches everything in the body into one message. `map_effect` accepts
-`event=` for what `@reactive.event` would do — do not stack that decorator yourself (it
-rejects the map argument at decoration time).
+It rebuilds the widget whenever a dependency invalidates, which throws the map away and
+re-uploads every coordinate buffer. `@map_effect` (from `swiftmap.shiny`) resolves the
+live widget instead, skips quietly if it has not rendered yet, and batches everything in
+its body into one message. It takes `event=` for what `@reactive.event` would do -- do
+not stack that decorator yourself, as it rejects the map argument at decoration time.
+
+Four runnable apps live in
+[examples/shiny/](https://github.com/Rkleisley/swiftmap/tree/main/examples/shiny), from
+this one to a live feed and a draw-an-AOI filter.
 
 ---
 
@@ -560,78 +540,19 @@ zones, not point clouds — so the point builders warn past a thousand.
 
 ## React
 
-The same map as a component. `swiftmap-core/react` exports `<SwiftMap>`, one more host
-over the core the notebook widget and the static export use — not a second renderer:
+The same map as a React component: `swiftmap-core/react` exports `<SwiftMap>`, one more
+host over the same core this widget uses — not a second renderer. Layers can be authored
+in JS too, through `createMapModel`, held byte-identical to Python's `Map` by a
+conformance suite.
 
-```jsx
-import { SwiftMap } from "swiftmap-core/react";
-// plus leaflet.css, leaflet-geoman.css and swiftmap-core/swiftmap.css from your bundler
-
-<SwiftMap ref={mapRef} layers={layers} buffers={buffers} center={[36.05, -5.25]} zoom={12}
-          showLegend timeConfig={{ period: "P1D" }}
-          onViewChange={...} onLayerToggle={...} onFeatureClick={...}
-          onDrawChange={...} onTimeChange={...} />
+```bash
+npm install swiftmap-core
 ```
 
-Props are the same configs the Python side builds (`layers`, binary `buffers`, the
-legend/time/draw/scale/logo configs); the callbacks are the core's write-backs; and
-`mapRef.current.applyPatch(ops, buffers)` is the widget's own incremental path — a live
-feed's `buffer_append`/`append` ops land exactly as they do from Python. `react`,
-`leaflet`, `leaflet.glify` and Leaflet-Geoman are peer dependencies your bundler owns.
+Props, callbacks, the live-feed hooks, the buffer contract for hand-built configs, and the
+host interface are documented in the package's own README:
+[README.npm.md](https://github.com/Rkleisley/swiftmap/blob/main/README.npm.md).
 `examples/react/` is the working example, and tier 3 drives it.
-
-Building layers in JS no longer means hand-writing configs -- `createMapModel`
-is the same authoring surface Python has, held byte-identical to it by a
-conformance suite:
-
-```js
-import { createMapModel } from "swiftmap-core";
-
-const model = createMapModel();
-model.addCircleMarkers({ lat, lon, site, value }, { name: "Sites" });
-model.addPolygon(ring, { name: "Zone", fillColor: "#00ff00" });
-
-<SwiftMap {...model.props()} />
-```
-
-Same defaults, same folder seeding, same merge rule (same name + same folder
-becomes one collection), same auto-fit -- because a golden-fixture suite pins the
-JS output (state, buffers, and the op stream) byte-identical to what Python's
-`Map` produces for the same inputs. The whole surface is there: data-driven
-colour and size with their legend blocks (`colorCol`, `radiusCol`), WKT strings
-and GeoJSON straight into the builders (`addPolygon("POLYGON ((...))")`, holes
-and multi-parts included; several features fan into numbered layers),
-`addCollection`, `findLayers` / `select` / `hide` / `show` / `updateLayer`
-(attributes, replace, and the append delta), `makeTimeLayer` / `configureTime`,
-and `addBasemap` over a catalogue generated from the same registry Python
-resolves. Every mutation emits the ops Python's transport emits
-(`model.subscribe`), so a live feed drives the map through
-`useSwiftMapFeed(model, mapRef)` from `swiftmap-core/react` -- one state model,
-wire cost of the batch -- while `useSwiftMapModel` covers the
-mutate-then-snapshot shape. `examples/react/` is authored entirely through the
-model. Not in JS yet: labels, feature styles/highlight, imagery, and
-column-driven point fan-out.
-
-Hand-building configs and buffers anyway? The contract, which nothing else documents:
-
-| buffer key | dtype | stride |
-|---|---|---|
-| `<id>` | Float64 | 2 per vertex, **lat then lon** (the reverse of GeoJSON/WKT order) |
-| `<id>::colors` | Uint8 | 4 per point, RGBA |
-| `<id>::radii` | Float32 | 1 per point, pixels |
-| `<id>::times` | Float64 | 2 per feature, `[start, end]` epoch **milliseconds** (never seconds) |
-
-Multi-ring polygons carry `rings: [[5, 5], [5]]` — parts → ring vertex counts,
-concatenated into one flat buffer, first ring of each part the outer boundary and the
-rest holes; a single plain ring omits the key. Multi-part lines carry `parts` (vertex
-counts per part). Two layers added with the same `name` **and** `layer_group` merge
-into one `type: "group"` entry with the members nested under `layers` — one sidebar
-entry, selected as one unit — and the group has an id of its own. A map given layers
-but no `center`/`zoom` opens fitted to their bounds, exactly as `Map()` does in Python.
-Malformed configs no longer fail silently: the core warns on unknown types,
-buffer/count mismatches, desynced property columns, seconds-shaped times, and `append`
-ops whose `base` disagrees with the layer (`collectLayerProblems` exports the same
-checks for linting up front).
 
 ## Streamlit
 
