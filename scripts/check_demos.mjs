@@ -4,10 +4,12 @@
  *     node scripts/check_demos.mjs [--dir docs] [--shots <out-dir>] [--headed]
  *
  * The site is generated from working code, but "the generator ran" is not the
- * same claim as "nineteen maps mount in a browser and something reached the
- * GPU" -- and the whole pitch of the page is the second one. So this walks the
- * page the way a visitor does: scroll each card into view, wait for its map to
- * mount, and assert that a canvas or a tile actually rendered inside it.
+ * same claim as "every map mounts in a browser and something reached the GPU"
+ * -- and the whole pitch of the page is the second one. So this walks the page
+ * the way a visitor does: scroll each card into view, wait for its map to
+ * mount, and assert that a canvas or a tile actually rendered inside it. It
+ * also checks the hero ladder against the tiers actually built, which is how a
+ * partial build gets caught before it is published.
  *
  * Exit code is non-zero if any card fails, so it belongs next to
  * build_demos.py on the release checklist.
@@ -16,7 +18,7 @@
  * drivers. --shots is for eyeballing, not for asserting.
  */
 import { createServer } from "node:http";
-import { readFile, mkdir } from "node:fs/promises";
+import { readFile, readdir, mkdir } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { argv, exit } from "node:process";
 
@@ -81,6 +83,20 @@ try {
         ms: document.getElementById("hero-ms").textContent,
     }));
     console.log(`        ${readout.points} points, mount->paint ${readout.ms}`);
+
+    // The ladder must offer every tier that exists on disk. A partial build
+    // rewrites index.html with only the tiers it made, leaving the rest of the
+    // data orphaned -- a page that looks finished while missing the headline.
+    // Comparing the two catches it, including in an already-committed page.
+    const onDisk = (await readdir(join(DIR, "data")))
+        .filter(name => name.startsWith("hero-")).sort();
+    const onPage = await page.locator(".tier").evaluateAll(
+        els => els.map(e => e.dataset.tier).sort());
+    const missing = onDisk.filter(slug => !onPage.includes(slug));
+    missing.length
+        ? fail("ladder", `data/ has ${onDisk.join(", ")} but the page offers only `
+                       + `${onPage.join(", ")} -- rebuild without --skip-hero-large`)
+        : pass(`ladder offers all ${onDisk.length} tiers built`);
 
     // Every rung of the ladder, in order, including the largest.
     const tiers = await page.locator(".tier").count();

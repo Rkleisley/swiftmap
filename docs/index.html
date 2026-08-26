@@ -43,6 +43,12 @@
     <button class="tier" type="button" data-tier="hero-10k"
                     data-points="10000"
                     aria-pressed="false">10,000 pts<span class="wt">about where an SVG map gives up</span></button>
+<button class="tier" type="button" data-tier="hero-100k"
+                    data-points="100000" data-initial="1"
+                    aria-pressed="false">100,000 pts<span class="wt">already past every vector library</span></button>
+<button class="tier" type="button" data-tier="hero-1m"
+                    data-points="1000000"
+                    aria-pressed="false">1,000,000 pts<span class="wt">still one drag</span></button>
     <div class="readout">
       <div class="stat"><b id="hero-points">&mdash;</b><span>points drawn</span></div>
       <div class="stat"><b id="hero-ms">&mdash;</b><span>mount &rarr; first paint</span></div>
@@ -52,7 +58,7 @@
 
   <p class="hero-note">
     <span>Synthetic western-Mediterranean vessel traffic, coloured by speed. The tiers are the
-    same field at three densities &mdash; 197.9 KB of float64 coordinates for the
+    same field at three densities &mdash; 19.1 MB of float64 coordinates for the
     largest, fetched only when you ask for it. The frame counter reads while you drag, because
     an idle map runs at your display's refresh rate no matter what is on it.</span>
   </p>
@@ -61,8 +67,7 @@
     <button class="copy" type="button">copy</button>
     <pre><code><span class="t-com"># traffic: 1,000,000 AIS pings -- lane, ferry, coastal, fishing, anchorage.</span>
 <span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
-m.<span class="t-fn">add_basemap</span>(<span class="t-str">&quot;Esri.WorldGrayCanvas&quot;</span>)                    <span class="t-com"># one of ~880 by name</span>
-m.<span class="t-fn">select</span>(<span class="t-str">&quot;Esri.WorldGrayCanvas&quot;</span>, <span class="t-kwa">scope</span>=<span class="t-str">&quot;Basemaps&quot;</span>)
+m.<span class="t-fn">select</span>(<span class="t-str">&quot;World Gray Canvas&quot;</span>, <span class="t-kwa">scope</span>=<span class="t-str">&quot;Basemaps&quot;</span>)   <span class="t-com"># a bare Map() ships two</span>
 m.<span class="t-fn">add_circle_markers</span>(traffic, <span class="t-kwa">name</span>=<span class="t-str">&quot;Vessel traffic&quot;</span>, <span class="t-kwa">layer_group</span>=<span class="t-str">&quot;AIS&quot;</span>,
                      <span class="t-kwa">radius</span>=<span class="t-num">2</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;speed_kn&quot;</span>,
                      <span class="t-kwa">colormap</span>=<span class="t-str">&quot;turbo&quot;</span>, <span class="t-kwa">vmin</span>=<span class="t-num">0</span>, <span class="t-kwa">vmax</span>=<span class="t-num">21</span>)

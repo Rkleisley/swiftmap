@@ -422,8 +422,7 @@ HERO_TIERS = [
 HERO_CODE = '''\
 # traffic: 1,000,000 AIS pings -- lane, ferry, coastal, fishing, anchorage.
 m = Map()
-m.add_basemap("Esri.WorldGrayCanvas")                    # one of ~880 by name
-m.select("Esri.WorldGrayCanvas", scope="Basemaps")
+m.select("World Gray Canvas", scope="Basemaps")   # a bare Map() ships two
 m.add_circle_markers(traffic, name="Vessel traffic", layer_group="AIS",
                      radius=2, color_col="speed_kn",
                      colormap="turbo", vmin=0, vmax=21)
@@ -1011,6 +1010,22 @@ def main():
     args = ap.parse_args()
 
     out = Path(args.out)
+
+    # A partial build still rewrites index.html -- with only the tiers and cards
+    # it was asked for. The result looks finished, so committing it silently
+    # publishes a page missing its hero ladder or half its gallery. That has
+    # already happened once (5bcd0f0 shipped a one-rung hero from a
+    # --skip-hero-large run), which is why this is a refusal and not a warning:
+    # the flags are for iterating somewhere else, and docs/ is the published
+    # artifact.
+    if (args.skip_hero_large or args.only) and out.resolve() == (ROOT / "docs").resolve():
+        sys.exit(
+            "refusing to write a partial build into docs/.\n"
+            "  --skip-hero-large and --only produce a page missing tiers or cards.\n"
+            "  Iterate elsewhere, then run the full build for docs/:\n"
+            "      python scripts/build_demos.py --skip-hero-large --out build/demos\n"
+            "      python scripts/build_demos.py"
+        )
     (out / "assets").mkdir(parents=True, exist_ok=True)
     (out / "data").mkdir(parents=True, exist_ok=True)
 
