@@ -570,14 +570,16 @@ test("a table through the vector builders never throws (round-8 R)", () => {
         // Not a table, not coordinates: warn and add nothing.
         m.addLine(42);
         assert.equal(m.props().layers.length, before);
-        // A row-array table with a WKT column works, ramp and all.
+        // A row-array table with a WKT column works, ramp and all -- the fan
+        // merging into ONE sidebar entry holding both cells.
         m.addPolygon([
             { wkt: "POLYGON ((-5.31 36.00, -5.30 36.00, -5.30 36.01, -5.31 36.00))", v: 1 },
             { wkt: "POLYGON ((-5.29 36.00, -5.28 36.00, -5.28 36.01, -5.29 36.00))", v: 9 },
         ], { name: "Cells", colorCol: "v" });
-        const cells = m.props().layers.filter(l => l.type === "polygon");
-        assert.equal(cells.length, 2);
-        assert.ok(cells.every(l => l.fillColor && l.legend),
+        const entry = m.props().layers.find(l => l.name === "Cells");
+        assert.equal(entry.type, "group", "a uniform fan is one merged entry");
+        assert.equal(entry.layers.length, 2);
+        assert.ok(entry.layers.every(l => l.fillColor && l.legend),
             "row tables reach the same fan, fill and legend as columnar ones");
     } finally {
         console.warn = original;

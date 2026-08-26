@@ -73,6 +73,55 @@ _SUB_LAYER_ATTRS = (
 # Same set, plus the flags that are carried down but not stripped from the group.
 _COPY_ATTRS = _SUB_LAYER_ATTRS + ("autobind_popup", "autobind_tooltip")
 
+
+def _as_sub_layer(config: Any) -> dict:
+    """One member of a merged entry, reduced to the keys members carry."""
+    sub_layer = {
+        "id": config.get("id"),
+        "type": config.get("type"),
+        "name": config.get("name") or "Sub-layer",
+        "visible": config.get("visible", True),
+    }
+    for attr in _COPY_ATTRS:
+        val = config.get(attr)
+        if val is not None:
+            sub_layer[attr] = val
+    return sub_layer
+
+
+def add_children_merged(self, children: list) -> "Map":
+    """
+    One fan, one op: several same-(name, group) configs land as a single merged
+    entry, assembled here and placed through the ordinary add_child.
+
+    The incremental path re-emits the whole group per member joining, so a
+    20k-feature fan cost O(n^2) on the wire and in CPU -- exactly the
+    message-scales-with-accumulated-data failure the transport exists to avoid.
+    Assembling first makes it one add (or one replace, when an earlier call
+    already holds the name), with add_child still owning every normalisation:
+    group configs, radio units, the merge index, auto-fit.
+    """
+    if len(children) == 1:
+        return self.add_child(children[0])
+    for child in children:
+        if isinstance(child.get("properties"), dict):
+            child["properties"] = {
+                str(k): _json_safe(v) for k, v in child["properties"].items()
+            }
+    first = children[0]
+    group = {k: v for k, v in first.items()
+             if k not in _SUB_LAYER_ATTRS and k != "id"}
+    group["type"] = "group"
+    group["id"] = f"layer_{self._layer_counter}"
+    self._layer_counter += 1
+    group["layers"] = [_as_sub_layer(LayerConfig(**c)) for c in children]
+    self.add_child(group)
+    # The group itself carries no bounds (bounds is a member attribute), so the
+    # auto-fit union grows per member, exactly as the incremental path grew it.
+    for child in children:
+        self._auto_fit_extend(child)
+    return self
+
 def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optional[str] = None, group_multi_select: Optional[bool] = None) -> "Map":
     """Adds a layer or configuration metadata config directly to the map's layers list."""
     if isinstance(child, dict):
@@ -173,18 +222,8 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
         existing_type = new_config.get("type")
         if existing_type != "group":
             # Convert the single layer config to a nested layer dict
-            sub_layer = {
-                "id": new_config.get("id"),
-                "type": existing_type,
-                "name": new_config.get("name") or "Sub-layer",
-                "visible": new_config.get("visible", True),
-            }
-            # Copy other attributes
-            for attr in _COPY_ATTRS:
-                val = new_config.get(attr)
-                if val is not None:
-                    sub_layer[attr] = val
-            
+            sub_layer = _as_sub_layer(new_config)
+
             # Update to be a group type, with an id of its own. The group used to
             # keep the first member's id (it was built from that member's config),
             # so the two shared one: a sidebar toggle of the collection wrote to
@@ -203,17 +242,7 @@ def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optiona
         if child_config.get("type") == "group":
             new_config.layers = new_config.layers + child_config.get("layers", [])
         else:
-            sub_layer = {
-                "id": child_config.id,
-                "type": child_config.type,
-                "name": child_config.name,
-                "visible": child_config.visible,
-            }
-            for attr in _COPY_ATTRS:
-                val = getattr(child_config, attr, None)
-                if val is not None:
-                    sub_layer[attr] = val
-            new_config.layers = new_config.layers + [sub_layer]
+            new_config.layers = new_config.layers + [_as_sub_layer(child_config)]
             
         # Replace the old reference inside the layers list with our new instance
         self._layers_replace(existing, new_config)

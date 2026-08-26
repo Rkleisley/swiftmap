@@ -92,15 +92,18 @@ def resolve_layer_name(
     """
     Picks the display name for one feature.
 
-    A name matching a property key takes that feature's value. A literal name gains a
-    positional suffix when the call produced several features, so they stay distinct in
-    the sidebar instead of merging under one entry.
+    A name matching a property key takes that feature's value. A literal name is
+    shared by EVERY feature the call produced, so the merge machinery collapses
+    them into one sidebar entry -- 20k WKT rows under name="Zones" is one entry
+    holding 20k features, not 20k numbered entries. (The old positional suffix
+    kept fans distinct on purpose, from before merged collections were the good
+    path; a name column is how per-feature names are asked for.)
     """
     if is_column(name, props):
         return str(props[name][index])
     if name:
-        return f"{name} {index + 1}" if is_multi else name
+        return name
     feature_props = {k: v[index] for k, v in props.items()} if props else {}
     if "name" in feature_props:
         return str(feature_props["name"])
-    return f"{fallback} {index + 1}" if is_multi else fallback
+    return fallback

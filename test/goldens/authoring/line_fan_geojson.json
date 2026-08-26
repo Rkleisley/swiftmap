@@ -48,37 +48,6 @@
    }
   },
   {
-   "buffer": null,
-   "op": {
-    "layer": {
-     "autobind_popup": true,
-     "autobind_tooltip": true,
-     "bounds": [
-      [
-       36.0,
-       -5.3
-      ],
-      [
-       36.1,
-       -5.2
-      ]
-     ],
-     "color": "#3388ff",
-     "id": "layer_2",
-     "layer_group": "Line Group",
-     "name": "Tracks 1",
-     "opacity": 1.0,
-     "properties": {
-      "n": 1
-     },
-     "type": "polyline",
-     "visible": true,
-     "weight": 3
-    },
-    "op": "add"
-   }
-  },
-  {
    "buffer": "AAAAAAAAQkBmZmZmZmYUwM3MzMzMDEJAAAAAAAAAFMA=",
    "op": {
     "id": "layer_3",
@@ -91,27 +60,61 @@
     "layer": {
      "autobind_popup": true,
      "autobind_tooltip": true,
-     "bounds": [
-      [
-       36.0,
-       -5.1
-      ],
-      [
-       36.1,
-       -5.0
-      ]
-     ],
-     "color": "#3388ff",
-     "id": "layer_3",
+     "id": "layer_4",
      "layer_group": "Line Group",
-     "name": "Tracks 2",
-     "opacity": 1.0,
-     "properties": {
-      "n": 2
-     },
-     "type": "polyline",
-     "visible": true,
-     "weight": 3
+     "layers": [
+      {
+       "autobind_popup": true,
+       "autobind_tooltip": true,
+       "bounds": [
+        [
+         36.0,
+         -5.3
+        ],
+        [
+         36.1,
+         -5.2
+        ]
+       ],
+       "color": "#3388ff",
+       "id": "layer_2",
+       "name": "Tracks",
+       "opacity": 1.0,
+       "properties": {
+        "n": 1
+       },
+       "type": "polyline",
+       "visible": true,
+       "weight": 3
+      },
+      {
+       "autobind_popup": true,
+       "autobind_tooltip": true,
+       "bounds": [
+        [
+         36.0,
+         -5.1
+        ],
+        [
+         36.1,
+         -5.0
+        ]
+       ],
+       "color": "#3388ff",
+       "id": "layer_3",
+       "name": "Tracks",
+       "opacity": 1.0,
+       "properties": {
+        "n": 2
+       },
+       "type": "polyline",
+       "visible": true,
+       "weight": 3
+      }
+     ],
+     "name": "Tracks",
+     "type": "group",
+     "visible": true
     },
     "op": "add"
    }
@@ -180,52 +183,61 @@
    {
     "autobind_popup": true,
     "autobind_tooltip": true,
-    "bounds": [
-     [
-      36.0,
-      -5.3
-     ],
-     [
-      36.1,
-      -5.2
-     ]
-    ],
-    "color": "#3388ff",
-    "id": "layer_2",
+    "id": "layer_4",
     "layer_group": "Line Group",
-    "name": "Tracks 1",
-    "opacity": 1.0,
-    "properties": {
-     "n": 1
-    },
-    "type": "polyline",
-    "visible": true,
-    "weight": 3
-   },
-   {
-    "autobind_popup": true,
-    "autobind_tooltip": true,
-    "bounds": [
-     [
-      36.0,
-      -5.1
-     ],
-     [
-      36.1,
-      -5.0
-     ]
+    "layers": [
+     {
+      "autobind_popup": true,
+      "autobind_tooltip": true,
+      "bounds": [
+       [
+        36.0,
+        -5.3
+       ],
+       [
+        36.1,
+        -5.2
+       ]
+      ],
+      "color": "#3388ff",
+      "id": "layer_2",
+      "name": "Tracks",
+      "opacity": 1.0,
+      "properties": {
+       "n": 1
+      },
+      "type": "polyline",
+      "visible": true,
+      "weight": 3
+     },
+     {
+      "autobind_popup": true,
+      "autobind_tooltip": true,
+      "bounds": [
+       [
+        36.0,
+        -5.1
+       ],
+       [
+        36.1,
+        -5.0
+       ]
+      ],
+      "color": "#3388ff",
+      "id": "layer_3",
+      "name": "Tracks",
+      "opacity": 1.0,
+      "properties": {
+       "n": 2
+      },
+      "type": "polyline",
+      "visible": true,
+      "weight": 3
+     }
     ],
-    "color": "#3388ff",
-    "id": "layer_3",
-    "layer_group": "Line Group",
-    "name": "Tracks 2",
-    "opacity": 1.0,
-    "properties": {
-     "n": 2
-    },
-    "type": "polyline",
-    "visible": true,
-    "weight": 3
+    "name": "Tracks",
+    "type": "group",
+    "visible": true
    }
   ],
   "legend_config": {},

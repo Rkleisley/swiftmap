@@ -109,7 +109,7 @@ def test_lines_take_their_own_style_per_feature():
     m = Map()
     start = len(m.layers)
     m.add_polyline(fc, name="Route")
-    added = m.layers[start:]
+    added = m.find_layers(types="polyline")
     colors = sorted(l.get("color") for l in added)
     assert colors == ["blue", "red"], "each line keeps its own colour"
     blue = next(l for l in added if l.get("color") == "blue")
@@ -124,7 +124,7 @@ def test_polygons_take_their_own_style_per_feature():
     m = Map()
     start = len(m.layers)
     m.add_polygon(fc, name="Zone")
-    added = m.layers[start:]
+    added = m.find_layers(types="polygon")
     assert sorted(l.get("color") for l in added) == ["blue", "red"]
     red = next(l for l in added if l.get("color") == "red")
     assert red.get("fillOpacity") == 0.5

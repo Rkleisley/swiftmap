@@ -25,11 +25,12 @@ HEX_JUNK = "fffffffffffffff"                  # 15 hex chars, not a valid cell
 
 
 def polygon_layers(m):
-    return [l for l in m.layers if l.type == "polygon"]
+    # Fans merge into one sidebar entry now; the leaves live inside it.
+    return m.find_layers(types="polygon")
 
 
 def vector_coords(m, layer):
-    raw = m.coordinate_buffers[layer.id]
+    raw = m.coordinate_buffers[layer.get("id")]
     return np.frombuffer(raw, dtype=np.float64).reshape(-1, 2).tolist()
 
 
@@ -69,7 +70,7 @@ def test_bare_cell_string_becomes_a_hexagon():
     layers = polygon_layers(m)
     assert len(layers) == 1
     assert vector_coords(m, layers[0]) == expected_ring(CELL)
-    assert layers[0].properties["h3"] == CELL
+    assert layers[0].get("properties")["h3"] == CELL
 
 
 def test_list_of_cells_fans_into_hexagons():
@@ -77,7 +78,7 @@ def test_list_of_cells_fans_into_hexagons():
     m.add_polygon(DISK)
     layers = polygon_layers(m)
     assert len(layers) == len(DISK)
-    assert sorted(l.properties["h3"] for l in layers) == DISK
+    assert sorted(l.get("properties")["h3"] for l in layers) == DISK
 
 
 def test_hex_shaped_junk_string_is_not_geometry():
@@ -104,8 +105,8 @@ def test_pandas_h3_column_keeps_the_ids_as_properties():
     m.add_polygon(df)
     layers = polygon_layers(m)
     assert len(layers) == 3
-    assert [l.properties["count"] for l in layers] == [4, 9, 2]
-    assert [l.properties["h3"] for l in layers] == DISK[:3]
+    assert [l.get("properties")["count"] for l in layers] == [4, 9, 2]
+    assert [l.get("properties")["h3"] for l in layers] == DISK[:3]
     assert vector_coords(m, layers[0]) == expected_ring(DISK[0])
 
 
@@ -116,7 +117,7 @@ def test_polars_h3_column():
     m.add_polygon(df)
     layers = polygon_layers(m)
     assert len(layers) == 3
-    assert [l.properties["count"] for l in layers] == [4, 9, 2]
+    assert [l.get("properties")["count"] for l in layers] == [4, 9, 2]
 
 
 def test_plain_dict_h3_column():
@@ -124,7 +125,7 @@ def test_plain_dict_h3_column():
     m.add_polygon({"h3": DISK[:2], "value": [1.5, 2.5]})
     layers = polygon_layers(m)
     assert len(layers) == 2
-    assert [l.properties["value"] for l in layers] == [1.5, 2.5]
+    assert [l.get("properties")["value"] for l in layers] == [1.5, 2.5]
 
 
 def test_integer_ids_parse_and_stay_integers_in_properties():
@@ -134,7 +135,7 @@ def test_integer_ids_parse_and_stay_integers_in_properties():
     m.add_polygon(df)
     layers = polygon_layers(m)
     assert len(layers) == 2
-    assert [l.properties["h3"] for l in layers] == ids
+    assert [l.get("properties")["h3"] for l in layers] == ids
     assert vector_coords(m, layers[0]) == expected_ring(DISK[0])
 
 
@@ -155,7 +156,7 @@ def test_wkt_column_wins_over_an_h3_column():
     layers = polygon_layers(m)
     assert len(layers) == 1
     assert len(vector_coords(m, layers[0])) == 4       # the WKT square, not the hexagon
-    assert layers[0].properties["h3"] == CELL          # the cell id stays data
+    assert layers[0].get("properties")["h3"] == CELL          # the cell id stays data
 
 
 def test_invalid_cells_in_a_column_do_not_hijack_it():
@@ -180,7 +181,7 @@ def test_a_bad_row_is_skipped_with_a_count():
         m.add_polygon(df)
     layers = polygon_layers(m)
     assert len(layers) == 2
-    assert [l.properties["v"] for l in layers] == [1, 3]
+    assert [l.get("properties")["v"] for l in layers] == [1, 3]
 
 
 def test_color_col_ramps_the_hexagons():
@@ -188,7 +189,7 @@ def test_color_col_ramps_the_hexagons():
     m = Map()
     m.add_polygon(df, name="Density", color_col="count")
     layers = polygon_layers(m)
-    fills = [getattr(l, "fillColor", None) for l in layers]
+    fills = [l.get("fillColor") for l in layers]
     assert all(f and f.startswith("#") for f in fills)
     assert fills[0] != fills[2]                        # the extremes take different colours
 

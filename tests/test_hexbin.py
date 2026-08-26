@@ -80,10 +80,10 @@ def test_composes_with_add_polygon_and_color_col():
     df = frame([A, A, A, B])
     m = Map()
     m.add_polygon(hexbin(df, resolution=8), name="Density", color_col="count")
-    layers = [l for l in m.layers if l.type == "polygon"]
+    layers = m.find_layers(types="polygon")
     assert len(layers) == 2
-    assert sorted(l.properties["count"] for l in layers) == [1, 3]
-    assert all(getattr(l, "fillColor", "").startswith("#") for l in layers)
+    assert sorted(l.get("properties")["count"] for l in layers) == [1, 3]
+    assert all((l.get("fillColor") or "").startswith("#") for l in layers)
 
 
 def test_impossible_resolution_raises():

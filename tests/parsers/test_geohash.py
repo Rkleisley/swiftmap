@@ -19,11 +19,12 @@ HASHES_32 = [nm.encode(36.0 + i * 0.2, -5.3 + i * 0.2, 6, 32) for i in range(3)]
 
 
 def polygon_layers(m):
-    return [l for l in m.layers if l.type == "polygon"]
+    # Fans merge into one sidebar entry now; the leaves live inside it.
+    return m.find_layers(types="polygon")
 
 
 def vector_coords(m, layer):
-    raw = m.coordinate_buffers[layer.id]
+    raw = m.coordinate_buffers[layer.get("id")]
     return np.frombuffer(raw, dtype=np.float64).reshape(-1, 2).tolist()
 
 
@@ -34,8 +35,8 @@ def test_column_with_stated_base_becomes_rectangles():
     layers = polygon_layers(m)
     assert len(layers) == 3
     assert vector_coords(m, layers[0]) == nm.cell_ring(HASHES_32[0], 32)
-    assert [l.properties["count"] for l in layers] == [4, 9, 2]
-    assert [l.properties["geohash"] for l in layers] == HASHES_32   # the join key stays
+    assert [l.get("properties")["count"] for l in layers] == [4, 9, 2]
+    assert [l.get("properties")["geohash"] for l in layers] == HASHES_32   # the join key stays
 
 
 def test_explicit_geohash_col_for_an_unguessable_name():
@@ -104,7 +105,7 @@ def test_alphabet_violations_skip_with_a_count():
     m = Map()
     with pytest.warns(Warning, match="Skipped 1 of 3"):
         m.add_polygon(df, geohash_base=32)
-    assert [l.properties["v"] for l in polygon_layers(m)] == [1, 3]
+    assert [l.get("properties")["v"] for l in polygon_layers(m)] == [1, 3]
 
 
 def test_polars_and_dict_front_doors():
@@ -121,6 +122,6 @@ def test_color_col_ramps_the_cells():
     df = pd.DataFrame({"geohash": HASHES_32, "count": [0, 50, 100]})
     m = Map()
     m.add_polygon(df, geohash_base=32, name="Density", color_col="count")
-    fills = [getattr(l, "fillColor", None) for l in polygon_layers(m)]
+    fills = [l.get("fillColor") for l in polygon_layers(m)]
     assert all(f and f.startswith("#") for f in fills)
     assert fills[0] != fills[2]

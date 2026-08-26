@@ -122,10 +122,10 @@ def test_categorical_color_col_on_lines_overrides_stroke():
     })
     m = Map()
     m.add_polyline(df, line_id_col="track_id", name="Tracks", color_col="track_id")
-    lines = [l for l in m.layers if l.get("type") == "polyline"]
+    lines = m.find_layers(types="polyline")
     assert len(lines) == 2
-    assert lines[0].color != lines[1].color
-    assert all(l.color.startswith("#") for l in lines)
+    assert lines[0].get("color") != lines[1].get("color")
+    assert all(l.get("color").startswith("#") for l in lines)
 
 
 def test_color_col_on_polygons_drives_the_fill_not_the_border():

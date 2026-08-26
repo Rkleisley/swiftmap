@@ -108,6 +108,33 @@ function findColumn(keys, wanted, explicit) {
 // Points from the three JS-native shapes: [[lat, lon], ...], a column dict
 // ({lat: [...], lon: [...], other: [...]}), or rows of objects. Returns
 // { pairs, properties } with the coordinate columns removed from properties.
+// Python's _SUB_LAYER_ATTRS, verbatim: the keys a merged entry's members carry
+// (everything else describes the entry itself). Held identical by the goldens.
+const SUB_LAYER_ATTRS = new Set([
+    "radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity",
+    "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations",
+    "location", "geojson", "rings", "legend", "legend_size", "label", "labels",
+    "parts", "added_with", "bounds", "subdomains", "wms", "url", "image_format",
+    "popup_fields", "popup_names", "popup_template", "popup_style",
+    "popup_max_width", "tooltip_fields", "tooltip_names", "tooltip_template",
+    "tooltip_style",
+]);
+const COPY_ATTRS = [...SUB_LAYER_ATTRS, "autobind_popup", "autobind_tooltip"];
+
+function asSubLayer(config) {
+    const sub = {
+        id: config.id,
+        type: config.type,
+        name: config.name || "Sub-layer",
+        visible: config.visible !== undefined ? config.visible : true,
+    };
+    for (const attr of COPY_ATTRS) {
+        const val = config[attr];
+        if (val !== null && val !== undefined) sub[attr] = val;
+    }
+    return sub;
+}
+
 function isGeometryInput(data) {
     return typeof data === "string"
         || (data && typeof data === "object" && !Array.isArray(data)
@@ -359,9 +386,14 @@ export function createMapModel(options = {}) {
             delete member.layer_group;
             return member;
         };
+        // A group child brings its MEMBERS to the merge (an assembled fan
+        // joining an earlier entry of the same name); its own minted id is
+        // discarded, exactly as Python's add_child discards it.
+        const incoming = layer.type === "group"
+            ? layer.layers : [asMember(layer)];
         let group;
         if (twin.type === "group") {
-            group = { ...twin, layers: [...twin.layers, asMember(layer)] };
+            group = { ...twin, layers: [...twin.layers, ...incoming] };
         } else {
             group = {
                 id: nextId(), type: "group", name: layer.name,
@@ -370,11 +402,25 @@ export function createMapModel(options = {}) {
                 // included -- a radio-hidden entry promotes to a hidden group.
                 visible: twin.visible !== false,
                 autobind_popup: true, autobind_tooltip: true,
-                layers: [asMember(twin), asMember(layer)],
+                layers: [asMember(twin), ...incoming],
             };
         }
         state.layers = state.layers.map((l, i) => (i === twinIndex ? group : l));
         emit({ op: "replace", id: group.id, layer: group });
+    }
+
+    // One fan, one op: a uniform fan's members assemble into a single group
+    // placed once, instead of n incremental merges each re-emitting the whole
+    // group -- Python's add_children_merged, held identical by the goldens.
+    function placeMergedFan(members) {
+        const group = {};
+        for (const [k, v] of Object.entries(members[0])) {
+            if (!SUB_LAYER_ATTRS.has(k) && k !== "id") group[k] = v;
+        }
+        group.type = "group";
+        group.id = nextId();
+        group.layers = members.map(asSubLayer);
+        place(group);
     }
 
     // Swaps one top-level config, emitting a whole-layer replace -- or the given
@@ -421,7 +467,7 @@ export function createMapModel(options = {}) {
         }
     }
 
-    function addLayer(layer, pairs, options, defaultGroup) {
+    function addLayer(layer, pairs, options, defaultGroup, deferPlace = false) {
         layer.layer_group = opt(options, "layerGroup", "layer_group", defaultGroup);
         const multiSelect = opt(options, "multiSelect", "multi_select",
             opt(options, "groupMultiSelect", "group_multi_select"));
@@ -437,7 +483,9 @@ export function createMapModel(options = {}) {
             style: explicit, static_style: staticStyle,
             label: opt(options, "label", "label") ?? null,
         });
-        place(layer);
+        // A deferred layer joins a merged fan placed by the caller in one op;
+        // the auto-fit still grows per member, as Python's path grows it.
+        if (!deferPlace) place(layer);
         autoFitExtend(bounds);
         return layer;
     }
@@ -646,10 +694,10 @@ export function createMapModel(options = {}) {
 
     // WKT strings and GeoJSON route through the feature path: one feature is
     // one layer (multi-part geometry keeps its parts/rings structure); several
-    // features FAN into numbered sibling layers exactly as Python's adders do --
-    // and a name matching a property key names each from its own value. Fanned
-    // layers refuse updateLayer(data=...), as in Python: siblings share no
-    // persistent link.
+    // features sharing one literal name merge into ONE sidebar entry, exactly
+    // as Python's adders do -- and a name matching a property key names each
+    // from its own value instead. Fanned layers refuse updateLayer(data=...),
+    // as in Python: siblings share no persistent link.
     function addVectorFeatures(type, data, options) {
         const family = type === "polyline" ? LINE_GEOMETRY : POLYGON_GEOMETRY;
         const partsOf = type === "polyline" ? linePartsOf : polygonPartsOf;
@@ -682,9 +730,15 @@ export function createMapModel(options = {}) {
         const dataColors = dataDrivenColors(columns, dataOpts, fallbackColor, label);
         const dataLegend = dataDrivenLegend(columns, dataOpts, fallbackColor);
         const labelOpt = opt(options, "label", "label") ?? null;
+        // A uniform fan (one literal name for every feature) assembles into a
+        // single merged entry placed once -- Python's add_children_merged.
+        const uniform = !nameIsColumn && features.length > 1;
+        const fanned = [];
         features.forEach((feature, i) => {
+            // A literal name is shared by the whole fan, so the merge machinery
+            // collapses it into ONE sidebar entry -- Python's rule exactly; a
+            // name column is how per-feature names are asked for.
             const name = nameIsColumn ? String(feature.properties[baseName])
-                : isMulti ? `${baseName ?? defaultName} ${i + 1}`
                 : (baseName ?? defaultName);
             const props = Object.fromEntries(keys.map(k => [k, feature.properties[k] ?? null]));
             Object.assign(props, options.properties || {});
@@ -713,9 +767,11 @@ export function createMapModel(options = {}) {
                 const plain = parts.length === 1 && parts[0].length === 1;
                 if (!plain) layer.rings = parts.map(part => part.map(r => r.length));
             }
-            addLayer(layer, flat, options, `${defaultName} Group`);
+            addLayer(layer, flat, options, `${defaultName} Group`, uniform);
             recordAddedWith(layer, options, null, isMulti || nameIsColumn);
+            if (uniform) fanned.push(layer);
         });
+        if (uniform) placeMergedFan(fanned);
         return model;
     }
 

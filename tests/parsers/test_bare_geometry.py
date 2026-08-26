@@ -39,5 +39,6 @@ def test_a_list_of_shapely_geometries_fans_like_features():
     m.add_polygon([shapely.wkt.loads("POLYGON ((-5.3 36.0, -5.2 36.0, -5.2 36.1, -5.3 36.0))"),
                    shapely.wkt.loads("POLYGON ((-5.1 36.0, -5.0 36.0, -5.0 36.1, -5.1 36.0))")],
                   name="Cells")
-    names = sorted(l.get("name") for l in m.find_layers(types="polygon"))
-    assert names == ["Cells 1", "Cells 2"]
+    entry = next(l for l in m.layers if l.get("name") == "Cells")
+    assert entry.get("type") == "group"
+    assert len(m.find_layers(types="polygon")) == 2

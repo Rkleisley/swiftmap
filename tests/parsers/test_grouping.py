@@ -123,8 +123,9 @@ def test_literal_name_and_group_are_not_treated_as_columns(mixed):
         assert group == "Field Data"
 
 
-def test_literal_name_gains_a_suffix_when_a_call_makes_several_layers():
-    """Distinct names keep sibling features from merging into one sidebar entry."""
+def test_literal_name_fans_merge_into_one_entry():
+    """One literal name for a whole fan is ONE sidebar entry holding every
+    feature -- the 20k-WKT report: numbered suffixes made 20k entries."""
     fc = gj_collection(
         gj_feature("LineString", lonlat(LINE)),
         gj_feature("LineString", lonlat([B, C])),
@@ -132,7 +133,9 @@ def test_literal_name_gains_a_suffix_when_a_call_makes_several_layers():
     m = Map()
     start = len(m.layers)
     m.add_polyline(fc, name="Route")
-    assert sorted(n for _t, n, _g in entries(m, start)) == ["Route 1", "Route 2"]
+    assert [(t, n) for t, n, _g in entries(m, start)] == [
+        ("polyline", "Route"), ("polyline", "Route")]
+    assert [l.get("type") for l in m.layers[start:]] == ["group"]
 
 
 def test_mixed_literal_and_column_parts_in_one_path(mixed):

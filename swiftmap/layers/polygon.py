@@ -5,6 +5,7 @@ from ._style import pop_style_options, pop_data_options, resolve_styles
 from .._colormaps import data_driven_colors, data_driven_legend, rgb_hex
 from ._batching import batched
 from ._update import record_added_with
+from ._add_child import add_children_merged
 from ._grouping import is_column
 from ._grouping import (build_group_specs, resolve_group_path, resolve_layer_name,
                         resolve_feature_label)
@@ -161,6 +162,11 @@ def add_polygon(
                                    layer_style.get("color", "#3388ff"), "add_polygon")
     legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#3388ff"))
 
+    # A uniform fan -- every feature sharing one literal name and one static
+    # folder -- assembles into a single merged entry placed once, instead of n
+    # incremental merges each re-emitting the whole group (quadratic wire and
+    # CPU: the 20k-WKT ingest that surfaced it).
+    pending = []
     for i, coords in enumerate(polygons_coords):
         poly_props = {k: v[i] for k, v in props.items()} if props else {}
         if properties:
@@ -187,7 +193,7 @@ def add_polygon(
         self._set_layer_buffer(
             layer_id, np.asarray(flat, dtype=np.float64).flatten().tobytes())
 
-        self.add_child({
+        pending.append({
             "id": layer_id,
             "type": "polygon",
             "name": poly_name,
@@ -217,6 +223,15 @@ def add_polygon(
             **({"legend": legend_block} if legend_block else {}),
             **({"label": resolve_feature_label(label, props, i)} if label is not None else {})
         })
+
+    uniform = (len(pending) > 1
+               and len({c["name"] for c in pending}) == 1
+               and len({c["layer_group"] for c in pending}) == 1)
+    if uniform:
+        add_children_merged(self, pending)
+    else:
+        for config in pending:
+            self.add_child(config)
 
     return self
 

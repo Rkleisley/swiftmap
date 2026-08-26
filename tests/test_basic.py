@@ -149,8 +149,9 @@ def test_parse_lines_geojson_and_df():
     })
     m2 = Map()
     m2.add_polyline(df_track, name="Track")
-    polyline_layers = [l for l in m2.layers if l.type == "polyline"]
-    assert len(polyline_layers) == 2
+    entry = m2.layers[-1]
+    assert entry.type == "group" and entry.name == "Track"
+    assert len(m2.find_layers(types="polyline")) == 2
 
 def test_geopandas_points_and_lines():
     try:
@@ -246,7 +247,9 @@ def test_an_ordinary_id_column_still_groups():
     })
     m = Map()
     m.add_polygon(df, shape_id_col="zone", name="Zones")
-    assert len([l for l in m.layers if l.type == "polygon"]) == 2
+    entry = m.layers[-1]
+    assert entry.type == "group" and entry.name == "Zones"
+    assert len(m.find_layers(types="polygon")) == 2
 
 def test_wkt_of_the_wrong_kind_via_the_id_col_adds_nothing():
     df = pd.DataFrame({"g": ["LINESTRING (-118.24 34.05, -122.41 37.77)"]})
@@ -341,8 +344,9 @@ def test_polars_and_dict_lines_polygons():
     })
     m = Map()
     m.add_line(df_line, line_id_col="track_id", order_col="step", name="Polars Tracks")
-    assert len(m.layers) == 4
-    assert m.layers[-1].type == "polyline"
+    assert len(m.layers) == 3
+    assert m.layers[-1].type == "group"
+    assert len(m.find_layers(types="polyline")) == 2
 
     df_poly = pl.DataFrame({
         "zone": ["Zone A"],
