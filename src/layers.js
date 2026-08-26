@@ -134,7 +134,7 @@ export function heatMetaKey(layer) {
     return JSON.stringify([layer.radius, layer.opacity, layer.max_intensity,
         layer.ramp, layer.source || null,
         layer.cells || null, layer.vmin ?? null, layer.vmax ?? null,
-        layer.cell_counts || null]);
+        layer.cell_counts || null, layer.auto_normalize ?? true]);
 }
 
 // A layer by id, descending into groups -- a heat source may be a merged

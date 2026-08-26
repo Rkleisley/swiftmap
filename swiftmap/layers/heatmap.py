@@ -16,6 +16,7 @@ def add_heatmap(
     data: Any,
     weight_col: Optional[str] = None,
     cells: str = "blobs",
+    auto_normalize: bool = True,
     resolution: Optional[int] = None,
     radius: Optional[int] = None,
     colormap: Any = None,
@@ -67,6 +68,12 @@ def add_heatmap(
         from that layer's own properties.
     cells : {'blobs', 'h3'}, default 'blobs'
         The kernel: screen-space blobs, or fixed-resolution H3 hexagons.
+    auto_normalize : bool, default True
+        The view-tracking itself. True re-stretches the ramp as the view
+        settles; False computes the scale once and holds it -- blobs freeze
+        the scale of the first settled view, hexes colour by the whole
+        dataset's extremes. Explicit pins (max_intensity, vmin/vmax) override
+        either way.
     resolution : int, optional
         H3 resolution for ``cells="h3"``, 0 (continent) to 15 (sub-metre);
         default 8. Requires the `h3` package (optional dependency).
@@ -197,6 +204,7 @@ def add_heatmap(
         "layer_group": resolve_group_path(group_specs, {}, 0, "Heatmap Group"),
         "group_multi_select": group_multi_select,
         "visible": visible,
+        "auto_normalize": bool(auto_normalize),
         "ramp": anchors,
         # The ramp reads low -> high by design: the scale is view-relative, so
         # numbers on it would be a lie that changes with every pan.

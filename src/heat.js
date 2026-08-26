@@ -208,6 +208,7 @@ export function createHeatRenderer(canvas, options = {}) {
     const opacity = options.opacity ?? 1.0;
     const radius = Math.max(1, options.radius ?? 25);
     const pinnedMax = options.maxIntensity ?? null;
+    const autoNormalize = options.autoNormalize ?? true;
     const anchors = options.anchors || COLORMAPS[DEFAULT_COLORMAP];
     // Signed, seconds: negative means the layer fades (gputime's encoding).
     const durSec = options.durationSec ?? ALWAYS;
@@ -372,6 +373,9 @@ export function createHeatRenderer(canvas, options = {}) {
     // changes -- never per frame -- so the readback cost stays off the pan path.
     function computeMax() {
         if (!count || pinnedMax !== null) return;
+        // auto_normalize=false: the first settled view's scale holds still --
+        // computed once because SOME scale must exist, then frozen.
+        if (!autoNormalize && currentMax > 0) return;
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
         let max = 0;
         if (floatOk) {
@@ -545,6 +549,7 @@ export function createHexHeatRenderer(canvas, options = {}) {
     const anchors = options.anchors || COLORMAPS[DEFAULT_COLORMAP];
     const pinLo = options.vmin ?? null;
     const pinHi = options.vmax ?? null;
+    const autoNormalize = options.autoNormalize ?? true;
 
     const gl = canvas.getContext("webgl2", { antialias: true, depth: false, alpha: true })
         || canvas.getContext("webgl", { antialias: true, depth: false, alpha: true });
@@ -622,7 +627,9 @@ export function createHexHeatRenderer(canvas, options = {}) {
         // colours, and the same frame repaints -- a pan across quiet water
         // re-lights the local structure.
         normalize(view) {
-            if (data && values && values.length) {
+            // auto_normalize=false: the whole dataset's extremes, set once at
+            // setData, stay -- stable colours, no view-tracking.
+            if (data && values && values.length && autoNormalize) {
                 const cssW = canvas.width / view.dpr;
                 const cssH = canvas.height / view.dpr;
                 const rect = {
@@ -713,6 +720,7 @@ export function createHeatLayer(L, layer, latlonView, weightsView, timeOpts = nu
                     anchors: layer.ramp,
                     vmin: layer.vmin,
                     vmax: layer.vmax,
+                    autoNormalize: layer.auto_normalize,
                 });
             } else {
                 this._renderer = createHeatRenderer(this._canvas, {
@@ -720,6 +728,7 @@ export function createHeatLayer(L, layer, latlonView, weightsView, timeOpts = nu
                     opacity: layer.opacity,
                     maxIntensity: layer.max_intensity,
                     anchors: layer.ramp,
+                    autoNormalize: layer.auto_normalize,
                     durationSec: timeOpts ? timeOpts.durationSec : undefined,
                 });
             }

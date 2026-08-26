@@ -50,6 +50,7 @@
    "buffer": null,
    "op": {
     "layer": {
+     "auto_normalize": true,
      "bounds": [
       [
        36.01,
@@ -165,6 +166,7 @@
     "visible": false
    },
    {
+    "auto_normalize": true,
     "bounds": [
      [
       36.01,

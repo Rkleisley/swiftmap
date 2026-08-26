@@ -828,6 +828,7 @@ export function createMapModel(options = {}) {
             name: options.name || "Heatmap",
             layer_group: staticGroupPath(specs, "Heatmap Group"),
             visible: options.visible !== undefined ? options.visible : true,
+            auto_normalize: opt(options, "autoNormalize", "auto_normalize", true) !== false,
             radius, opacity,
             max_intensity: maxIntensity,
             ramp: [...anchors],

@@ -92,6 +92,15 @@ def test_nonsense_radius_warns_and_defaults():
     assert heat_layers(m)[0].radius == 25
 
 
+def test_auto_normalize_defaults_on_and_records_off():
+    m = Map()
+    m.add_heatmap(DF, name="A")
+    m.add_heatmap(DF, name="B", auto_normalize=False)
+    m.add_heatmap(DF, name="C", cells="h3", auto_normalize=False)
+    flags = [l.auto_normalize for l in heat_layers(m)]
+    assert flags == [True, False, False]
+
+
 def test_max_intensity_is_recorded():
     m = Map()
     m.add_heatmap(DF, max_intensity=12)
