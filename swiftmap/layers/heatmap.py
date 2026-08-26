@@ -18,6 +18,8 @@ def add_heatmap(
     cells: str = "blobs",
     auto_normalize: bool = True,
     resolution: Optional[int] = None,
+    length: Optional[int] = None,
+    base: Optional[int] = None,
     radius: Optional[int] = None,
     colormap: Any = None,
     max_intensity: Optional[float] = None,
@@ -66,8 +68,9 @@ def add_heatmap(
         Column whose value each point contributes to the sum; omitted, every
         point contributes 1 (a count). For a layer source, the column comes
         from that layer's own properties.
-    cells : {'blobs', 'h3'}, default 'blobs'
-        The kernel: screen-space blobs, or fixed-resolution H3 hexagons.
+    cells : {'blobs', 'h3', 'geohash'}, default 'blobs'
+        The kernel: screen-space blobs, fixed-resolution H3 hexagons, or
+        fixed-length Niemeyer geohash rectangles.
     auto_normalize : bool, default True
         The view-tracking itself. True re-stretches the ramp as the view
         settles; False computes the scale once and holds it -- blobs freeze
@@ -77,6 +80,11 @@ def add_heatmap(
     resolution : int, optional
         H3 resolution for ``cells="h3"``, 0 (continent) to 15 (sub-metre);
         default 8. Requires the `h3` package (optional dependency).
+    length, base : int, optional
+        For ``cells="geohash"``: the hash length (default 6) and the base --
+        16, 32 or 64, REQUIRED with no default, because a Niemeyer hash
+        cannot state its own base. geostructures' NiemeyerHasher vocabulary;
+        needs no third-party package.
     radius : int, optional
         Blob kernel radius in screen pixels; default 25. Blobs only.
     colormap : optional
@@ -101,18 +109,23 @@ def add_heatmap(
     lat_col, lon_col, coord_order :
         As in every add_* method; used only on the data path.
     """
-    if cells not in ("blobs", "h3"):
-        warn(f"add_heatmap: cells must be 'blobs' or 'h3', got {cells!r}. "
-             f"Using 'blobs'.")
+    if cells not in ("blobs", "h3", "geohash"):
+        warn(f"add_heatmap: cells must be 'blobs', 'h3' or 'geohash', got "
+             f"{cells!r}. Using 'blobs'.")
         cells = "blobs"
 
-    if cells == "h3":
+    if cells != "blobs":
         if radius is not None:
-            warn("add_heatmap: radius sizes the blob kernel and does not apply "
-                 "to cells='h3' (hexes are ground-fixed). Ignoring it.")
+            warn(f"add_heatmap: radius sizes the blob kernel and does not apply "
+                 f"to cells={cells!r} (cells are ground-fixed). Ignoring it.")
         if max_intensity is not None:
-            warn("add_heatmap: max_intensity pins the blob scale; for "
-                 "cells='h3' pin the ramp with vmin/vmax. Ignoring it.")
+            warn(f"add_heatmap: max_intensity pins the blob scale; for "
+                 f"cells={cells!r} pin the ramp with vmin/vmax. Ignoring it.")
+    if cells == "h3":
+        for given, knob in ((length, "length"), (base, "base")):
+            if given is not None:
+                warn(f"add_heatmap: {knob} is a geohash knob; cells='h3' takes "
+                     f"resolution=. Ignoring it.")
         if resolution is None:
             resolution = 8
         elif isinstance(resolution, bool) or not isinstance(resolution, int) \
@@ -124,10 +137,28 @@ def add_heatmap(
             warn("add_heatmap: cells='h3' needs the h3 package to bin points "
                  "into hexes. pip install h3. No layer was added.")
             return self
+    elif cells == "geohash":
+        from .._niemeyer import BASES
+        if resolution is not None:
+            warn("add_heatmap: resolution is an H3 knob; cells='geohash' takes "
+                 "length= and base=. Ignoring it.")
+        if base is None or base not in BASES:
+            warn(f"add_heatmap: cells='geohash' needs base= as one of {BASES} "
+                 f"-- a Niemeyer hash cannot state its own base, so swiftmap "
+                 f"never assumes one. No layer was added.")
+            return self
+        if length is None:
+            length = 6
+        elif isinstance(length, bool) or not isinstance(length, int) or length < 1:
+            warn(f"add_heatmap: length must be a positive integer, got "
+                 f"{length!r}. Using 6.")
+            length = 6
     else:
         for given, knob, fix in ((resolution, "resolution", "cells='h3'"),
-                                 (vmin, "vmin", "cells='h3'"),
-                                 (vmax, "vmax", "cells='h3'")):
+                                 (length, "length", "cells='geohash'"),
+                                 (base, "base", "cells='geohash'"),
+                                 (vmin, "vmin", "the cell kernels"),
+                                 (vmax, "vmax", "the cell kernels")):
             if given is not None:
                 warn(f"add_heatmap: {knob} applies to {fix}, not to blobs. "
                      f"Ignoring it.")
@@ -169,7 +200,7 @@ def add_heatmap(
         if weight_col is not None:
             values = (getattr(source_layer, "properties", None) or {}).get(weight_col)
             weights = _weights_or_warn(values, count, weight_col, f"layer {data!r}")
-        if cells == "h3":
+        if cells != "blobs":
             if not count:
                 warn(f"add_heatmap: layer {data!r} has no coordinate buffer to "
                      f"bin. No layer was added.", EmptyLayerWarning)
@@ -216,26 +247,37 @@ def add_heatmap(
                     "coord_order": coord_order},
             data_opts={"weight_col": weight_col,
                        "cells": None if cells == "blobs" else cells,
-                       "resolution": resolution}),
+                       "resolution": resolution,
+                       "length": length, "base": base}),
     }
 
-    if cells == "h3":
-        h3 = h3_module()
+    if cells != "blobs":
         w = None
         if weights is not None:
             w = np.nan_to_num(weights.astype(np.float64), nan=0.0)
+        if cells == "h3":
+            h3 = h3_module()
+            to_cell = lambda lat, lon: h3.latlng_to_cell(lat, lon, resolution)
+            boundary_of = lambda cell: [
+                [float(a), float(b)] for a, b in h3.cell_to_boundary(cell)]
+        else:
+            from .._niemeyer import cell_ring, encode
+            to_cell = lambda lat, lon: encode(lat, lon, length, base)
+            # Unclosed, like the hex boundaries: the renderer fans the ring.
+            boundary_of = lambda cell: cell_ring(cell, base)[:-1]
+
         sums = {}
         for i in range(len(lats)):
-            cell = h3.latlng_to_cell(float(lats[i]), float(lons[i]), resolution)
+            cell = to_cell(float(lats[i]), float(lons[i]))
             sums[cell] = sums.get(cell, 0.0) + (w[i] if w is not None else 1.0)
 
         cell_ids = list(sums.keys())
         ring_pts = []
         cell_counts = []
         for cell in cell_ids:
-            boundary = h3.cell_to_boundary(cell)
+            boundary = boundary_of(cell)
             cell_counts.append(len(boundary))
-            ring_pts.extend([[float(lat), float(lon)] for lat, lon in boundary])
+            ring_pts.extend(boundary)
         rings = np.asarray(ring_pts, dtype=np.float64)
         values = np.asarray([sums[c] for c in cell_ids], dtype=np.float64)
         bounds = [[float(rings[:, 0].min()), float(rings[:, 1].min())],
@@ -245,15 +287,16 @@ def add_heatmap(
         self._set_layer_buffer(f"{layer_id}::values", values.tobytes())
         self.add_child({
             **shared,
-            "cells": "h3",
-            "resolution": resolution,
+            "cells": cells,
+            **({"resolution": resolution} if cells == "h3"
+               else {"length": length, "base": base}),
             "opacity": 0.75 if opacity is None else opacity,
             "vmin": vmin,
             "vmax": vmax,
             "cell_counts": cell_counts,
-            # The cell ids stay: a hex is a real place, and the ids are the
+            # The cell ids stay: a cell is a real place, and the ids are the
             # join key back onto whatever produced the points.
-            "properties": {"h3": cell_ids},
+            "properties": {("h3" if cells == "h3" else "geohash"): cell_ids},
             "bounds": bounds,
             **kwargs,
         })

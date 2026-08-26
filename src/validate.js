@@ -69,7 +69,7 @@ export function collectLayerProblems(layer, buffers = {}) {
                 + `${Math.floor(weights.byteLength / 4)} float32 entries for `
                 + `${points} points`);
         }
-        if (layer.cells === "h3") {
+        if (layer.cells && layer.cells !== "blobs") {
             const counts = Array.isArray(layer.cell_counts) ? layer.cell_counts : [];
             const total = counts.reduce((a, b) => a + b, 0);
             if (src && total * 16 !== src.byteLength) {

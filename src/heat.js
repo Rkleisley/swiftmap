@@ -714,7 +714,7 @@ export function createHeatLayer(L, layer, latlonView, weightsView, timeOpts = nu
         },
 
         _initGL() {
-            if (layer.cells === "h3") {
+            if (layer.cells && layer.cells !== "blobs") {
                 this._renderer = createHexHeatRenderer(this._canvas, {
                     opacity: layer.opacity,
                     anchors: layer.ramp,
@@ -737,7 +737,7 @@ export function createHeatLayer(L, layer, latlonView, weightsView, timeOpts = nu
                     + `${layer.name || layer.id} will not render.`);
                 return;
             }
-            if (layer.cells === "h3") {
+            if (layer.cells && layer.cells !== "blobs") {
                 this._projected = projectHexCells(
                     latlonView, layer.cell_counts, this._map.options.crs, L);
                 const values = valuesView

@@ -246,3 +246,38 @@ def test_export_carries_the_heat_layer():
     m.add_heatmap(DF, name="Density")
     html = m.to_html()
     assert '"heatmap"' in html and "Density" in html
+
+
+# --- the geohash cell kernel -------------------------------------------------
+
+def test_geohash_cells_bin_and_ship_rectangles():
+    import swiftmap._niemeyer as nm
+    m = Map()
+    m.add_heatmap(DF, cells="geohash", length=5, base=32, name="GhHeat")
+    (layer,) = heat_layers(m)
+    assert layer.cells == "geohash"
+    assert layer.length == 5 and layer.base == 32
+    assert all(c == 4 for c in layer.cell_counts)      # rectangles, unclosed
+    expected = {}
+    for lat, lon in zip(DF["lat"], DF["lon"]):
+        cell = nm.encode(lat, lon, 5, 32)
+        expected[cell] = expected.get(cell, 0) + 1
+    assert layer.properties["geohash"] == list(expected.keys())
+    values = np.frombuffer(m.coordinate_buffers[f"{layer.id}::values"],
+                           dtype=np.float64)
+    assert values.tolist() == list(expected.values())
+
+
+def test_geohash_cells_require_the_base():
+    m = Map()
+    with pytest.warns(Warning, match="cannot state its own base"):
+        m.add_heatmap(DF, cells="geohash")
+    assert heat_layers(m) == []
+
+
+def test_cell_kernel_knobs_warn_across_families():
+    m = Map()
+    with pytest.warns(Warning, match="resolution is an H3 knob"):
+        m.add_heatmap(DF, cells="geohash", base=32, resolution=7)
+    with pytest.warns(Warning, match="is a geohash knob"):
+        m.add_heatmap(DF, name="B", cells="h3", length=6)
