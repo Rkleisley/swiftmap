@@ -19,6 +19,9 @@ const GLYPHS = {
     polyline: "line",
     polygon: "polygon",
     circle: "circle",
+    // Gated here like every other type: without a glyph, a heat layer's ramp
+    // block -- which both stacks emit -- fell at the door (React round-8 T).
+    heatmap: "gradient",
 };
 
 function swatchEntry(layer, hidden) {
@@ -28,6 +31,7 @@ function swatchEntry(layer, hidden) {
         shape: GLYPHS[layer.type] || "square",
         color: layer.color || "#3388ff",
         fillColor: layer.fillColor || layer.fill_color || layer.color || "#3388ff",
+        ...(layer.ramp ? { gradient: layer.ramp } : {}),
         hidden,
     };
 }
@@ -42,6 +46,10 @@ function entriesForLayer(layer, groupConfigs) {
     if (layer.type === "basemap") return [];
     const hidden = !isLayerEffectiveVisible(layer, groupConfigs);
     if (layer.type === "group") {
+        // A merged entry that states its OWN legend speaks for all its members:
+        // one row, not one per member (React round-8 S). Without it, N styled
+        // members made N swatches and the group's block was dead weight.
+        if (layer.legend) return [blockEntry(layer, hidden)];
         // A collection: one entry per geometry part, same label by design -- the
         // glyphs are what tell them apart, matching how the parts render.
         return (layer.layers || [])
@@ -184,6 +192,13 @@ function div(styles, text) {
 }
 
 function glyph(entry) {
+    if (entry.shape === "gradient") {
+        const stops = (entry.gradient && entry.gradient.length > 1)
+            ? entry.gradient : [entry.fillColor, entry.color];
+        return div({ width: "20px", height: "10px",
+                     background: `linear-gradient(to right, ${stops.join(", ")})`,
+                     borderRadius: "2px", marginRight: "6px", flex: "none" });
+    }
     if (entry.shape === "line") {
         return div({ width: "20px", height: "4px", background: entry.color,
                      marginRight: "6px", flex: "none" });

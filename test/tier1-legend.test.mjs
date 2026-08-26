@@ -183,3 +183,45 @@ test("identical size keys collapse like identical ramps", () => {
     assert.equal(flat(spec).filter(e => e.kind === "sizes").length, 1,
         "one shared mapping, one row");
 });
+
+// --- round 8: heat layers and merged entries ----------------------------------------
+test("a heatmap layer's ramp block reaches the legend (round-8 T)", () => {
+    const block = { kind: "ramp", field: "density", anchors: ["#000", "#fff"],
+                    vmin: "low", vmax: "high" };
+    const spec = deriveLegendSpec([
+        layer({ id: "h", type: "heatmap", name: "Heat", legend: block }),
+        layer({ id: "x", type: "heatmap", name: "HexHeat", cells: "h3", legend: block }),
+        layer({ id: "c", type: "circle_markers", name: "Control" }),
+    ], {}, {});
+    const kinds = flat(spec).map(e => e.kind);
+    assert.deepEqual(kinds, ["ramp", "swatch"],
+        "both kernels contribute (identical blocks collapse to one ramp row); "
+        + "the control still swatches");
+});
+
+test("a bare heatmap layer falls back to a gradient swatch", () => {
+    const spec = deriveLegendSpec([
+        layer({ id: "h", type: "heatmap", name: "Heat",
+                ramp: ["#111111", "#eeeeee"] }),
+    ], {}, {});
+    const [entry] = flat(spec);
+    assert.equal(entry.shape, "gradient");
+    assert.deepEqual(entry.gradient, ["#111111", "#eeeeee"]);
+});
+
+test("a merged entry's own legend block speaks for its members (round-8 S)", () => {
+    const block = { kind: "ramp", field: "count", anchors: ["#000", "#fff"],
+                    vmin: 1, vmax: 1942 };
+    const members = Array.from({ length: 5 }, (_, i) =>
+        layer({ id: `m${i}`, type: "polygon", name: "Cells",
+                fillColor: `#00000${i}` }));
+    const spec = deriveLegendSpec([
+        layer({ id: "grp", type: "group", name: "Cells", legend: block,
+                layers: members }),
+    ], {}, {});
+    const entries = flat(spec);
+    assert.equal(entries.length, 1, "one row, not one per styled member");
+    assert.equal(entries[0].kind, "ramp");
+    assert.equal(entries[0].label, "count",
+        "the shared mapping labels itself by its field");
+});

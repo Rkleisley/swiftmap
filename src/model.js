@@ -34,12 +34,12 @@
 
 import { layersBoundsUnion } from "./utils.js";
 import { resolveColormap, dataDrivenColors, dataDrivenRadii,
-         dataDrivenLegend, dataDrivenSizeLegend,
+         dataDrivenLegend, dataDrivenSizeLegend, rgbHex,
          COLORMAPS, DEFAULT_COLORMAP } from "./colormaps.js";
 import { isValidPeriod, normalizeLayerTimes } from "./times.js";
 import { XYZ, ALIASES as BASEMAP_ALIASES, PRESETS, WMS,
          DEFAULT_BASEMAPS, queryKey } from "./basemap-catalog.js";
-import { featuresOf, pointPairsOf, linePartsOf, polygonPartsOf,
+import { featuresOf, pointPairsOf, linePartsOf, polygonPartsOf, parseWKT,
          POINT_GEOMETRY, LINE_GEOMETRY, POLYGON_GEOMETRY } from "./geo.js";
 import { POINTS, LINES, AREAS, STYLE_KEYS, normalizeStyle, popStyleOptions,
          resolveStyles, resolveFeatureLabels, resolveFeatureLabel,
@@ -112,6 +112,60 @@ function isGeometryInput(data) {
     return typeof data === "string"
         || (data && typeof data === "object" && !Array.isArray(data)
             && typeof data.type === "string");
+}
+
+// Python's WKT column-name guesses, verbatim; a candidate only counts when its
+// values actually parse as WKT of the right family.
+const WKT_COL_CANDIDATES = ["wkt", "geometry", "geom", "shape", "coords",
+                            "coordinates", "locations"];
+
+// The tabular front door for the vector builders: a columnar object or an
+// array of row objects whose WKT column carries the geometry, mirrored from
+// Python's tabular tier (React round-8 R: a table THREW from addPolygon where
+// a point layer would warn). Returns a FeatureCollection, "warned" after
+// telling the user why nothing was added, or null when the input is not
+// tabular at all.
+function tabularVectorInput(data, family, label) {
+    let columns = null;
+    if (Array.isArray(data) && data.length && typeof data[0] === "object"
+            && data[0] !== null && !Array.isArray(data[0])) {
+        const keys = [...new Set(data.flatMap(row => Object.keys(row)))];
+        columns = Object.fromEntries(
+            keys.map(k => [k, data.map(row => row[k] ?? null)]));
+    } else if (data && typeof data === "object" && !Array.isArray(data)
+            && Object.keys(data).length
+            && Object.values(data).every(v => Array.isArray(v))) {
+        columns = data;
+    }
+    if (!columns) return null;
+
+    const names = Object.keys(columns);
+    const wktCol = WKT_COL_CANDIDATES
+        .map(c => names.find(n => n.toLowerCase() === c))
+        .find(n => n && (columns[n] || []).some(
+            v => typeof v === "string" && parseWKT(v)));
+    if (!wktCol) {
+        console.warn(`swiftmap: ${label}: the supplied table has no WKT geometry `
+            + `column (looked for ${WKT_COL_CANDIDATES.join(", ")}). Tabular `
+            + `lat/lon grouping and H3 cell columns are Python-side; in JS, hand `
+            + `the builder WKT strings, GeoJSON, or coordinate rings. No layer `
+            + `was added.`);
+        return "warned";
+    }
+    const others = names.filter(n => n !== wktCol);
+    const n = Math.max(...names.map(k => columns[k].length));
+    const features = [];
+    for (let i = 0; i < n; i++) {
+        const geometry = typeof columns[wktCol][i] === "string"
+            ? parseWKT(columns[wktCol][i]) : null;
+        if (!geometry || !family.has(geometry.type)) continue;
+        features.push({
+            type: "Feature", geometry,
+            properties: Object.fromEntries(
+                others.map(k => [k, columns[k][i] ?? null])),
+        });
+    }
+    return { type: "FeatureCollection", features };
 }
 
 function normalizePoints(data, options = {}) {
@@ -618,6 +672,15 @@ export function createMapModel(options = {}) {
         const { explicit, staticStyle } = popStyleOptions(options, label, type);
         const { layerStyle, featureStyles } = resolveStyles(
             explicit, staticStyle, columns, features.length, STYLE_DEFAULTS[type]);
+        // color_col ramps the fan exactly as Python's builders do: polygons take
+        // the fill (choropleth -- the border keeps `color`), lines take the
+        // stroke, and every fanned layer carries the one shared legend block.
+        // Dropped silently before (React round-8 Q): the map rendered, every
+        // feature just came out default blue.
+        const dataOpts = dataOptsOf(options);
+        const fallbackColor = layerStyle.color || STYLE_DEFAULTS[type].color;
+        const dataColors = dataDrivenColors(columns, dataOpts, fallbackColor, label);
+        const dataLegend = dataDrivenLegend(columns, dataOpts, fallbackColor);
         const labelOpt = opt(options, "label", "label") ?? null;
         features.forEach((feature, i) => {
             const name = nameIsColumn ? String(feature.properties[baseName])
@@ -632,6 +695,12 @@ export function createMapModel(options = {}) {
                 ...(featureStyles ? featureStyles[i] : layerStyle),
                 properties: props,
             };
+            if (dataColors) {
+                const hex = rgbHex(dataColors.subarray(i * 4, i * 4 + 4));
+                if (type === "polygon") layer.fillColor = hex;
+                else layer.color = hex;
+            }
+            if (dataLegend) layer.legend = dataLegend;
             const featureLabel = resolveFeatureLabel(labelOpt, columns, i);
             if (featureLabel != null) layer.label = featureLabel;
             const parts = partsOf(feature.geometry);
@@ -652,6 +721,15 @@ export function createMapModel(options = {}) {
 
     function addLine(coords, options = {}) {
         if (isGeometryInput(coords)) return addVectorFeatures("polyline", coords, options);
+        const table = tabularVectorInput(coords, LINE_GEOMETRY, "addLine");
+        if (table === "warned") return model;
+        if (table) return addVectorFeatures("polyline", table, options);
+        if (!Array.isArray(coords)) {
+            console.warn("swiftmap: addLine could not read the supplied data -- "
+                + "expected coordinates, WKT/GeoJSON, or a table with a WKT "
+                + "geometry column. No layer was added.");
+            return model;
+        }
         const pairs = coords.map(p => [Number(p[0]), Number(p[1])]);
         const { explicit, staticStyle } = popStyleOptions(options, "addLine", "polyline");
         const { layerStyle } = resolveStyles(explicit, staticStyle, {}, 1,
@@ -672,6 +750,15 @@ export function createMapModel(options = {}) {
 
     function addPolygon(coords, options = {}) {
         if (isGeometryInput(coords)) return addVectorFeatures("polygon", coords, options);
+        const table = tabularVectorInput(coords, POLYGON_GEOMETRY, "addPolygon");
+        if (table === "warned") return model;
+        if (table) return addVectorFeatures("polygon", table, options);
+        if (!Array.isArray(coords)) {
+            console.warn("swiftmap: addPolygon could not read the supplied data -- "
+                + "expected coordinates, WKT/GeoJSON, or a table with a WKT "
+                + "geometry column. No layer was added.");
+            return model;
+        }
         const ring = coords.map(p => [Number(p[0]), Number(p[1])]);
         const [f, l] = [ring[0], ring[ring.length - 1]];
         if (f && (f[0] !== l[0] || f[1] !== l[1])) ring.push([f[0], f[1]]);

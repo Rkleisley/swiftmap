@@ -637,6 +637,35 @@ def scenario_heatmap_time():
     return m
 
 
+def scenario_polygon_fan_color_col():
+    """GeoJSON polygons fanned with a data-driven fill and one shared legend."""
+    m = Map(show_logo=False)
+    fc = {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {"count": 4},
+         "geometry": {"type": "Polygon", "coordinates":
+                      [[[-5.31, 36.00], [-5.30, 36.00], [-5.30, 36.01], [-5.31, 36.00]]]}},
+        {"type": "Feature", "properties": {"count": 21},
+         "geometry": {"type": "Polygon", "coordinates":
+                      [[[-5.29, 36.00], [-5.28, 36.00], [-5.28, 36.01], [-5.29, 36.00]]]}},
+        {"type": "Feature", "properties": {"count": 40},
+         "geometry": {"type": "Polygon", "coordinates":
+                      [[[-5.27, 36.00], [-5.26, 36.00], [-5.26, 36.01], [-5.27, 36.00]]]}},
+    ]}
+    m.add_polygon(fc, name="Cells", color_col="count", colormap="viridis")
+    return m
+
+
+def scenario_polygon_table_wkt_color_col():
+    """A columnar table with a WKT column, ramped -- the front door JS gained."""
+    m = Map(show_logo=False)
+    m.add_polygon(
+        {"geometry": ["POLYGON ((-5.31 36.00, -5.30 36.00, -5.30 36.01, -5.31 36.00))",
+                      "POLYGON ((-5.29 36.00, -5.28 36.00, -5.28 36.01, -5.29 36.00))"],
+         "count": [3, 9]},
+        name="Cells", color_col="count")
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -695,6 +724,8 @@ SCENARIOS = [
     scenario_heatmap_basic,
     scenario_heatmap_weighted_from_layer,
     scenario_heatmap_time,
+    scenario_polygon_fan_color_col,
+    scenario_polygon_table_wkt_color_col,
 ]
 
 

@@ -1,0 +1,428 @@
+{
+ "buffers": {
+  "layer_2": "AAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAMzMzMzMzFcDhehSuRwFCQDMzMzMzMxXAAAAAAAAAQkA9CtejcD0VwA==",
+  "layer_3": "AAAAAAAAQkApXI/C9SgVwAAAAAAAAEJAH4XrUbgeFcDhehSuRwFCQB+F61G4HhXAAAAAAAAAQkApXI/C9SgVwA==",
+  "layer_4": "AAAAAAAAQkAUrkfhehQVwAAAAAAAAEJACtejcD0KFcDhehSuRwFCQArXo3A9ChXAAAAAAAAAQkAUrkfhehQVwA=="
+ },
+ "doc": "GeoJSON polygons fanned with a data-driven fill and one shared legend.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 20,
+     "max_zoom": 22,
+     "name": "Dark Matter",
+     "subdomains": "abcd",
+     "type": "basemap",
+     "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAMzMzMzMzFcDhehSuRwFCQDMzMzMzMxXAAAAAAAAAQkA9CtejcD0VwA==",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.31
+      ],
+      [
+       36.01,
+       -5.3
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#440154",
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Polygon Group",
+     "legend": {
+      "anchors": [
+       "#440154",
+       "#482878",
+       "#3e4989",
+       "#31688e",
+       "#26828e",
+       "#1f9e89",
+       "#35b779",
+       "#6ece58",
+       "#b5de2b",
+       "#fde725"
+      ],
+      "field": "count",
+      "kind": "ramp",
+      "vmax": 40,
+      "vmin": 4
+     },
+     "name": "Cells 1",
+     "opacity": 1.0,
+     "properties": {
+      "count": 4
+     },
+     "type": "polygon",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkApXI/C9SgVwAAAAAAAAEJAH4XrUbgeFcDhehSuRwFCQB+F61G4HhXAAAAAAAAAQkApXI/C9SgVwA==",
+   "op": {
+    "id": "layer_3",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.29
+      ],
+      [
+       36.01,
+       -5.28
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#24898d",
+     "fillOpacity": 0.2,
+     "id": "layer_3",
+     "layer_group": "Polygon Group",
+     "legend": {
+      "anchors": [
+       "#440154",
+       "#482878",
+       "#3e4989",
+       "#31688e",
+       "#26828e",
+       "#1f9e89",
+       "#35b779",
+       "#6ece58",
+       "#b5de2b",
+       "#fde725"
+      ],
+      "field": "count",
+      "kind": "ramp",
+      "vmax": 40,
+      "vmin": 4
+     },
+     "name": "Cells 2",
+     "opacity": 1.0,
+     "properties": {
+      "count": 21
+     },
+     "type": "polygon",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAUrkfhehQVwAAAAAAAAEJACtejcD0KFcDhehSuRwFCQArXo3A9ChXAAAAAAAAAQkAUrkfhehQVwA==",
+   "op": {
+    "id": "layer_4",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.27
+      ],
+      [
+       36.01,
+       -5.26
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#fde725",
+     "fillOpacity": 0.2,
+     "id": "layer_4",
+     "layer_group": "Polygon Group",
+     "legend": {
+      "anchors": [
+       "#440154",
+       "#482878",
+       "#3e4989",
+       "#31688e",
+       "#26828e",
+       "#1f9e89",
+       "#35b779",
+       "#6ece58",
+       "#b5de2b",
+       "#fde725"
+      ],
+      "field": "count",
+      "kind": "ramp",
+      "vmax": 40,
+      "vmin": 4
+     },
+     "name": "Cells 3",
+     "opacity": 1.0,
+     "properties": {
+      "count": 40
+     },
+     "type": "polygon",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  }
+ ],
+ "scenario": "polygon_fan_color_col",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.31
+    ],
+    [
+     36.01,
+     -5.26
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 3,
+   "zoom_offset": 0
+  },
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Polygon Group": {
+    "multi_select": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors &copy; <a href=\"https://carto.com/attributions\">CARTO</a>",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 20,
+    "max_zoom": 22,
+    "name": "Dark Matter",
+    "subdomains": "abcd",
+    "type": "basemap",
+    "url": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.31
+     ],
+     [
+      36.01,
+      -5.3
+     ]
+    ],
+    "color": "#3388ff",
+    "fillColor": "#440154",
+    "fillOpacity": 0.2,
+    "id": "layer_2",
+    "layer_group": "Polygon Group",
+    "legend": {
+     "anchors": [
+      "#440154",
+      "#482878",
+      "#3e4989",
+      "#31688e",
+      "#26828e",
+      "#1f9e89",
+      "#35b779",
+      "#6ece58",
+      "#b5de2b",
+      "#fde725"
+     ],
+     "field": "count",
+     "kind": "ramp",
+     "vmax": 40,
+     "vmin": 4
+    },
+    "name": "Cells 1",
+    "opacity": 1.0,
+    "properties": {
+     "count": 4
+    },
+    "type": "polygon",
+    "visible": true,
+    "weight": 3
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.29
+     ],
+     [
+      36.01,
+      -5.28
+     ]
+    ],
+    "color": "#3388ff",
+    "fillColor": "#24898d",
+    "fillOpacity": 0.2,
+    "id": "layer_3",
+    "layer_group": "Polygon Group",
+    "legend": {
+     "anchors": [
+      "#440154",
+      "#482878",
+      "#3e4989",
+      "#31688e",
+      "#26828e",
+      "#1f9e89",
+      "#35b779",
+      "#6ece58",
+      "#b5de2b",
+      "#fde725"
+     ],
+     "field": "count",
+     "kind": "ramp",
+     "vmax": 40,
+     "vmin": 4
+    },
+    "name": "Cells 2",
+    "opacity": 1.0,
+    "properties": {
+     "count": 21
+    },
+    "type": "polygon",
+    "visible": true,
+    "weight": 3
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.27
+     ],
+     [
+      36.01,
+      -5.26
+     ]
+    ],
+    "color": "#3388ff",
+    "fillColor": "#fde725",
+    "fillOpacity": 0.2,
+    "id": "layer_4",
+    "layer_group": "Polygon Group",
+    "legend": {
+     "anchors": [
+      "#440154",
+      "#482878",
+      "#3e4989",
+      "#31688e",
+      "#26828e",
+      "#1f9e89",
+      "#35b779",
+      "#6ece58",
+      "#b5de2b",
+      "#fde725"
+     ],
+     "field": "count",
+     "kind": "ramp",
+     "vmax": 40,
+     "vmin": 4
+    },
+    "name": "Cells 3",
+    "opacity": 1.0,
+    "properties": {
+     "count": 40
+    },
+    "type": "polygon",
+    "visible": true,
+    "weight": 3
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {},
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

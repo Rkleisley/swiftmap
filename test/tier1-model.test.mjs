@@ -34,6 +34,26 @@ const SCENARIOS = {
         return m;
     },
 
+    polygon_fan_color_col: () => createMapModel().addPolygon(
+        { type: "FeatureCollection", features: [
+            { type: "Feature", properties: { count: 4 },
+              geometry: { type: "Polygon", coordinates:
+                  [[[-5.31, 36.00], [-5.30, 36.00], [-5.30, 36.01], [-5.31, 36.00]]] } },
+            { type: "Feature", properties: { count: 21 },
+              geometry: { type: "Polygon", coordinates:
+                  [[[-5.29, 36.00], [-5.28, 36.00], [-5.28, 36.01], [-5.29, 36.00]]] } },
+            { type: "Feature", properties: { count: 40 },
+              geometry: { type: "Polygon", coordinates:
+                  [[[-5.27, 36.00], [-5.26, 36.00], [-5.26, 36.01], [-5.27, 36.00]]] } },
+        ] },
+        { name: "Cells", colorCol: "count", colormap: "viridis" }),
+
+    polygon_table_wkt_color_col: () => createMapModel().addPolygon(
+        { geometry: ["POLYGON ((-5.31 36.00, -5.30 36.00, -5.30 36.01, -5.31 36.00))",
+                     "POLYGON ((-5.29 36.00, -5.28 36.00, -5.28 36.01, -5.29 36.00))"],
+          count: [3, 9] },
+        { name: "Cells", colorCol: "count" }),
+
     heatmap_time: () => {
         const m = createMapModel();
         m.addHeatmap(
@@ -533,4 +553,33 @@ test("every golden has a scenario and vice versa", () => {
         .map(f => f.replace(/\.json$/, "")).sort();
     assert.deepEqual(Object.keys(SCENARIOS).sort(), files,
         "the Python and JS scenario lists are the same list");
+});
+
+test("a table through the vector builders never throws (round-8 R)", () => {
+    const warned = [];
+    const original = console.warn;
+    console.warn = (msg) => warned.push(String(msg));
+    try {
+        const m = createMapModel();
+        const before = m.props().layers.length;
+        // No geometry column at all: warn and add nothing.
+        m.addPolygon({ lat: [1, 2], lon: [3, 4], count: [1, 2] });
+        assert.equal(m.props().layers.length, before);
+        assert.ok(warned.some(w => w.includes("no WKT geometry column")),
+            "the table is named as the problem, not thrown at the user");
+        // Not a table, not coordinates: warn and add nothing.
+        m.addLine(42);
+        assert.equal(m.props().layers.length, before);
+        // A row-array table with a WKT column works, ramp and all.
+        m.addPolygon([
+            { wkt: "POLYGON ((-5.31 36.00, -5.30 36.00, -5.30 36.01, -5.31 36.00))", v: 1 },
+            { wkt: "POLYGON ((-5.29 36.00, -5.28 36.00, -5.28 36.01, -5.29 36.00))", v: 9 },
+        ], { name: "Cells", colorCol: "v" });
+        const cells = m.props().layers.filter(l => l.type === "polygon");
+        assert.equal(cells.length, 2);
+        assert.ok(cells.every(l => l.fillColor && l.legend),
+            "row tables reach the same fan, fill and legend as columnar ones");
+    } finally {
+        console.warn = original;
+    }
 });
