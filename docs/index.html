@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>swiftmap &mdash; Leaflet ergonomics, WebGL scale</title>
+<meta name="description" content="A Python mapping library that keeps Leaflet's ergonomics and replaces its vector drawing with WebGL pipelines. Every map on this page is live.">
+<link rel="stylesheet" href="assets/swiftmap.css">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <span class="brand">swift<span>map</span></span>
+    <span class="pill">v0.5.0</span>
+    <nav>
+      <a href="#gallery">Gallery</a>
+      <a href="#stacks">Stacks</a>
+      <a href="#why">Why</a>
+      <a href="https://github.com/Rkleisley/swiftmap">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="hero wrap">
+  <h1>A million points, and it still <em>moves</em>.</h1>
+  <p class="lede">
+    swiftmap keeps Leaflet's ergonomics &mdash; <strong>a few <code>add_*</code> calls, no
+    projection argument, no view to set</strong> &mdash; and replaces its vector drawing with
+    WebGL pipelines. This is not a screenshot. Drag it.
+  </p>
+
+  <div class="stage" id="hero-stage">
+    <div class="map"></div>
+    <div class="veil"><span class="txt">starting up&hellip;</span><span class="bar"><i></i></span></div>
+  </div>
+
+  <div class="ladder">
+    <span class="label">Load</span>
+    <button class="tier" type="button" data-tier="hero-10k"
+                    data-points="10000"
+                    aria-pressed="false">10,000 pts<span class="wt">about where an SVG map gives up</span></button>
+<button class="tier" type="button" data-tier="hero-100k"
+                    data-points="100000" data-initial="1"
+                    aria-pressed="false">100,000 pts<span class="wt">already past every vector library</span></button>
+<button class="tier" type="button" data-tier="hero-1m"
+                    data-points="1000000"
+                    aria-pressed="false">1,000,000 pts<span class="wt">still one drag</span></button>
+    <div class="readout">
+      <div class="stat"><b id="hero-points">&mdash;</b><span>points drawn</span></div>
+      <div class="stat"><b id="hero-ms">&mdash;</b><span>mount &rarr; first paint</span></div>
+      <div class="stat"><b id="hero-fps">&mdash;</b><span>fps while dragging</span></div>
+    </div>
+  </div>
+
+  <p class="hero-note">
+    <span>Synthetic western-Mediterranean vessel traffic, coloured by speed. The tiers are the
+    same field at three densities &mdash; 19.1 MB of float64 coordinates for the
+    largest, fetched only when you ask for it. The frame counter reads while you drag, because
+    an idle map runs at your display's refresh rate no matter what is on it.</span>
+  </p>
+
+  <div class="code" style="margin-top:22px;border:1px solid var(--line);border-radius:12px;">
+    <button class="copy" type="button">copy</button>
+    <pre><code><span class="t-com"># traffic: 1,000,000 AIS pings -- lane, ferry, coastal, fishing, anchorage.</span>
+<span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_basemap</span>(<span class="t-str">&quot;Esri.WorldGrayCanvas&quot;</span>)                    <span class="t-com"># one of ~880 by name</span>
+m.<span class="t-fn">select</span>(<span class="t-str">&quot;Esri.WorldGrayCanvas&quot;</span>, <span class="t-kwa">scope</span>=<span class="t-str">&quot;Basemaps&quot;</span>)
+m.<span class="t-fn">add_circle_markers</span>(traffic, <span class="t-kwa">name</span>=<span class="t-str">&quot;Vessel traffic&quot;</span>, <span class="t-kwa">layer_group</span>=<span class="t-str">&quot;AIS&quot;</span>,
+                     <span class="t-kwa">radius</span>=<span class="t-num">2</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;speed_kn&quot;</span>,
+                     <span class="t-kwa">colormap</span>=<span class="t-str">&quot;turbo&quot;</span>, <span class="t-kwa">vmin</span>=<span class="t-num">0</span>, <span class="t-kwa">vmax</span>=<span class="t-num">21</span>)
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Speed over ground (kn)&quot;</span>)</code></pre>
+  </div>
+</div>
+
+<section id="gallery">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">The gallery</div>
+      <h2>Every card below is a live map</h2>
+      <p>
+        Not a screenshot and not a video &mdash; a real map you can pan, toggle and scrub,
+        built by running the code printed under it. The snippets are the strings this page's
+        generator executed, so a card cannot drift from its example.
+      </p>
+    </div>
+
+    <details class="data-panel">
+      <summary><b>The data every card shares</b> &mdash; run once, before all of them</summary>
+      <div class="code">
+        <button class="copy" type="button">copy</button>
+        <pre><code><span class="t-kw">import</span> numpy <span class="t-kw">as</span> np
+<span class="t-kw">import</span> pandas <span class="t-kw">as</span> pd
+<span class="t-kw">from</span> swiftmap <span class="t-kw">import</span> Map
+
+<span class="t-kwa">rng</span> = np.random.<span class="t-fn">default_rng</span>(<span class="t-num">42</span>)
+
+<span class="t-com"># 600 harbour sensors around the Strait of Gibraltar.</span>
+<span class="t-kwa">n</span> = <span class="t-num">600</span>
+<span class="t-kwa">sensors</span> = pd.<span class="t-fn">DataFrame</span>({
+    <span class="t-str">&quot;lat&quot;</span>: <span class="t-num">36.02</span> + rng.<span class="t-fn">normal</span>(<span class="t-num">0</span>, <span class="t-num">0.05</span>, n),
+    <span class="t-str">&quot;lon&quot;</span>: -<span class="t-num">5.45</span> + rng.<span class="t-fn">normal</span>(<span class="t-num">0</span>, <span class="t-num">0.09</span>, n),
+    <span class="t-str">&quot;site&quot;</span>: [<span class="t-str">f&quot;</span>S{i:03d}&quot; <span class="t-kw">for</span> i <span class="t-kw">in</span> <span class="t-fn">range</span>(n)],
+    <span class="t-str">&quot;station&quot;</span>: rng.<span class="t-fn">choice</span>([<span class="t-str">&quot;Alpha&quot;</span>, <span class="t-str">&quot;Bravo&quot;</span>, <span class="t-str">&quot;Charlie&quot;</span>, <span class="t-str">&quot;Delta&quot;</span>], n),
+    <span class="t-str">&quot;region&quot;</span>: rng.<span class="t-fn">choice</span>([<span class="t-str">&quot;East&quot;</span>, <span class="t-str">&quot;West&quot;</span>], n),
+    <span class="t-str">&quot;status&quot;</span>: rng.<span class="t-fn">choice</span>([<span class="t-str">&quot;Active&quot;</span>, <span class="t-str">&quot;Idle&quot;</span>, <span class="t-str">&quot;Fault&quot;</span>], n, <span class="t-kwa">p</span>=[<span class="t-num">.70</span>, <span class="t-num">.22</span>, <span class="t-num">.08</span>]),
+    <span class="t-str">&quot;reading&quot;</span>: np.<span class="t-fn">round</span>(rng.<span class="t-fn">gamma</span>(<span class="t-num">4</span>, <span class="t-num">4</span>, n), <span class="t-num">1</span>),
+    <span class="t-str">&quot;volume&quot;</span>: rng.<span class="t-fn">integers</span>(<span class="t-num">10</span>, <span class="t-num">500</span>, n),
+})
+
+<span class="t-com"># Three vessels, one ping every half hour for a day.</span>
+<span class="t-kwa">steps</span> = <span class="t-num">48</span>
+<span class="t-kwa">pings</span> = pd.<span class="t-fn">concat</span>([
+    pd.<span class="t-fn">DataFrame</span>({
+        <span class="t-str">&quot;vessel&quot;</span>: vessel,
+        <span class="t-str">&quot;lat&quot;</span>: lat0 + np.<span class="t-fn">cumsum</span>(rng.<span class="t-fn">normal</span>(<span class="t-num">0.002</span>, <span class="t-num">0.003</span>, steps)),
+        <span class="t-str">&quot;lon&quot;</span>: lon0 + np.<span class="t-fn">cumsum</span>(rng.<span class="t-fn">normal</span>(<span class="t-num">0.009</span>, <span class="t-num">0.004</span>, steps)),
+        <span class="t-str">&quot;timestamp&quot;</span>: pd.<span class="t-fn">date_range</span>(<span class="t-str">&quot;2026-08-01&quot;</span>, <span class="t-kwa">periods</span>=steps,
+                                   <span class="t-kwa">freq</span>=<span class="t-str">&quot;30min&quot;</span>, <span class="t-kwa">tz</span>=<span class="t-str">&quot;UTC&quot;</span>),
+    })
+    <span class="t-kw">for</span> vessel, (lat0, lon0) <span class="t-kw">in</span> [(<span class="t-str">&quot;Vessel A&quot;</span>, (<span class="t-num">36.00</span>, -<span class="t-num">5.85</span>)),
+                                 (<span class="t-str">&quot;Vessel B&quot;</span>, (<span class="t-num">35.94</span>, -<span class="t-num">5.78</span>)),
+                                 (<span class="t-str">&quot;Vessel C&quot;</span>, (<span class="t-num">36.08</span>, -<span class="t-num">5.90</span>))]
+], <span class="t-kwa">ignore_index</span>=<span class="t-kw">True</span>)
+
+<span class="t-com"># Two dwell zones, each with a risk rating and a lifetime.</span>
+<span class="t-kwa">zones</span> = pd.<span class="t-fn">DataFrame</span>({
+    <span class="t-str">&quot;zone&quot;</span>: [<span class="t-str">&quot;North&quot;</span>] * <span class="t-num">4</span> + [<span class="t-str">&quot;South&quot;</span>] * <span class="t-num">4</span>,
+    <span class="t-str">&quot;vertex&quot;</span>: [<span class="t-num">0</span>, <span class="t-num">1</span>, <span class="t-num">2</span>, <span class="t-num">3</span>] * <span class="t-num">2</span>,
+    <span class="t-str">&quot;lat&quot;</span>: [<span class="t-num">36.10</span>, <span class="t-num">36.10</span>, <span class="t-num">36.16</span>, <span class="t-num">36.16</span>, <span class="t-num">35.90</span>, <span class="t-num">35.90</span>, <span class="t-num">35.96</span>, <span class="t-num">35.96</span>],
+    <span class="t-str">&quot;lon&quot;</span>: [-<span class="t-num">5.55</span>, -<span class="t-num">5.40</span>, -<span class="t-num">5.40</span>, -<span class="t-num">5.55</span>, -<span class="t-num">5.55</span>, -<span class="t-num">5.40</span>, -<span class="t-num">5.40</span>, -<span class="t-num">5.55</span>],
+    <span class="t-str">&quot;risk&quot;</span>: [<span class="t-str">&quot;high&quot;</span>] * <span class="t-num">4</span> + [<span class="t-str">&quot;medium&quot;</span>] * <span class="t-num">4</span>,
+    <span class="t-str">&quot;times&quot;</span>: [[<span class="t-str">&quot;2026-08-01 02:00&quot;</span>, <span class="t-str">&quot;2026-08-01 14:00&quot;</span>]] * <span class="t-num">4</span>
+           + [[<span class="t-str">&quot;2026-08-01 08:00&quot;</span>, <span class="t-str">&quot;2026-08-01 22:00&quot;</span>]] * <span class="t-num">4</span>,
+})
+
+<span class="t-com"># 8,100 detections in four clusters of very different density, for the</span>
+<span class="t-com"># density kernels.</span>
+<span class="t-kwa">detections</span> = pd.<span class="t-fn">concat</span>([
+    pd.<span class="t-fn">DataFrame</span>({<span class="t-str">&quot;lat&quot;</span>: clat + rng.<span class="t-fn">normal</span>(<span class="t-num">0</span>, s, k),
+                  <span class="t-str">&quot;lon&quot;</span>: clon + rng.<span class="t-fn">normal</span>(<span class="t-num">0</span>, s * <span class="t-num">1.6</span>, k),
+                  <span class="t-str">&quot;weight&quot;</span>: rng.<span class="t-fn">gamma</span>(<span class="t-num">2</span>, <span class="t-num">2</span>, k)})
+    <span class="t-kw">for</span> k, clat, clon, s <span class="t-kw">in</span> [(<span class="t-num">4500</span>, <span class="t-num">36.05</span>, -<span class="t-num">5.45</span>, <span class="t-num">0.018</span>),
+                             (<span class="t-num">2000</span>, <span class="t-num">36.18</span>, -<span class="t-num">5.28</span>, <span class="t-num">0.024</span>),
+                             ( <span class="t-num">700</span>, <span class="t-num">35.92</span>, -<span class="t-num">5.62</span>, <span class="t-num">0.030</span>),
+                             ( <span class="t-num">900</span>, <span class="t-num">36.05</span>, -<span class="t-num">5.45</span>, <span class="t-num">0.060</span>)]
+], <span class="t-kwa">ignore_index</span>=<span class="t-kw">True</span>)</code></pre>
+      </div>
+    </details>
+
+    <div class="gallery">
+
+      <article class="card">
+        <header>
+          <h3>Points, in two lines <span class="api">add_circle_markers</span></h3>
+          <p>No column mapping, no projection argument, no view to set. <code>lat</code>/<code>lon</code> are found by name and the map fits itself to whatever you add.</p>
+        </header>
+        <div class="map" data-demo="points"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Sensors&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/01_quickstart.ipynb">examples/01_quickstart.ipynb</a>
+          <span>38.1 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Colour from a column <span class="api">color_col</span></h3>
+          <p>One keyword puts the data through a colormap, and the legend derives itself from the same fact. The colours are computed in Python and travel as a binary buffer, not as per-feature JSON.</p>
+        </header>
+        <div class="map" data-demo="color"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;reading&quot;</span>,
+                     <span class="t-kwa">colormap</span>=<span class="t-str">&quot;viridis&quot;</span>)
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Reading (ppm)&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/03_styling.ipynb">examples/03_styling.ipynb</a>
+          <span>40.8 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Size from a column <span class="api">radius_col</span></h3>
+          <p>Radii are area-proportional -- the radius grows with the square root -- so a doubled value looks doubled instead of quadrupled.</p>
+        </header>
+        <div class="map" data-demo="size"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Sensors&quot;</span>,
+                     <span class="t-kwa">color_col</span>=<span class="t-str">&quot;reading&quot;</span>, <span class="t-kwa">radius_col</span>=<span class="t-str">&quot;volume&quot;</span>,
+                     <span class="t-kwa">radius_range</span>=(<span class="t-num">3</span>, <span class="t-num">18</span>))
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Volume&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/03_styling.ipynb">examples/03_styling.ipynb</a>
+          <span>43.2 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Categories keep their colours <span class="api">colormap={...}</span></h3>
+          <p>A non-numeric column takes categorical colours automatically; a <code>{value: colour}</code> mapping pins them, and the legend reads in the mapping's order.</p>
+        </header>
+        <div class="map" data-demo="categories"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Status&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;status&quot;</span>,
+                     <span class="t-kwa">colormap</span>={<span class="t-str">&quot;Active&quot;</span>: <span class="t-str">&quot;#59a14f&quot;</span>, <span class="t-str">&quot;Idle&quot;</span>: <span class="t-str">&quot;#4e79a7&quot;</span>,
+                               <span class="t-str">&quot;Fault&quot;</span>: <span class="t-str">&quot;#e15759&quot;</span>})
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Sensor status&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/03_styling.ipynb">examples/03_styling.ipynb</a>
+          <span>40.8 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Bands instead of a ramp <span class="api">color_bins</span></h3>
+          <p>Bin edges turn a continuous ramp into discrete classes, and the legend switches from a gradient to labelled swatches to match.</p>
+        </header>
+        <div class="map" data-demo="bins"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Banded&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;reading&quot;</span>,
+                     <span class="t-kwa">color_bins</span>=[<span class="t-num">10</span>, <span class="t-num">20</span>, <span class="t-num">30</span>], <span class="t-kwa">colormap</span>=<span class="t-str">&quot;turbo&quot;</span>)
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Reading band&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/03_styling.ipynb">examples/03_styling.ipynb</a>
+          <span>40.7 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>A sidebar built from your columns <span class="api">layer_group</span></h3>
+          <p>A list of column names becomes a folder tree: region, then status, then a layer per station. Toggling a folder costs about a hundred bytes on the wire, at any scale.</p>
+        </header>
+        <div class="map" data-demo="sidebar"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;station&quot;</span>,
+                     <span class="t-kwa">layer_group</span>=[<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-str">&quot;region&quot;</span>, <span class="t-str">&quot;status&quot;</span>],
+                     <span class="t-kwa">color_col</span>=<span class="t-str">&quot;status&quot;</span>)
+m.<span class="t-fn">configure_group</span>(<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-kwa">collapsed</span>=<span class="t-kw">False</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/04_sidebar_groups.ipynb">examples/04_sidebar_groups.ipynb</a>
+          <span>61.2 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>A legend you can add to <span class="api">legend_add</span></h3>
+          <p>The derived legend is the starting point, not the ceiling: manual rows sit alongside it, grouped, in any of the four corners.</p>
+        </header>
+        <div class="map" data-demo="legend"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;reading&quot;</span>)
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Harbour key&quot;</span>, <span class="t-kwa">position</span>=<span class="t-str">&quot;bottom-right&quot;</span>)
+m.<span class="t-fn">legend_add</span>(<span class="t-str">&quot;Restricted zone&quot;</span>, <span class="t-kwa">shape</span>=<span class="t-str">&quot;polygon&quot;</span>, <span class="t-kwa">color</span>=<span class="t-str">&quot;#e15759&quot;</span>,
+             <span class="t-kwa">fill_color</span>=<span class="t-str">&quot;#e1575944&quot;</span>, <span class="t-kwa">group</span>=<span class="t-str">&quot;Areas&quot;</span>)
+m.<span class="t-fn">legend_add</span>(<span class="t-str">&quot;Confidence&quot;</span>, <span class="t-kwa">categories</span>=[<span class="t-str">&quot;confirmed&quot;</span>, <span class="t-str">&quot;probable&quot;</span>, <span class="t-str">&quot;ruled out&quot;</span>])</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/11_legend.ipynb">examples/11_legend.ipynb</a>
+          <span>41.1 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>A time slider over the same points <span class="api">make_time_layer</span></h3>
+          <p>Press play: the pings sweep along their routes, which stay put because only the point layer is timed. Point time filtering runs on the GPU -- the per-point timestamps upload once as vertex attributes and each tick is a single uniform, so scrubbing re-sends nothing.</p>
+        </header>
+        <div class="map" data-demo="time"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_line</span>(pings, <span class="t-kwa">line_id_col</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">order_col</span>=<span class="t-str">&quot;timestamp&quot;</span>,
+           <span class="t-kwa">name</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">layer_group</span>=<span class="t-str">&quot;Routes&quot;</span>, <span class="t-kwa">color</span>=<span class="t-str">&quot;#b0b7be&quot;</span>, <span class="t-kwa">weight</span>=<span class="t-num">2</span>)
+m.<span class="t-fn">add_circle_markers</span>(pings, <span class="t-kwa">name</span>=<span class="t-str">&quot;Pings&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">radius</span>=<span class="t-num">7</span>)
+m.<span class="t-fn">make_time_layer</span>(<span class="t-str">&quot;Pings&quot;</span>, <span class="t-kwa">duration</span>=<span class="t-str">&quot;PT6H&quot;</span>, <span class="t-kwa">fade</span>=<span class="t-kw">True</span>)
+m.<span class="t-fn">configure_time</span>(<span class="t-kwa">period</span>=<span class="t-str">&quot;PT1H&quot;</span>, <span class="t-kwa">speed</span>=<span class="t-num">2</span>, <span class="t-kwa">loop</span>=<span class="t-kw">True</span>, <span class="t-kwa">position</span>=<span class="t-str">&quot;bottom-center&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/06_time.ipynb">examples/06_time.ipynb</a>
+          <span>19.4 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Long-format rows become lines <span class="api">add_line</span></h3>
+          <p>An id column and an order column are enough -- no grouping, no geometry construction. WKT, GeoJSON and GeoPandas work the same way.</p>
+        </header>
+        <div class="map" data-demo="tracks"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_line</span>(pings, <span class="t-kwa">line_id_col</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">order_col</span>=<span class="t-str">&quot;timestamp&quot;</span>,
+           <span class="t-kwa">name</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">weight</span>=<span class="t-num">3</span>)
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Tracks&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/02_data_sources.ipynb">examples/02_data_sources.ipynb</a>
+          <span>8.1 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Areas, labelled and popped up <span class="api">add_polygon</span></h3>
+          <p>Interior holes and MultiPolygons render correctly. <code>label=</code> takes a column name and chips every shape with its own value.</p>
+        </header>
+        <div class="map" data-demo="polygons"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_polygon</span>(zones, <span class="t-kwa">shape_id_col</span>=<span class="t-str">&quot;zone&quot;</span>, <span class="t-kwa">order_col</span>=<span class="t-str">&quot;vertex&quot;</span>,
+              <span class="t-kwa">name</span>=<span class="t-str">&quot;zone&quot;</span>, <span class="t-kwa">label</span>=<span class="t-str">&quot;zone&quot;</span>, <span class="t-kwa">color</span>=<span class="t-str">&quot;crimson&quot;</span>,
+              <span class="t-kwa">fill_opacity</span>=<span class="t-num">0.25</span>, <span class="t-kwa">popup_fields</span>=[<span class="t-str">&quot;risk&quot;</span>], <span class="t-kwa">popup_names</span>=[<span class="t-str">&quot;Risk&quot;</span>])
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-kwa">radius</span>=<span class="t-num">4</span>, <span class="t-kwa">color</span>=<span class="t-str">&quot;#4e79a7&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/02_data_sources.ipynb">examples/02_data_sources.ipynb</a>
+          <span>39.7 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>One mixed dataset, one call <span class="api">add_collection</span></h3>
+          <p>Points, lines and areas in the same frame: swiftmap makes one layer per geometry kind and merges them under a single sidebar entry.</p>
+        </header>
+        <div class="map" data-demo="collection"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">survey</span> = pd.<span class="t-fn">DataFrame</span>({
+    <span class="t-str">&quot;geometry&quot;</span>: [<span class="t-str">&quot;POINT (-5.36 36.13)&quot;</span>,
+                 <span class="t-str">&quot;LINESTRING (-5.44 36.05, -5.36 36.09, -5.30 36.14)&quot;</span>,
+                 <span class="t-str">&quot;POLYGON ((-5.42 36.00, -5.32 36.00, -5.32 36.06, &quot;</span>
+                 <span class="t-str">&quot;-5.42 36.06, -5.42 36.00))&quot;</span>],
+    <span class="t-str">&quot;label&quot;</span>: [<span class="t-str">&quot;Buoy&quot;</span>, <span class="t-str">&quot;Route&quot;</span>, <span class="t-str">&quot;Zone&quot;</span>],
+})
+<span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_collection</span>(survey, <span class="t-kwa">name</span>=<span class="t-str">&quot;label&quot;</span>, <span class="t-kwa">layer_group</span>=<span class="t-str">&quot;Survey&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/02_data_sources.ipynb">examples/02_data_sources.ipynb</a>
+          <span>2.9 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Density: the screen-space kernel <span class="api">add_heatmap</span></h3>
+          <p>The classic heat blob, recomputed per frame on the GPU. Zoom in and the field re-normalises to what is on screen.</p>
+        </header>
+        <div class="map" data-demo="density-screen"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_heatmap</span>(detections, <span class="t-kwa">name</span>=<span class="t-str">&quot;Density&quot;</span>, <span class="t-kwa">radius</span>=<span class="t-num">40</span>)
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Detections&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/14_density.ipynb">examples/14_density.ipynb</a>
+          <span>282.3 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Density: real H3 cells <span class="api">cells=&quot;h3&quot;</span></h3>
+          <p>The same points binned into H3 hexagons and filled by their sums -- cells that carry their own ids, so a click tells you which cell and how many.</p>
+        </header>
+        <div class="map" data-demo="density-h3"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_heatmap</span>(detections, <span class="t-kwa">cells</span>=<span class="t-str">&quot;h3&quot;</span>, <span class="t-kwa">resolution</span>=<span class="t-num">6</span>,
+              <span class="t-kwa">weight_col</span>=<span class="t-str">&quot;weight&quot;</span>, <span class="t-kwa">name</span>=<span class="t-str">&quot;Hex density&quot;</span>)
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Weight per cell&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/14_density.ipynb">examples/14_density.ipynb</a>
+          <span>10.2 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Density: geohash cells <span class="api">cells=&quot;geohash&quot;</span></h3>
+          <p>The other cell family, same kernel. Rectangles instead of hexagons, and <code>base=</code> picks between geohash-32 and Niemeyer-16.</p>
+        </header>
+        <div class="map" data-demo="density-geohash"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_heatmap</span>(detections, <span class="t-kwa">cells</span>=<span class="t-str">&quot;geohash&quot;</span>, <span class="t-kwa">length</span>=<span class="t-num">5</span>, <span class="t-kwa">base</span>=<span class="t-num">32</span>,
+              <span class="t-kwa">name</span>=<span class="t-str">&quot;Geohash density&quot;</span>)
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Detections per cell&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/14_density.ipynb">examples/14_density.ipynb</a>
+          <span>11.4 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Draw an area of interest <span class="api">configure_draw</span></h3>
+          <p>Leaflet-Geoman's toolbar, wired to a synced trait. In a notebook or a Shiny app <code>m.drawings</code> updates in Python as you draw; here there is no Python behind the page, so the shapes stay put.</p>
+        </header>
+        <div class="map" data-demo="draw"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;reading&quot;</span>)
+m.<span class="t-fn">configure_draw</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">tools</span>=[<span class="t-str">&quot;rectangle&quot;</span>, <span class="t-str">&quot;polygon&quot;</span>, <span class="t-str">&quot;circle&quot;</span>])
+m.<span class="t-kwa">drawings</span> = [{<span class="t-str">&quot;type&quot;</span>: <span class="t-str">&quot;Feature&quot;</span>, <span class="t-str">&quot;properties&quot;</span>: {<span class="t-str">&quot;name&quot;</span>: <span class="t-str">&quot;Patrol box&quot;</span>},
+               <span class="t-str">&quot;geometry&quot;</span>: {<span class="t-str">&quot;type&quot;</span>: <span class="t-str">&quot;Polygon&quot;</span>, <span class="t-str">&quot;coordinates&quot;</span>: [[
+                   [-<span class="t-num">5.55</span>, <span class="t-num">35.98</span>], [-<span class="t-num">5.35</span>, <span class="t-num">35.98</span>], [-<span class="t-num">5.35</span>, <span class="t-num">36.08</span>],
+                   [-<span class="t-num">5.55</span>, <span class="t-num">36.08</span>], [-<span class="t-num">5.55</span>, <span class="t-num">35.98</span>]]]}}]</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/12_draw_aoi.ipynb">examples/12_draw_aoi.ipynb</a>
+          <span>40.9 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Permanent labels <span class="api">label=</span></h3>
+          <p>A column name labels each feature from its own value. Labels are DOM elements, so they are for sites and zones -- the point builders warn past a thousand.</p>
+        </header>
+        <div class="map" data-demo="labels"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_markers</span>(sensors.<span class="t-fn">head</span>(<span class="t-num">12</span>), <span class="t-kwa">name</span>=<span class="t-str">&quot;Sites&quot;</span>, <span class="t-kwa">label</span>=<span class="t-str">&quot;site&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/07_popups_tooltips.ipynb">examples/07_popups_tooltips.ipynb</a>
+          <span>2.8 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Popups and tooltips <span class="api">popup_fields</span></h3>
+          <p>Click a point for the popup, hover for the tooltip. Fields choose the columns, names relabel them, and every value is HTML-escaped.</p>
+        </header>
+        <div class="map" data-demo="popups"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;reading&quot;</span>, <span class="t-kwa">radius</span>=<span class="t-num">7</span>,
+                     <span class="t-kwa">popup_fields</span>=[<span class="t-str">&quot;site&quot;</span>, <span class="t-str">&quot;reading&quot;</span>, <span class="t-str">&quot;volume&quot;</span>, <span class="t-str">&quot;status&quot;</span>],
+                     <span class="t-kwa">popup_names</span>=[<span class="t-str">&quot;Site&quot;</span>, <span class="t-str">&quot;Reading (ppm)&quot;</span>, <span class="t-str">&quot;Volume&quot;</span>, <span class="t-str">&quot;Status&quot;</span>],
+                     <span class="t-kwa">tooltip_fields</span>=[<span class="t-str">&quot;site&quot;</span>])</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/07_popups_tooltips.ipynb">examples/07_popups_tooltips.ipynb</a>
+          <span>40.9 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>~880 basemaps, callable by name <span class="api">add_basemap</span></h3>
+          <p>Any xyzservices catalogue name, a WMS endpoint, or a raw <code>{z}/{x}/{y}</code> template. Open the sidebar and switch between them.</p>
+        </header>
+        <div class="map" data-demo="basemaps"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_basemap</span>(<span class="t-str">&quot;Esri.WorldImagery&quot;</span>)
+m.<span class="t-fn">add_basemap</span>(<span class="t-str">&quot;CartoDB.DarkMatter&quot;</span>)
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-kwa">color</span>=<span class="t-str">&quot;#ffcc00&quot;</span>, <span class="t-kwa">radius</span>=<span class="t-num">5</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/04_sidebar_groups.ipynb">examples/04_sidebar_groups.ipynb</a>
+          <span>38.9 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Point at one thing <span class="api">select / highlight</span></h3>
+          <p>Both are declarative and total: each call states the whole selection, so switching needs no undoing and <code>select(None)</code> puts everything back. The highlight sits above the layer's own styling, not instead of it.</p>
+        </header>
+        <div class="map" data-demo="highlight"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_polygon</span>(zones, <span class="t-kwa">shape_id_col</span>=<span class="t-str">&quot;zone&quot;</span>, <span class="t-kwa">order_col</span>=<span class="t-str">&quot;vertex&quot;</span>,
+              <span class="t-kwa">name</span>=<span class="t-str">&quot;zone&quot;</span>, <span class="t-kwa">layer_group</span>=<span class="t-str">&quot;Dwells&quot;</span>, <span class="t-kwa">fill_opacity</span>=<span class="t-num">0.2</span>)
+m.<span class="t-fn">add_line</span>(pings, <span class="t-kwa">line_id_col</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">order_col</span>=<span class="t-str">&quot;timestamp&quot;</span>,
+           <span class="t-kwa">name</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">layer_group</span>=<span class="t-str">&quot;Vessels&quot;</span>, <span class="t-kwa">weight</span>=<span class="t-num">3</span>)
+m.<span class="t-fn">select</span>(<span class="t-str">&quot;North&quot;</span>, <span class="t-kwa">scope</span>=<span class="t-str">&quot;Dwells&quot;</span>)       <span class="t-com"># hides South, leaves Vessels alone</span>
+m.<span class="t-fn">highlight</span>(<span class="t-str">&quot;Vessel A&quot;</span>, <span class="t-kwa">color</span>=<span class="t-str">&quot;#ffcc00&quot;</span>, <span class="t-kwa">lines</span>={<span class="t-str">&quot;weight&quot;</span>: <span class="t-num">6</span>})</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/05_layer_control.ipynb">examples/05_layer_control.ipynb</a>
+          <span>8.9 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Georeferenced rasters <span class="api">add_imagery</span></h3>
+          <p>Anything GDAL reads, warped into the map's CRS at build time; a single band goes through the house colormaps. The source here is UTM 30N, reprojected on the way in.</p>
+        </header>
+        <div class="map" data-demo="imagery"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_imagery</span>(<span class="t-str">&quot;demo_dem.tif&quot;</span>, <span class="t-kwa">name</span>=<span class="t-str">&quot;Synthetic DEM&quot;</span>,
+              <span class="t-kwa">colormap</span>=<span class="t-str">&quot;turbo&quot;</span>, <span class="t-kwa">vmin</span>=<span class="t-num">0</span>, <span class="t-kwa">vmax</span>=<span class="t-num">1500</span>, <span class="t-kwa">opacity</span>=<span class="t-num">0.85</span>)
+m.<span class="t-fn">add_circle_markers</span>(sensors.<span class="t-fn">head</span>(<span class="t-num">80</span>), <span class="t-kwa">name</span>=<span class="t-str">&quot;Sites&quot;</span>,
+                     <span class="t-kwa">color_col</span>=<span class="t-str">&quot;reading&quot;</span>, <span class="t-kwa">radius</span>=<span class="t-num">5</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/13_imagery.ipynb">examples/13_imagery.ipynb</a>
+          <span>81.3 KB on the wire</span>
+        </footer>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="stacks">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">The same core, four ways</div>
+      <h2>Applications, not features</h2>
+      <p>
+        One rendering core serves notebooks, Shiny, React and Streamlit, with map state
+        syncing both ways wherever there is a Python side to sync with. These are runnable
+        apps rather than embeds, because &ldquo;what does a production app look like&rdquo; is a
+        different question from &ldquo;what can it do&rdquo;.
+      </p>
+    </div>
+    <div class="apps">
+
+        <div class="app">
+          <h3><span class="dot"></span>Shiny for Python</h3>
+          <p>Four runnable apps, from a basic map to a live feed and a draw-an-AOI filter. Map state syncs both ways: pan the map and Python sees the viewport; filter in Python and the map follows.</p>
+          <div class="files">examples/shiny/</div>
+          <a class="go" href="https://github.com/Rkleisley/swiftmap/tree/main/examples/shiny">open on GitHub &rarr;</a>
+        </div>
+
+        <div class="app">
+          <h3><span class="dot"></span>React</h3>
+          <p>The core wrapped as a component over the npm package. Leaflet, glify and Geoman stay peer dependencies, so your bundler owns them and nothing is loaded twice.</p>
+          <div class="files">examples/react/</div>
+          <a class="go" href="https://github.com/Rkleisley/swiftmap/tree/main/examples/react">open on GitHub &rarr;</a>
+        </div>
+
+        <div class="app">
+          <h3><span class="dot"></span>Streamlit</h3>
+          <p>A bidirectional component that ships inside the wheel -- nothing is fetched at view time, which is the one stack that works with no network at all.</p>
+          <div class="files">examples/streamlit/</div>
+          <a class="go" href="https://github.com/Rkleisley/swiftmap/tree/main/examples/streamlit">open on GitHub &rarr;</a>
+        </div>
+
+        <div class="app">
+          <h3><span class="dot"></span>Notebooks</h3>
+          <p>Fourteen notebooks that are the long-form version of the gallery above, and the smoke test that runs on every change. Anywhere anywidget runs: JupyterLab, Notebook, VS Code.</p>
+          <div class="files">examples/*.ipynb</div>
+          <a class="go" href="https://github.com/Rkleisley/swiftmap/tree/main/examples">open on GitHub &rarr;</a>
+        </div>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">Why this exists</div>
+      <h2>The gap the other libraries leave open</h2>
+      <p>
+        folium and ipyleaflet have the ergonomics but hit a ceiling in the tens of thousands
+        of features and offer flat layer controls. deck.gl scales, but it is a different
+        mental model with a thin Python layer. swiftmap keeps the Leaflet model and adds the
+        scale.
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th></th><th>folium / ipyleaflet</th><th>deck.gl (pydeck)</th><th class="me-col">swiftmap</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Points before it stops being usable</td><td>tens of thousands</td><td>millions</td>
+              <td class="me-col me">millions &mdash; drag the map above</td></tr>
+          <tr><td>Mental model</td><td>Leaflet</td><td>its own layer/view stack</td>
+              <td class="me-col me">Leaflet</td></tr>
+          <tr><td>Layer control</td><td>flat list</td><td>build it yourself</td>
+              <td class="me-col me">hierarchy from your columns</td></tr>
+          <tr><td>Coordinates on the wire</td><td>JSON per feature</td><td>typed arrays</td>
+              <td class="me-col me">binary float64 buffers</td></tr>
+          <tr><td>Cost of a layer toggle</td><td>re-render</td><td>re-render</td>
+              <td class="me-col me">a ~100-byte patch, at any scale</td></tr>
+          <tr><td>Python &harr; map sync</td><td>one way</td><td>one way</td>
+              <td class="me-col me">bidirectional (viewport, clicks, draws, time)</td></tr>
+          <tr><td>Time playback</td><td>plugin, DOM-based</td><td>manual</td>
+              <td class="me-col me">built in, filtered on the GPU</td></tr>
+          <tr><td>Offline / air-gapped</td><td>CDN at view time</td><td>CDN at view time</td>
+              <td class="me-col me">everything inside the wheel</td></tr>
+          <tr><td>Static share</td><td>one HTML file</td><td>one HTML file</td>
+              <td class="me-col me">one HTML file, sidebar and time included</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="sec-head" style="margin-top:56px">
+      <h2>Install it</h2>
+    </div>
+    <div class="code" style="border:1px solid var(--line);border-radius:12px;max-width:520px">
+      <button class="copy" type="button">copy</button>
+      <pre><code>pip install swiftmap</code></pre>
+    </div>
+
+    <!-- Two rows, deliberately unalike. Run together as one sentence, the
+         optional half reads as part of the required list at a glance. -->
+    <dl class="deps">
+      <div class="dep-row">
+        <dt>Pulls in</dt>
+        <dd><code>anywidget</code> <code>numpy</code> <code>xyzservices</code>
+            <span class="aside">and nothing else &mdash; no compiled bits, no Node</span></dd>
+      </div>
+      <div class="dep-row">
+        <dt>Never installs</dt>
+        <dd class="muted">pandas, polars, geopandas, geostructures &mdash; every one is
+            supported as a data source, and swiftmap reads whichever you already
+            have. None is a dependency.</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span><a href="https://github.com/Rkleisley/swiftmap">github.com/Rkleisley/swiftmap</a></span>
+    <span><a href="https://github.com/Rkleisley/swiftmap/blob/main/README.md">Documentation</a></span>
+    <span><a href="https://pypi.org/project/swiftmap/">PyPI</a></span>
+    <span class="built">generated 2026-08-26 &middot; scripts/build_demos.py</span>
+  </div>
+</footer>
+
+<script type="module" src="assets/gallery.js"></script>
+</body>
+</html>

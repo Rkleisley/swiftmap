@@ -1,0 +1,352 @@
+/* The demo site's own chrome. The maps bring their own stylesheet
+   (assets/swiftmap.css, a copy of the widget's); nothing here touches
+   .leaflet-* or .swiftmap-*, so the two cannot fight.
+
+   Dark page, light maps: every card is a real map wearing the widget's own
+   light chrome, and the contrast is the point -- the maps read as the
+   content and the page reads as the frame around them. */
+
+:root {
+    --bg:        #0a0d12;
+    --bg-raised: #111721;
+    --bg-sunken: #070a0e;
+    --line:      #1e2733;
+    --line-soft: #161d27;
+    --ink:       #e6edf3;
+    --ink-dim:   #97a3b3;
+    --ink-faint: #67717f;
+    --accent:    #6fd3ff;
+    --accent-dk: #31708f;
+    --warm:      #ffb454;
+    --good:      #7ee787;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------------------------------------------------------------- header */
+
+.topbar {
+    position: sticky; top: 0; z-index: 1100;
+    background: rgba(10, 13, 18, .94);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line-soft);
+}
+.topbar .wrap {
+    display: flex; align-items: center; gap: 20px;
+    height: 58px;
+}
+.brand {
+    font-family: var(--mono); font-size: 17px; font-weight: 600;
+    color: var(--ink); letter-spacing: -.01em;
+}
+.brand span { color: var(--accent); }
+.topbar nav { margin-left: auto; display: flex; gap: 22px; font-size: 14px; }
+.topbar nav a { color: var(--ink-dim); }
+.topbar nav a:hover { color: var(--ink); text-decoration: none; }
+.pill {
+    font-family: var(--mono); font-size: 12px;
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 10px; color: var(--ink-faint);
+}
+
+/* ------------------------------------------------------------------ hero */
+
+.hero { padding: 72px 0 0; }
+.hero h1 {
+    font-size: clamp(34px, 5.2vw, 60px);
+    line-height: 1.05; letter-spacing: -.03em;
+    margin: 0 0 18px; font-weight: 700; max-width: 16ch;
+}
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero .lede {
+    font-size: clamp(17px, 2vw, 20px); color: var(--ink-dim);
+    max-width: 62ch; margin: 0 0 30px;
+}
+.hero .lede strong { color: var(--ink); font-weight: 600; }
+
+.stage {
+    position: relative; z-index: 0;   /* contain Leaflet's panes (see .topbar) */
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--bg-sunken);
+    box-shadow: 0 24px 60px -20px rgba(0,0,0,.9);
+}
+.stage .map { position: relative; height: 560px; width: 100%; }
+/* One mount owns one of these; see `mount` in gallery.js. */
+.map > .mount { position: absolute; inset: 0; }
+@media (max-width: 760px) { .stage .map { height: 400px; } }
+
+/* The ladder: the control strip under the hero map. */
+.ladder {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-raised);
+}
+.ladder .label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-faint); margin-right: 4px;
+}
+.tier {
+    font-family: var(--mono); font-size: 13px;
+    background: #182130; color: var(--ink-dim);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 13px; cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+}
+.tier:hover:not(:disabled) { background: #1e2a3c; color: var(--ink); }
+.tier[aria-pressed="true"] {
+    background: var(--accent-dk); border-color: var(--accent);
+    color: #fff;
+}
+.tier:disabled { opacity: .45; cursor: progress; }
+.tier .wt { display: block; font-size: 10px; color: var(--ink-faint); letter-spacing: .04em; }
+.tier[aria-pressed="true"] .wt { color: #cfeaf7; }
+
+.readout { margin-left: auto; display: flex; gap: 22px; align-items: center; }
+.readout .stat { text-align: right; }
+.readout .stat b {
+    display: block; font-family: var(--mono); font-size: 17px;
+    color: var(--ink); font-weight: 600; line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
+.readout .stat span {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-faint);
+}
+.readout .stat b.hot { color: var(--good); }
+.readout .stat b.warn { color: var(--warm); }
+@media (max-width: 900px) { .readout { margin-left: 0; width: 100%; justify-content: space-between; } }
+
+/* The loading veil over the hero map while a tier's buffers arrive. */
+.veil {
+    position: absolute; inset: 0; z-index: 500;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; background: rgba(7, 10, 14, .93);
+    font-family: var(--mono); font-size: 13px; color: var(--ink-dim);
+    transition: opacity .25s;
+}
+.veil[hidden] { display: none; }
+.veil .bar {
+    width: min(340px, 60%); height: 3px; border-radius: 2px;
+    background: #1c2532; overflow: hidden;
+}
+.veil .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s linear; }
+
+.hero-note {
+    margin: 16px 0 0; font-size: 14px; color: var(--ink-faint);
+    display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+}
+.hero-note code {
+    font-family: var(--mono); font-size: 13px; color: var(--ink-dim);
+    background: var(--bg-raised); border: 1px solid var(--line-soft);
+    border-radius: 5px; padding: 1px 6px;
+}
+
+/* --------------------------------------------------------------- section */
+
+section { padding: 84px 0 0; }
+.sec-head { max-width: 70ch; margin-bottom: 34px; }
+.sec-head .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 10px;
+}
+.sec-head h2 {
+    font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -.02em;
+    line-height: 1.15; margin: 0 0 14px; font-weight: 650;
+}
+.sec-head p { color: var(--ink-dim); margin: 0; font-size: 17px; }
+
+/* ------------------------------------------------------------ data panel */
+
+details.data-panel {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--bg-raised); margin-bottom: 30px;
+}
+details.data-panel > summary {
+    cursor: pointer; padding: 14px 18px; list-style: none;
+    font-size: 14px; color: var(--ink-dim);
+    display: flex; align-items: center; gap: 10px;
+}
+details.data-panel > summary::-webkit-details-marker { display: none; }
+details.data-panel > summary::before {
+    content: ">"; font-family: var(--mono); color: var(--accent); font-size: 12px;
+    transition: transform .15s; display: inline-block;
+}
+details.data-panel[open] > summary::before { transform: rotate(90deg); }
+details.data-panel > summary b { color: var(--ink); font-weight: 600; }
+details.data-panel .code { border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; }
+
+/* ----------------------------------------------------------------- cards */
+
+.gallery {
+    display: grid; gap: 26px;
+    grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+}
+@media (max-width: 680px) { .gallery { grid-template-columns: 1fr; } }
+
+.card {
+    position: relative; z-index: 0;   /* contain Leaflet's panes (see .topbar) */
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--bg-raised); overflow: hidden;
+    display: flex; flex-direction: column;
+}
+.card > header { padding: 16px 18px 13px; }
+@media (min-width: 681px) { .card > header { min-height: 116px; } }
+.card > header h3 {
+    margin: 0 0 5px; font-size: 16px; font-weight: 600; letter-spacing: -.01em;
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+}
+.card > header h3 .api {
+    font-family: var(--mono); font-size: 11px; font-weight: 400;
+    color: var(--accent); background: rgba(111, 211, 255, .09);
+    border: 1px solid rgba(111, 211, 255, .18);
+    border-radius: 5px; padding: 1px 7px;
+}
+.card > header p { margin: 0; font-size: 14px; color: var(--ink-dim); line-height: 1.5; }
+
+/* The live map. Mounted when it scrolls into view (see gallery.js) --
+   a browser caps concurrent WebGL contexts well below one per card. */
+.card .map {
+    height: 420px; width: 100%;
+    background: var(--bg-sunken);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    position: relative;
+}
+.card .map[data-state="idle"]::after,
+.card .map[data-state="loading"]::after,
+.card .map[data-state="error"]::after {
+    content: attr(data-hint);
+    position: absolute; inset: 0; z-index: 2; display: flex;
+    align-items: center; justify-content: center; padding: 20px; text-align: center;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-faint);
+}
+.card .map[data-state="error"]::after { color: var(--warm); }
+
+/* ------------------------------------------------------------------ code */
+
+.code { position: relative; background: var(--bg-sunken); }
+.code pre {
+    margin: 0; padding: 15px 18px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+    color: #c6d3e1; tab-size: 4;
+}
+.code pre::-webkit-scrollbar { height: 8px; }
+.code pre::-webkit-scrollbar-thumb { background: #223040; border-radius: 4px; }
+
+/* Tokens, painted by the generator with Python's own tokenizer. */
+.t-kw  { color: #ff9ecb; }
+.t-str { color: #a5e8a0; }
+.t-num { color: #ffcb8b; }
+.t-com { color: #5b6675; font-style: italic; }
+.t-fn  { color: #82cfff; }
+.t-kwa { color: #d3b0ff; }
+
+.copy {
+    position: absolute; top: 9px; right: 9px;
+    font-family: var(--mono); font-size: 11px;
+    background: #182130; color: var(--ink-faint);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 4px 9px; cursor: pointer; opacity: 0;
+    transition: opacity .13s, color .13s;
+}
+.code:hover .copy, .copy:focus { opacity: 1; }
+.copy:hover { color: var(--ink); }
+.copy.done { color: var(--good); border-color: var(--good); opacity: 1; }
+
+.card > footer {
+    padding: 10px 18px; border-top: 1px solid var(--line-soft);
+    font-size: 12.5px; color: var(--ink-faint);
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.card > footer a { color: var(--ink-dim); }
+.card > footer a:hover { color: var(--accent); text-decoration: none; }
+
+/* ------------------------------------------------------------------ apps */
+
+.apps { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.app {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--bg-raised); padding: 22px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.app h3 { margin: 0; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+.app .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.app p { margin: 0; font-size: 14px; color: var(--ink-dim); flex: 1; }
+.app .files { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+.app a.go { font-size: 13px; font-family: var(--mono); }
+
+/* --------------------------------------------------------------- compare */
+
+.compare {
+    width: 100%; border-collapse: collapse; font-size: 14.5px;
+    border: 1px solid var(--line);
+}
+.compare th, .compare td { padding: 13px 16px; text-align: left; border-bottom: 1px solid var(--line-soft); }
+.compare thead th {
+    background: var(--bg-raised); font-size: 12px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint);
+}
+.compare tbody tr:last-child td { border-bottom: 0; }
+.compare td:first-child { color: var(--ink-dim); }
+.compare .me { color: var(--ink); font-weight: 600; }
+.compare .me-col { background: rgba(111, 211, 255, .045); }
+.table-scroll { overflow-x: auto; border-radius: 12px; }
+
+/* ------------------------------------------------------------------ deps */
+
+/* The required/optional split has to be visible before it is read: run as one
+   sentence, "and none is a dependency" arrives too late and the optional
+   packages look required. Label column, two different treatments. */
+.deps { margin: 26px 0 0; max-width: 760px; }
+.dep-row {
+    display: grid; grid-template-columns: 128px 1fr; gap: 18px;
+    padding: 13px 0; border-top: 1px solid var(--line-soft);
+    align-items: baseline;
+}
+.dep-row dt {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-faint);
+}
+.dep-row dd { margin: 0; font-size: 14.5px; }
+.dep-row dd code {
+    font-family: var(--mono); font-size: 13px; color: var(--ink);
+    background: #182130; border: 1px solid var(--line);
+    border-radius: 6px; padding: 3px 9px; margin-right: 5px;
+    display: inline-block;
+}
+.dep-row dd .aside { color: var(--ink-faint); font-size: 13.5px; }
+.dep-row dd.muted { color: var(--ink-dim); line-height: 1.55; }
+@media (max-width: 620px) {
+    .dep-row { grid-template-columns: 1fr; gap: 6px; }
+}
+
+/* ---------------------------------------------------------------- footer */
+
+footer.site {
+    margin-top: 96px; padding: 34px 0 60px;
+    border-top: 1px solid var(--line-soft);
+    color: var(--ink-faint); font-size: 13.5px;
+}
+footer.site .wrap { display: flex; flex-wrap: wrap; gap: 18px; align-items: baseline; }
+footer.site .built { margin-left: auto; font-family: var(--mono); font-size: 12px; }

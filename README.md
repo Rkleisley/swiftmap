@@ -22,6 +22,8 @@ static HTML file that opens with no backend at all — see
 that ships in the wheel, so nothing is fetched when a map is viewed — on an air-gapped
 network the wheel is the whole story.
 
+**[Live demos and a capability gallery →](https://rkleisley.github.io/swiftmap/)** &nbsp;— every map on that page is real: pan it, toggle it, scrub it, and read the six lines that made it.
+
 **Contents** &nbsp;·&nbsp; [Installation](#installation) &nbsp;·&nbsp; [Quick start (notebook)](#quick-start-notebook) &nbsp;·&nbsp; [Quick start (Shiny)](#quick-start-shiny) &nbsp;·&nbsp; [What you can plot](#what-you-can-plot) &nbsp;·&nbsp; [Basemaps](#basemaps) &nbsp;·&nbsp; [Imagery](#imagery) &nbsp;·&nbsp; [Styling](#styling) &nbsp;·&nbsp; [Color and size from data](#color-and-size-from-data) &nbsp;·&nbsp; [Density](#density) &nbsp;·&nbsp; [The legend](#the-legend) &nbsp;·&nbsp; [Scale bar](#scale-bar) &nbsp;·&nbsp; [Logo card](#logo-card) &nbsp;·&nbsp; [The sidebar: hierarchy from your data](#the-sidebar-hierarchy-from-your-data) &nbsp;·&nbsp; [Acting on layers after they exist](#acting-on-layers-after-they-exist) &nbsp;·&nbsp; [Drawing & AOIs](#drawing--aois) &nbsp;·&nbsp; [Time layers](#time-layers) &nbsp;·&nbsp; [Popups & Tooltips](#popups--tooltips) &nbsp;·&nbsp; [Labels](#labels) &nbsp;·&nbsp; [React](#react) &nbsp;·&nbsp; [Streamlit](#streamlit) &nbsp;·&nbsp; [Sharing a map: one static file](#sharing-a-map-one-static-file) &nbsp;·&nbsp; [Performance notes](#performance-notes)
 
 ---
