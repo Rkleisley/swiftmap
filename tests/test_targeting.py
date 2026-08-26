@@ -676,3 +676,17 @@ def test_a_sidebar_write_reaches_a_merged_member(m):
         {"op": "set", "id": member.get("id"), "fields": {"visible": False}}]}, [])
     assert m.find_layers("Survey", types="polyline")[0].get("visible") is False
     assert m.find_layers("Survey", types="circle_markers")[0].get("visible", True),         "only the addressed member flipped"
+
+
+def test_select_zoom_survives_merged_collections():
+    # The React report's oldest finding: select's own matches -- plain dicts for
+    # merged members -- crashed _identifiers on the hand-off to bounds_of.
+    import pandas as pd
+    from swiftmap import Map
+    m = Map()
+    m.add_circle_markers(pd.DataFrame({"lat": [36.0, 36.1], "lon": [-5.3, -5.2]}),
+                         name="Dwell 1", layer_group="Dwells")
+    m.add_polygon([[36.0, -5.3], [36.1, -5.3], [36.1, -5.2]],
+                  name="Dwell 1", layer_group="Dwells")
+    m.select("Dwell 1", zoom=True, zoom_offset=-1)   # raised TypeError before
+    assert m.bounds_of("Dwell 1") == [[36.0, -5.3], [36.1, -5.2]]

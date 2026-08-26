@@ -143,6 +143,59 @@ suite("the layers put visible pixels on the map", async () => {
     });
 });
 
+suite("hidden layers stay dark through a highlight rebuild", async () => {
+    await withPage(async (page, errors) => {
+        // The React report's long-standing finding: hide layers, then land a
+        // highlight (or an append) -- the rebuild must not redraw layers whose
+        // model still says visible: false.
+        // Per-layer flags through the REAL wire path -- the exact ops Python's
+        // hide() and highlight() emit, not a folder toggle or a trait swap.
+        await page.evaluate(() => {
+            window.__model.emit("msg:custom", { ops: [
+                { op: "set", id: "pts", fields: { visible: false } },
+                { op: "set", id: "pts2", fields: { visible: false } },
+            ] }, []);
+        });
+        await page.waitForTimeout(900);
+        const clip = { clip: { x: 100, y: 100, width: 480, height: 450 } };
+        const hidden = await page.screenshot(clip);
+
+        await page.evaluate(() => {
+            window.__model.emit("msg:custom", { ops: [
+                { op: "set", id: "pts2",
+                  fields: { highlight_style: { color: "#00ff00", radius: 24 } } },
+            ] }, []);
+        });
+        await page.waitForTimeout(900);
+        const highlighted = await page.screenshot(clip);
+
+        assert.equal(Buffer.compare(hidden, highlighted), 0,
+            "a highlight on a hidden layer rebuilds the bucket; nothing hidden "
+            + "may come back -- the screen must be pixel-identical");
+
+        // The other reported trigger: a data write. A tail for the coordinate
+        // buffer AND the times buffer (pts is a time layer), plus the property
+        // rows -- update_layer(append=True)'s exact wire shape.
+        await page.evaluate(() => {
+            const coords = new Float64Array([36.06, -5.24]);
+            const times = new Float64Array([Date.UTC(2026, 0, 2), Date.UTC(2026, 0, 2)]);
+            window.__model.emit("msg:custom", { ops: [
+                { op: "buffer_append", id: "pts", buffer_index: 0 },
+                { op: "buffer_append", id: "pts::times", buffer_index: 1 },
+                { op: "append", id: "pts", base: 3,
+                  properties: { site: ["Echo"] } },
+            ] }, [new DataView(coords.buffer), new DataView(times.buffer)]);
+        });
+        await page.waitForTimeout(900);
+        const appended = await page.screenshot(clip);
+
+        assert.equal(Buffer.compare(hidden, appended), 0,
+            "an append to a hidden layer rebuilds the bucket; the new point and "
+            + "the old ones alike must stay dark");
+        assert.deepEqual(errors, [], "no page errors across the rebuilds");
+    }, "widget-time.html");
+});
+
 suite("the coordinate readout can be dismissed", async () => {
     await withPage(async page => {
         // Every empty-map click replaces this popup, so its close button is

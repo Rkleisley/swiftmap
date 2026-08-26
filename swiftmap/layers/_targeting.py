@@ -52,6 +52,15 @@ def _identifiers(value: Any) -> frozenset:
     items = value if isinstance(value, (list, tuple, set, frozenset)) else [value]
     out = set()
     for item in items:
+        # A merged collection's members are plain dicts, whose id and name are
+        # KEYS, not attributes: getattr found neither, so the dict itself fell
+        # into the set and select(..., zoom=True) crashed on the hand-off from
+        # its own matches to bounds_of (the React report's oldest finding).
+        if isinstance(item, dict):
+            for key in ("id", "name"):
+                if item.get(key) is not None:
+                    out.add(item[key])
+            continue
         out.add(getattr(item, "id", None) or item)
         name = getattr(item, "name", None)
         if name is not None:

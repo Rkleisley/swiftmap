@@ -812,6 +812,15 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 // (an append moves bufLen, a highlight moves the style key) drew
                 // hidden layers again until the user re-toggled them.
                 state.visKey = null;
+                // And push it NOW, in the same synchronous block as the rebuild:
+                // waiting for the window-push loop below left a gap in which
+                // glify could composite one all-visible frame -- a flash of the
+                // hidden layers on every highlight or append.
+                const handle = state.layer && state.layer._swiftmapTime;
+                if (handle && state.visVector) {
+                    state.visKey = state.visVector.join("");
+                    handle.setLayerVisibility(state.visVector);
+                }
             }
         }
 
