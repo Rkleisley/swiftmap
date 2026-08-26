@@ -21,6 +21,7 @@ alone for anyone arriving with a task.
 | [11_legend](11_legend.ipynb) | The auto-derived legend: ramps/bins/categories/size rows, scope and dimming, manual entries, persistent suppression, full takeover | `configure_legend`, `legend_add`, `legend_remove`, `legend_clear` |
 | [12_draw_aoi](12_draw_aoi.ipynb) | The draw toolbar: shapes coming back as GeoJSON, seeding AOIs from Python, filtering data against them | `configure_draw`, `drawings`, `draw_seq`, `clear_drawings` |
 | [13_imagery](13_imagery.ipynb) | Raster overlays authored in-cell: single band through colormaps, nodata transparency, and a UTM source landing on the same footprint as its 4326 twin | `add_imagery` |
+| [14_density](14_density.ipynb) | The one sanctioned aggregation: screen-space blobs, H3 and geohash cells, view-relative colour, and `hexbin` for when you want numbers | `add_heatmap`, `cells=`, `weight_col`, `max_intensity`, `swiftmap.hexbin` |
 
 ## Apps, one per stack
 

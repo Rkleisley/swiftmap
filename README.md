@@ -133,6 +133,7 @@ rejects the map argument at decoration time).
 | `add_circle` | Geodesic circle | Center plus `radius` in **meters** — note the unit difference from circle markers |
 | `add_collection` (aliases `add_geojson`, `add_geostructures`) | Every kind in a mixed dataset | One layer per geometry kind, merged under a single sidebar entry; points render as circle markers unless `point_type="markers"` |
 | `add_basemap` | Tile layer | Any xyzservices catalogue name (~880 providers), a WMS registry name or raw WMS endpoint, or a raw `{z}/{x}/{y}` template — see [Basemaps](#basemaps) |
+| `add_heatmap` | Density field | Screen-space blobs, or real H3/geohash cells filled by their sums — see [Density](#density) |
 | `add_imagery` | Georeferenced raster overlay | Anything GDAL reads, warped into the map's CRS; single band through the house colormaps — see [Imagery](#imagery); requires `rasterio` (optional) |
 
 Every `add_*` method accepts the same range of inputs:
@@ -280,6 +281,49 @@ toggle and view attach has to carry.
 The legend below picks all of this up automatically — the ramp, the bins, the
 categories, and a stated size row for `radius_col` (`size ∝ volume (10 – 500)`;
 stated, never drawn, because legend pixels are not map pixels at any zoom).
+
+## Density
+
+Past a certain count, colouring individual points stops showing anything — five million
+markers are a solid blob. `add_heatmap` is the answer, in two flavours:
+
+```python
+m.add_heatmap(df)                                    # screen-space blobs
+m.add_heatmap(df, cells="h3", resolution=8)          # real hexagons, filled by their sums
+m.add_heatmap(df, cells="geohash", length=6, base=32)
+m.add_heatmap("Sites", weight_col="volume")          # derive from a layer already plotted
+```
+
+**Blobs** accumulate a Gaussian kernel sized in *pixels*, so the field recomputes with
+every view — no upstream table could equal it. **Cells** bin in Python at add time and
+fill the actual cell polygons through the ramp. (`base` is required for geohashes: a hash
+cannot state its own base, so swiftmap never assumes one.)
+
+Either way the colour is **relative to what you are looking at**: the scale re-stretches to
+the extremes in view on every settled pan or zoom, so zooming into a quiet region spreads
+its structure across the whole ramp instead of leaving it uniformly dark. That is why the
+legend reads *low to high* with no numbers — numbers on a view-relative scale would lie
+with every pan. Pin the scale with `max_intensity` (blobs) or `vmin`/`vmax` (cells), or
+turn the tracking off with `auto_normalize=False`, and the numbers mean something again.
+Heat rides the time slider like any other layer.
+
+Deriving from an existing point layer by name costs a config rather than a re-upload, and
+`weight_col` is read from that layer's own properties.
+
+**This is the only place swiftmap aggregates**, deliberately. When you want numbers,
+clicks, or a legend with values on it, bin the data yourself and plot the result as
+polygons — the map stays a painter:
+
+```python
+import swiftmap
+cells = swiftmap.hexbin(df, resolution=8)      # data in, data out: h3 + count columns
+m.add_polygon(cells, color_col="count")        # ordinary polygons, popups and all
+```
+
+`hexbin` takes everything the `add_*` methods take and returns the flavour you gave it
+(pandas in, pandas out; polars in, polars out). Counting is the only statistic built in —
+it is the one with no interpretation in it; every other statistic belongs upstream, and
+whatever upstream produces paints through the same door. Needs `h3`.
 
 ## The legend
 
