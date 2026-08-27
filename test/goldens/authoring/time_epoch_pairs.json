@@ -98,10 +98,15 @@
    "buffer": null,
    "op": {
     "fields": {
+     "properties": {},
      "time": {
       "duration": "PT2H",
       "fade": true,
-      "field": "datetime_start/datetime_end"
+      "field": "datetime_start/datetime_end",
+      "stripped": [
+       "datetime_start",
+       "datetime_end"
+      ]
      }
     },
     "id": "layer_2",
@@ -188,21 +193,16 @@
     "layer_group": "Circle Markers Group",
     "name": "Dwells",
     "opacity": 1.0,
-    "properties": {
-     "datetime_end": [
-      1767229200,
-      1767315600
-     ],
-     "datetime_start": [
-      1767225600,
-      1767312000
-     ]
-    },
+    "properties": {},
     "radius": 10,
     "time": {
      "duration": "PT2H",
      "fade": true,
-     "field": "datetime_start/datetime_end"
+     "field": "datetime_start/datetime_end",
+     "stripped": [
+      "datetime_start",
+      "datetime_end"
+     ]
     },
     "type": "circle_markers",
     "visible": true,

@@ -136,3 +136,22 @@ export function normalizeLayerTimes(props, timeField = null, timeEndField = null
     const field = endField ? `${startField}/${endField}` : startField;
     return { interleaved, field, timeless };
 }
+
+// A stripped time column, reconstructed for one feature's popup from the
+// binary buffer that replaced it: the same instants under the original name,
+// in ISO form. Single stripped field with a real interval shows the range.
+export function strippedTimeProps(layer, timesView, index) {
+    const stripped = (layer.time && layer.time.stripped) || [];
+    if (!stripped.length || !timesView
+            || timesView.byteLength < (index + 1) * 16) {
+        return null;
+    }
+    const start = timesView.getFloat64(index * 16, true);
+    const end = timesView.getFloat64(index * 16 + 8, true);
+    if (Number.isNaN(start)) return null;
+    const iso = (ms) => new Date(ms).toISOString();
+    if (stripped.length > 1) {
+        return { [stripped[0]]: iso(start), [stripped[1]]: iso(end) };
+    }
+    return { [stripped[0]]: end !== start ? `${iso(start)} – ${iso(end)}` : iso(start) };
+}

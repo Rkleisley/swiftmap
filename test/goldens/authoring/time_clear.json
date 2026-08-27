@@ -123,9 +123,37 @@
    "buffer": null,
    "op": {
     "fields": {
+     "properties": {
+      "value": [
+       1.0,
+       9.0
+      ]
+     },
      "time": {
       "duration": "period",
-      "field": "timestamp"
+      "field": "timestamp",
+      "stripped": [
+       "timestamp"
+      ]
+     }
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "properties": {
+      "timestamp": [
+       1767225600000,
+       1767312000000
+      ],
+      "value": [
+       1.0,
+       9.0
+      ]
      }
     },
     "id": "layer_2",
@@ -249,8 +277,8 @@
     "opacity": 1.0,
     "properties": {
      "timestamp": [
-      "2026-01-01T00:00:00",
-      "2026-01-02T00:00:00"
+      1767225600000,
+      1767312000000
      ],
      "value": [
       1.0,

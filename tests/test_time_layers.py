@@ -155,7 +155,9 @@ def m():
 def test_make_time_layer_stamps_the_layer_and_ships_a_buffer(m):
     m.make_time_layer("Vessel")
     layer = m.find_layers("Vessel")[0]
-    assert layer["time"] == {"field": "timestamp", "duration": "period"}
+    assert layer["time"] == {"field": "timestamp", "duration": "period",
+                             "stripped": ["timestamp"]}
+    assert "timestamp" not in (layer.get("properties") or {}),         "the JSON copy of the column is gone; the buffer is the source of truth"
     times = np.frombuffer(m.coordinate_buffers[f"{layer['id']}::times"])
     assert list(times) == [T0, T0, T0 + 6 * HOUR, T0 + 6 * HOUR]
 
@@ -500,3 +502,83 @@ def test_polars_tz_aware_order_columns_were_never_broken_and_stay_that_way():
     m.add_polyline(df, line_id_col="track_id", order_col="ts", name="T")
     line = [l for l in m.layers if l.get("type") == "polyline"][0]
     assert line.properties["ts"] == [int(T0), int(T0 + HOUR)]
+
+
+import pandas as pd  # noqa: E402  (the file's earlier tests use dicts)
+from swiftmap import Map  # noqa: E402
+
+
+def test_keep_field_keeps_the_json_copy():
+    df = pd.DataFrame({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                       "timestamp": ["2026-01-01T00:00", "2026-01-02T00:00"]})
+    m = Map()
+    m.add_circle_markers(df, name="V")
+    m.make_time_layer("V", keep_field=True)
+    layer = m.find_layers("V")[0]
+    assert "stripped" not in layer["time"]
+    assert "timestamp" in layer["properties"]
+
+
+def test_clear_time_layer_restores_the_stripped_column():
+    df = pd.DataFrame({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                       "timestamp": ["2026-01-01T00:00:00", "2026-01-02T00:00:00"]})
+    m = Map()
+    m.add_circle_markers(df, name="V")
+    m.make_time_layer("V")
+    m.clear_time_layer("V")
+    layer = m.find_layers("V")[0]
+    assert layer.get("time") is None
+    from datetime import datetime, timezone
+    expected = [int(datetime(2026, 1, d, tzinfo=timezone.utc).timestamp() * 1000)
+                for d in (1, 2)]
+    assert layer["properties"]["timestamp"] == expected, \
+        "the same instants come back, as epoch milliseconds"
+
+
+def test_interval_columns_strip_and_restore_as_a_pair():
+    df = pd.DataFrame({"lat": [36.0], "lon": [-5.3],
+                       "arrived": ["2026-01-01T00:00:00"],
+                       "departed": ["2026-01-01T06:00:00"]})
+    m = Map()
+    m.add_circle_markers(df, name="D")
+    m.make_time_layer("D", time_field="arrived", time_end_field="departed")
+    layer = m.find_layers("D")[0]
+    assert layer["time"]["stripped"] == ["arrived", "departed"]
+    assert "arrived" not in layer["properties"]
+    assert "departed" not in layer["properties"]
+    m.clear_time_layer("D")
+    layer = m.find_layers("D")[0]
+    assert len(layer["properties"]["arrived"]) == 1
+    assert layer["properties"]["departed"][0] - layer["properties"]["arrived"][0] \
+        == 6 * 3600 * 1000
+
+
+def test_vector_layers_keep_their_time_properties():
+    # A line's per-vertex times ride its order column, which serves updates and
+    # re-derivations beyond the animation: vectors are not stripped.
+    df = pd.DataFrame({"lat": [36.0, 36.1, 36.2], "lon": [-5.3, -5.2, -5.1],
+                       "track_id": ["T"] * 3,
+                       "timestamp": pd.to_datetime(
+                           ["2026-01-01", "2026-01-02", "2026-01-03"])})
+    m = Map()
+    m.add_line(df, line_id_col="track_id", order_col="timestamp", name="Trk")
+    m.make_time_layer("Trk")
+    layer = m.find_layers("Trk")[0]
+    assert "stripped" not in (layer.get("time") or {})
+
+
+def test_append_to_a_stripped_layer_keeps_history_and_stays_stripped():
+    df = pd.DataFrame({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                       "timestamp": ["2026-01-01T00:00:00", "2026-01-02T00:00:00"]})
+    m = Map()
+    m.add_circle_markers(df, name="Feed")
+    m.make_time_layer("Feed", period="P1D")
+    layer = m.find_layers("Feed")[0]
+    before = bytes(m.coordinate_buffers[f"{layer['id']}::times"])
+    m.update_layer("Feed", append=True, data=pd.DataFrame(
+        {"lat": [36.2], "lon": [-5.1], "timestamp": ["2026-01-03T00:00:00"]}))
+    layer = m.find_layers("Feed")[0]
+    after = bytes(m.coordinate_buffers[f"{layer['id']}::times"])
+    assert after[:len(before)] == before, "old spans survive byte-identical"
+    assert len(after) == len(before) + 16
+    assert "timestamp" not in layer["properties"], "the update did not resurrect it"

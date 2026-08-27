@@ -95,9 +95,13 @@
    "buffer": null,
    "op": {
     "fields": {
+     "properties": {},
      "time": {
       "duration": "period",
-      "field": "timestamp"
+      "field": "timestamp",
+      "stripped": [
+       "timestamp"
+      ]
      }
     },
     "id": "layer_2",
@@ -184,17 +188,14 @@
     "layer_group": "Circle Markers Group",
     "name": "Feed",
     "opacity": 1.0,
-    "properties": {
-     "timestamp": [
-      "2026-01-01T00:00:00",
-      "2026-01-02T12:30:00Z",
-      null
-     ]
-    },
+    "properties": {},
     "radius": 10,
     "time": {
      "duration": "period",
-     "field": "timestamp"
+     "field": "timestamp",
+     "stripped": [
+      "timestamp"
+     ]
     },
     "type": "circle_markers",
     "visible": true,

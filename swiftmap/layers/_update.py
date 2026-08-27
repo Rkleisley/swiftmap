@@ -141,15 +141,21 @@ def _retime(layer: Any, props: Dict[str, Any]):
     """
     meta = layer.get("time")
     if not meta:
-        return None, False
+        return None, False, props
     field = str(meta.get("field") or "")
     start_field, end_field = (field.split("/", 1) + [None])[:2] if field else (None, None)
     interleaved, _, _ = normalize_layer_times(props, start_field, end_field)
     if interleaved is None:
         warn(f"update_layer: the new data for {layer.get('name')!r} has no "
              f"{field!r} time property; the layer stops animating.")
-        return None, True
-    return np.asarray(interleaved, dtype=np.float64).tobytes(), False
+        return None, True, props
+    # A layer whose time column was stripped into the buffer stays stripped:
+    # the refresh re-derives the buffer from the new data, then drops the JSON
+    # copy again -- an update must not resurrect the redundancy.
+    stripped = meta.get("stripped") or []
+    if stripped:
+        props = {k: v for k, v in props.items() if k not in stripped}
+    return np.asarray(interleaved, dtype=np.float64).tobytes(), False, props
 
 
 def _clear_overrides(layer: Any, append: bool) -> bool:
@@ -201,6 +207,28 @@ def _update_points(self, layer, data, append, parser, field_kwargs, rec) -> "Map
                             dtype=np.float64).reshape(-1, 2)
         old_props = layer.get("properties") or {}
         n_old = old.shape[0]
+        # A stripped time column's old values live only in the buffer now.
+        # Backfill them for the merge -- exactly, [start, end] pairs included --
+        # so the re-derived series keeps its history byte-identical and the
+        # append still ships a tail; _retime strips the merged column again.
+        stripped = (layer.get("time") or {}).get("stripped") or []
+        if stripped:
+            old_times = np.frombuffer(
+                self.coordinate_buffers.get(f"{layer_id}::times", b""),
+                dtype=np.float64)
+            if old_times.size == n_old * 2:
+                old_props = dict(old_props)
+                starts, ends = old_times[0::2], old_times[1::2]
+                if len(stripped) > 1:
+                    old_props[stripped[0]] = [
+                        None if np.isnan(s) else float(s) for s in starts]
+                    old_props[stripped[1]] = [
+                        None if np.isnan(e) else float(e) for e in ends]
+                else:
+                    old_props[stripped[0]] = [
+                        None if np.isnan(s)
+                        else (float(s) if s == e else [float(s), float(e)])
+                        for s, e in zip(starts, ends)]
         lats = np.concatenate([old[:, 0], lats])
         lons = np.concatenate([old[:, 1], lons])
         merged = {}
@@ -226,7 +254,7 @@ def _update_points(self, layer, data, append, parser, field_kwargs, rec) -> "Map
     size_legend = data_driven_size_legend(props, data_opts)
     labels = (resolve_feature_labels(rec["label"], props, n)
               if rec.get("label") is not None else None)
-    times_payload, drop_time = _retime(layer, props)
+    times_payload, drop_time, props = _retime(layer, props)
     cleared = _clear_overrides(layer, append)
 
     coords = np.column_stack((lats, lons)).flatten().astype(np.float64)
@@ -383,7 +411,7 @@ def _update_single(self, layer, data, parser, field_kwargs, rec) -> "Map":
     legend_block = data_driven_legend(props, data_opts, layer.get("color", _STYLE_DEFAULTS[ltype]["color"]))
     label = (resolve_feature_label(rec["label"], props, 0)
              if rec.get("label") is not None else None)
-    times_payload, drop_time = _retime(layer, feature_props)
+    times_payload, drop_time, feature_props = _retime(layer, feature_props)
     cleared = _clear_overrides(layer, append=False)
 
     with self.batch():

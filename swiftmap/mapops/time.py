@@ -20,6 +20,7 @@ TIME_POSITIONS = frozenset({
 def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = None,
                     time_end_field: Optional[str] = None, period: Optional[str] = None,
                     duration: Optional[str] = "period", fade: bool = False,
+                    keep_field: bool = False,
                     **criteria) -> "Map":
     """
     Animates the matching layers along the time their features already carry.
@@ -131,7 +132,22 @@ def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = Non
             time_meta = {"field": field, "duration": duration}
             if fade:
                 time_meta["fade"] = True
-            self._set_layer_fields([layer], {"time": time_meta})
+            updates = {"time": time_meta}
+            # Once the binary buffer carries every instant, the JSON copy in
+            # properties is pure wire redundancy -- and it is exactly what a
+            # first paint at 25x200k chokes on: five million timestamps
+            # serialised as strings beside the same five million as float64.
+            # Point layers drop the column(s); popups reconstruct the value
+            # from the buffer under the original name (same instants, ISO
+            # form), and clear_time_layer restores the column. keep_field=True
+            # keeps the raw values when their original spelling matters.
+            if not keep_field and layer.get("type") in ("circle_markers", "markers"):
+                names = [n for n in field.split("/", 1) if n in props]
+                if names:
+                    time_meta["stripped"] = names
+                    updates["properties"] = {k: v for k, v in props.items()
+                                             if k not in names}
+            self._set_layer_fields([layer], updates)
         if period is not None:
             self.configure_time(period=period)
     return self
@@ -156,6 +172,24 @@ def clear_time_layer(self, target: Any = None, **criteria) -> "Map":
     if not matched:
         return self
     with self.batch():
+        # Stripped time columns come back from the buffer before it goes: the
+        # same instants, restored as epoch-ms numbers under their original
+        # names -- clearing an animation must not lose the layer's data.
+        for l in matched:
+            stripped = (l.get("time") or {}).get("stripped")
+            raw = self.coordinate_buffers.get(f"{l.get('id')}::times")
+            if stripped and raw:
+                arr = np.frombuffer(raw, dtype=np.float64)
+
+                def column(vals):
+                    return [None if np.isnan(v)
+                            else (int(v) if float(v).is_integer() else float(v))
+                            for v in vals]
+                props = dict(l.get("properties") or {})
+                props[stripped[0]] = column(arr[0::2])
+                if len(stripped) > 1:
+                    props[stripped[1]] = column(arr[1::2])
+                self._set_layer_fields([l], {"properties": props})
         self._set_layer_fields(matched, {"time": None})
         # The ::times KEYS, not the layer ids: _remove_layer_buffers sweeps
         # everything under an id, and passing the id here deleted the layer's

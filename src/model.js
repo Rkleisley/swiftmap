@@ -1321,8 +1321,10 @@ export function createMapModel(options = {}) {
         const period = opts.period ?? null;
         let duration = opts.duration !== undefined ? opts.duration : "period";
         const fade = opts.fade || false;
+        const keepField = opt(opts, "keepField", "keep_field") || false;
         for (const key of ["timeField", "time_field", "timeEndField", "time_end_field",
-                           "period", "duration", "fade"]) delete opts[key];
+                           "period", "duration", "fade", "keepField", "keep_field"])
+            delete opts[key];
         const matched = findLayers(target, opts);
         if (!matched.length) {
             console.warn("swiftmap: makeTimeLayer matched no layers. Nothing was animated.");
@@ -1362,7 +1364,20 @@ export function createMapModel(options = {}) {
             if (!buffers[key] || !bytesEqual(buffers[key], payload)) buffersSet(key, payload);
             const timeMeta = { field, duration };
             if (fade) timeMeta.fade = true;
-            setLayerFields([layer], { time: timeMeta });
+            const updates = { time: timeMeta };
+            // The strip, Python's rule exactly: point layers drop the JSON
+            // copy of what the binary buffer now carries; popups reconstruct
+            // from the buffer, clearTimeLayer restores the column.
+            if (!keepField && (layer.type === "circle_markers"
+                    || layer.type === "markers")) {
+                const names = field.split("/", 2).filter(n => n in props);
+                if (names.length) {
+                    timeMeta.stripped = names;
+                    updates.properties = Object.fromEntries(
+                        Object.entries(props).filter(([k]) => !names.includes(k)));
+                }
+            }
+            setLayerFields([layer], updates);
         }
         if (period != null) configureTime({ period });
         return model;
@@ -1373,6 +1388,26 @@ export function createMapModel(options = {}) {
             ? findLayers() : findLayers(target, criteria);
         const matched = pool.filter(l => l.time);
         if (!matched.length) return model;
+        // Stripped columns come back from the buffer before it goes: epoch-ms
+        // numbers under their original names, exactly as Python restores them.
+        for (const l of matched) {
+            const stripped = (l.time && l.time.stripped) || [];
+            const view = buffers[`${l.id}::times`];
+            if (!stripped.length || !view) continue;
+            const arr = new Float64Array(view.buffer, view.byteOffset,
+                                         view.byteLength / 8);
+            const column = (offset) => {
+                const out = [];
+                for (let i = offset; i < arr.length; i += 2) {
+                    out.push(Number.isNaN(arr[i]) ? null : arr[i]);
+                }
+                return out;
+            };
+            const props = { ...(l.properties || {}) };
+            props[stripped[0]] = column(0);
+            if (stripped.length > 1) props[stripped[1]] = column(1);
+            setLayerFields([l], { properties: props });
+        }
         setLayerFields(matched, { time: null });
         buffersRemove(matched.filter(l => buffers[`${l.id}::times`])
                              .map(l => `${l.id}::times`));
@@ -1420,9 +1455,15 @@ export function createMapModel(options = {}) {
         if (interleaved == null) {
             console.warn(`swiftmap: updateLayer: the new data for '${layer.name}' has no `
                 + `'${desc}' time property; the layer stops animating.`);
-            return { payload: null, dropTime: true };
+            return { payload: null, dropTime: true, props };
         }
-        return { payload: new Uint8Array(interleaved.buffer), dropTime: false };
+        // A stripped layer stays stripped across refreshes (Python's _retime).
+        const stripped = (layer.time && layer.time.stripped) || [];
+        if (stripped.length) {
+            props = Object.fromEntries(
+                Object.entries(props).filter(([k]) => !stripped.includes(k)));
+        }
+        return { payload: new Uint8Array(interleaved.buffer), dropTime: false, props };
     }
 
     // --- query -----------------------------------------------------------------------
@@ -1807,7 +1848,28 @@ export function createMapModel(options = {}) {
                 oldPairs.push([old.getFloat64(i * 16, true), old.getFloat64(i * 16 + 8, true)]);
             }
             pairs = [...oldPairs, ...pairs];
-            const oldProps = layer.properties || {};
+            let oldProps = layer.properties || {};
+            // A stripped time column's old values live only in the buffer:
+            // backfill exactly -- pairs included -- so the merged series keeps
+            // its history byte-identical and the append still ships a tail
+            // (Python's backfill, verbatim; retime strips the column again).
+            const stripped = (layer.time && layer.time.stripped) || [];
+            const oldTimes = buffers[`${layer.id}::times`];
+            if (stripped.length && oldTimes && oldTimes.byteLength === nOld * 16) {
+                oldProps = { ...oldProps };
+                const starts = [], ends = [];
+                for (let i = 0; i < nOld; i++) {
+                    starts.push(oldTimes.getFloat64(i * 16, true));
+                    ends.push(oldTimes.getFloat64(i * 16 + 8, true));
+                }
+                if (stripped.length > 1) {
+                    oldProps[stripped[0]] = starts.map(s => Number.isNaN(s) ? null : s);
+                    oldProps[stripped[1]] = ends.map(e => Number.isNaN(e) ? null : e);
+                } else {
+                    oldProps[stripped[0]] = starts.map((s, i) => Number.isNaN(s)
+                        ? null : (s === ends[i] ? s : [s, ends[i]]));
+                }
+            }
             const merged = {};
             for (const k of new Set([...Object.keys(oldProps), ...Object.keys(props)])) {
                 const a = Array.isArray(oldProps[k]) ? [...oldProps[k]]
@@ -1828,7 +1890,7 @@ export function createMapModel(options = {}) {
         const labels = rec.label != null
             ? resolveFeatureLabels(rec.label, props, n) : null;
         let timesPayload = null, dropTime = false;
-        if (layer.time) ({ payload: timesPayload, dropTime } = retime(layer, props));
+        if (layer.time) ({ payload: timesPayload, dropTime, props } = retime(layer, props));
         const bounds = boundsOfPairs(pairs);
         const coords = packPairs(pairs);
 
@@ -1906,7 +1968,7 @@ export function createMapModel(options = {}) {
         if (label != null) config.label = label;
         else delete config.label;
         let timesPayload = null, dropTime = false;
-        if (layer.time) ({ payload: timesPayload, dropTime } = retime(layer, config.properties));
+        if (layer.time) ({ payload: timesPayload, dropTime, props: config.properties } = retime(layer, config.properties));
         if (dropTime) config.time = null;
         Object.assign(config, fieldKwargs);
         buffersSet(layer.id, packPairs(pairs));

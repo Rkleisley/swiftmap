@@ -3,6 +3,7 @@ import { L } from "./libs.js";
 import { pinShader } from "./shaders.js";
 import { windowFor, featureInWindow, timesFor, layerInWindow, effectiveDuration,
          periodToMs } from "./timecontrol.js";
+import { strippedTimeProps } from "./times.js";
 import { buildTimeAttributes, attachTimeToInstance, timeVertexShader,
          gpuTimeAvailable, buildVectorTimeMeta, attachTimeToVectorInstance } from "./gputime.js";
 import { createHeatLayer } from "./heat.js";
@@ -903,7 +904,12 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                         if (info) {
                             const layer = info.layer;
                             const originalIndex = info.originalIndex;
-                            const props = getIndexedProperties(layer.properties, originalIndex);
+                            const props = {
+                                ...getIndexedProperties(layer.properties, originalIndex),
+                                ...(strippedTimeProps(layer,
+                                    coordinateBuffers[`${layer.id}::times`],
+                                    originalIndex) || {}),
+                            };
                             bindPopup(map, point, props, layer);
                             // The clicked point's own coordinates -- more truthful
                             // than the mouse position for a point.
@@ -934,7 +940,12 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             if (info) {
                                 const layer = info.layer;
                                 const originalIndex = info.originalIndex;
-                                const props = getIndexedProperties(layer.properties, originalIndex);
+                                const props = {
+                                ...getIndexedProperties(layer.properties, originalIndex),
+                                ...(strippedTimeProps(layer,
+                                    coordinateBuffers[`${layer.id}::times`],
+                                    originalIndex) || {}),
+                            };
                                 bindTooltip(map, point, props, layer, this);
                             }
                         });
