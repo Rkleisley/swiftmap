@@ -79,6 +79,9 @@ test = [
     "shapely",
     "geostructures",
     "h3>=4",
+    # The MVT parity suite pins swiftmap's dependency-free decoder to the
+    # reference implementation.
+    "mapbox-vector-tile",
 ]
 
 [tool.setuptools.packages.find]
