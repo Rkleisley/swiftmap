@@ -1,0 +1,184 @@
+{
+ "buffers": {
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA"
+ },
+ "doc": "Direction and pattern decoration on a track.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 16,
+     "max_zoom": 22,
+     "name": "World Gray Canvas",
+     "type": "basemap",
+     "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "arrows": true,
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.1,
+       -5.2
+      ]
+     ],
+     "color": "#0055ff",
+     "dash": [
+      8.0,
+      4.0
+     ],
+     "id": "layer_2",
+     "layer_group": "Line Group",
+     "name": "Flow",
+     "opacity": 1.0,
+     "properties": {},
+     "type": "polyline",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  }
+ ],
+ "scenario": "line_arrows_dash",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.3
+    ],
+    [
+     36.1,
+     -5.2
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 1,
+   "zoom_offset": 0
+  },
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Line Group": {
+    "multi_select": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 16,
+    "max_zoom": 22,
+    "name": "World Gray Canvas",
+    "type": "basemap",
+    "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    "visible": false
+   },
+   {
+    "arrows": true,
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.3
+     ],
+     [
+      36.1,
+      -5.2
+     ]
+    ],
+    "color": "#0055ff",
+    "dash": [
+     8.0,
+     4.0
+    ],
+    "id": "layer_2",
+    "layer_group": "Line Group",
+    "name": "Flow",
+    "opacity": 1.0,
+    "properties": {},
+    "type": "polyline",
+    "visible": true,
+    "weight": 3
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {},
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

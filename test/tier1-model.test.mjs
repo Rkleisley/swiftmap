@@ -54,6 +54,10 @@ const SCENARIOS = {
           count: [3, 9] },
         { name: "Cells", colorCol: "count" }),
 
+    line_arrows_dash: () => createMapModel().addLine(
+        [[36.00, -5.30], [36.05, -5.25], [36.10, -5.20]],
+        { name: "Flow", arrows: true, dash: "8 4", color: "#0055ff" }),
+
     heatmap_time: () => {
         const m = createMapModel();
         m.addHeatmap(

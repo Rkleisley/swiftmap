@@ -23,6 +23,8 @@ def add_line(
     line_id_col: Optional[str] = None,
     order_col: Optional[str] = None,
     coord_order: str = "auto",
+    arrows: bool = False,
+    dash: Any = None,
     name: Optional[str] = None,
     layer_group: Optional[str] = None,
     group_multi_select: Optional[bool] = None,
@@ -172,6 +174,23 @@ def add_line(
                                    layer_style.get("color", "#3388ff"), "add_line")
     legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#3388ff"))
 
+    # Direction and pattern decoration. `arrows=True` draws a chevron per
+    # segment, oriented with travel, thinned automatically as segments shrink
+    # on screen -- a paused track finally shows which way it goes. `dash` is an
+    # on,off pixel pair ("8 4" or [8, 4]), screen-stable at every zoom.
+    dash_list = None
+    if dash is not None:
+        try:
+            raw = dash.replace(",", " ").split() if isinstance(dash, str) else list(dash)
+            parts = [float(x) for x in raw]
+        except (TypeError, ValueError):
+            parts = []
+        if len(parts) >= 2 and parts[0] > 0 and parts[1] > 0:
+            dash_list = parts[:2]
+        else:
+            warn(f"add_line: dash must give an on,off pixel pair -- dash='8 4' or "
+                 f"dash=[8, 4] -- got {dash!r}. Drawing solid.")
+
     # A uniform fan assembles into one merged entry placed once -- see add_polygon.
     pending = []
     for i, coords in enumerate(lines_coords):
@@ -212,6 +231,8 @@ def add_line(
             "layer_group": resolve_group_path(group_specs, props, i, "Line Group"),
             "group_multi_select": group_multi_select,
             "visible": True,
+            **({"arrows": True} if arrows else {}),
+            **({"dash": dash_list} if dash_list else {}),
             **({"parts": parts} if parts else {}),
             "bounds": bounds_of_coords(flat),
             # Recorded for update_layer(data=...). One of several features, or a

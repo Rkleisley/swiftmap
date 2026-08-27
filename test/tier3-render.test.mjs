@@ -1590,6 +1590,48 @@ suite("a whole-map GPU loss rebuilds every bucket in one rung", async () => {
     }, "widget.html");
 });
 
+suite("arrows and dashes draw, and draw differently from a solid line", async () => {
+    await withPage(async (page, errors) => {
+        const counts = await page.evaluate(async () => {
+            const m = await import("/dist/anywidget.js");
+            const mk = async (id, deco) => {
+                const el = document.createElement("div");
+                el.id = id;
+                el.style.cssText = "width:400px;height:300px;display:inline-block";
+                document.body.appendChild(el);
+                const coords = new Float64Array(
+                    [36.00, -5.32, 36.02, -5.28, 36.00, -5.24]);
+                await m.default.render({ model: m.createHostStub({
+                    layers: [{ id: "t", type: "polyline", name: "Track",
+                               layer_group: "L", visible: true, color: "#ff0000",
+                               weight: 4, opacity: 1, ...deco }],
+                    group_configs: {},
+                    coordinate_buffers: { t: new DataView(coords.buffer) },
+                    center: [36.01, -5.28], zoom: 12, crs: "EPSG:3857",
+                    auto_sync: true, sync_trigger: 0, show_logo: false,
+                }, { comm: null }), el });
+                return el;
+            };
+            const plain = await mk("plain", {});
+            const deco = await mk("deco", { arrows: true, dash: [10, 6] });
+            await new Promise(r => setTimeout(r, 800));
+            const panes = el =>
+                el.querySelectorAll(".leaflet-polylines-pane canvas").length;
+            return { plain: panes(plain), deco: panes(deco) };
+        });
+        assert.equal(counts.plain, 1, "a solid line is one canvas");
+        assert.equal(counts.deco, 2,
+            "the arrows ride their own points canvas in the lines pane");
+
+        const plainShot = await page.locator("#plain").screenshot();
+        const decoShot = await page.locator("#deco").screenshot();
+        assert.notEqual(Buffer.compare(plainShot, decoShot), 0,
+            "the same track must LOOK different dashed and arrowed -- equal "
+            + "pixels mean the decoration silently drew nothing");
+        assert.deepEqual(errors, [], "no errors from the decoration pipeline");
+    });
+});
+
 suite("destroying a map mid-zoom-animation throws nothing later", async () => {
     // Leaflet arms a bare setTimeout(_onZoomTransitionEnd, 250) when a zoom
     // animation starts, and map.remove() does not clear it -- so a map torn

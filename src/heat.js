@@ -27,8 +27,8 @@ const NORMALIZE_DELAY = 150;   // ms after the last move before re-normalising
 // 256 units across the world. The closed form exists so five million points do
 // not each construct a LatLng and a Point on the way to the GPU.
 const MAX_MERC_LAT = 85.0511287798;
-function mercatorX(lon) { return 256 * (0.5 + lon / 360); }
-function mercatorY(lat) {
+export function mercatorX(lon) { return 256 * (0.5 + lon / 360); }
+export function mercatorY(lat) {
     const clamped = Math.max(-MAX_MERC_LAT, Math.min(MAX_MERC_LAT, lat));
     const s = Math.sin(clamped * Math.PI / 180);
     return 256 * (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI));

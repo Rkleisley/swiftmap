@@ -7,6 +7,9 @@ import { buildTimeAttributes, attachTimeToInstance, timeVertexShader,
          gpuTimeAvailable, buildVectorTimeMeta, attachTimeToVectorInstance } from "./gputime.js";
 import { createHeatLayer } from "./heat.js";
 import { durationSeconds } from "./gputime.js";
+import { lineDecoVertexShader, lineDecoFragmentShader, arrowVertexShader,
+         ARROW_FRAGMENT, buildLineDistances, buildArrowPoints, arrowTimeAttrs,
+         wireLineDeco, wireArrowDeco, combineTimeHandles } from "./linedeco.js";
 
 function setupGlifyProjection(glInstance) {
     if (glInstance && glInstance.layer) {
@@ -444,8 +447,17 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 };
                 m.on("mousemove", this._mapMouseMoveHandler);
 
-                const lineOptions = vectorTime
-                    ? { vertexShaderSource: () => timeVertexShader() } : {};
+                // Any dash in the bucket switches to the decoration shader
+                // pair -- a superset of the time shader (same attribute
+                // contract), so the two compose instead of competing.
+                const anyDash = layersList.some(
+                    l => Array.isArray(l.dash) && l.dash.length >= 2);
+                const anyArrows = layersList.some(l => l.arrows);
+                const lineOptions = anyDash
+                    ? { vertexShaderSource: () => lineDecoVertexShader(),
+                        fragmentShaderSource: () => lineDecoFragmentShader() }
+                    : vectorTime
+                        ? { vertexShaderSource: () => timeVertexShader() } : {};
                 this.glLines = L.glify.lines({
                     ...lineOptions,
                     map: m,
@@ -503,8 +515,64 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 });
                 setupGlifyProjection(this.glLines);
                 this._sensitivityOff = trackLineSensitivity(m, this.glLines);
+
+                // Decoration wiring runs BEFORE the time attach: its
+                // always-visible defaults are exactly what the time wiring
+                // overwrites when a slider is aboard. A wiring failure warns
+                // and costs the decoration, never the line.
+                let lineDeco = null;
+                if (anyDash) {
+                    try {
+                        const { dists, dash } = buildLineDistances(features);
+                        lineDeco = wireLineDeco(this.glLines, dists, dash);
+                    } catch (err) {
+                        console.warn(`[SwiftMap] line dashes disabled: ${err.message}`);
+                    }
+                }
+                let arrowHandle = null;
+                if (anyArrows) {
+                    try {
+                        const arrows = buildArrowPoints(features);
+                        if (arrows.latlngs.length) {
+                            this.glArrows = L.glify.points({
+                                map: m,
+                                data: arrows.latlngs,
+                                pane: "polylinesPane",
+                                size: (i) => arrows.sizes[i],
+                                color: (i) => arrows.colors[i],
+                                // Decoration, not a click target: arrows must
+                                // never win a click from the line under them.
+                                picking: false,
+                                vertexShaderSource: () => arrowVertexShader(),
+                                fragmentShaderSource: () => ARROW_FRAGMENT,
+                            });
+                            setupGlifyProjection(this.glArrows);
+                            this._arrowDeco = wireArrowDeco(
+                                this.glArrows, arrows.angles, arrows.segLens);
+                            if (vectorTime) {
+                                const layerPos = new Map(
+                                    layersList.map((l, i) => [l, i]));
+                                arrowHandle = attachTimeToInstance(this.glArrows,
+                                    arrowTimeAttrs(arrows, layerPos, vectorMeta));
+                            }
+                        }
+                    } catch (err) {
+                        console.warn(`[SwiftMap] line arrows disabled: ${err.message}`);
+                    }
+                }
+                if (lineDeco || this._arrowDeco) {
+                    const applyPx = () => {
+                        const px = Math.pow(2, m.getZoom());
+                        if (lineDeco) lineDeco.setPxPerWorld(px);
+                        if (this._arrowDeco) this._arrowDeco.setPxPerWorld(px);
+                    };
+                    applyPx();
+                    m.on("zoomend", applyPx);
+                    this._decoOff = () => m.off("zoomend", applyPx);
+                }
                 if (vectorTime) {
-                    this._swiftmapTime = attachTimeToVectorInstance(this.glLines, vectorMeta, vertexCounts);
+                    const lineHandle = attachTimeToVectorInstance(this.glLines, vectorMeta, vertexCounts);
+                    this._swiftmapTime = combineTimeHandles(lineHandle, arrowHandle);
                 }
             },
             onRemove: function(m) {
@@ -512,6 +580,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     m.off("mousemove", this._mapMouseMoveHandler);
                 }
                 if (this._sensitivityOff) this._sensitivityOff();
+                if (this._decoOff) this._decoOff();
+                if (this.glArrows) this.glArrows.remove();
                 if (this.glLines) this.glLines.remove();
                 if (this._sharedTooltip) {
                     this._sharedTooltip.remove();

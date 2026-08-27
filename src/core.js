@@ -564,7 +564,8 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
     }
     function retireGl(instance) {
         if (!instance) return;
-        for (const gl of [instance.glPoints, instance.glLines, instance.glShapes, instance]) {
+        for (const gl of [instance.glPoints, instance.glLines, instance.glShapes,
+                          instance.glArrows, instance]) {
             cancelGlFrame(gl);
         }
         try { instance.remove(); } catch (err) { /* already gone */ }
@@ -609,7 +610,8 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
     }
 
     function armContextLossRecovery(type, wrapper) {
-        for (const gl of [wrapper.glPoints, wrapper.glLines, wrapper.glShapes]) {
+        for (const gl of [wrapper.glPoints, wrapper.glLines, wrapper.glShapes,
+                          wrapper.glArrows]) {
             const canvas = gl && gl.layer && gl.layer.canvas;
             if (!canvas || canvas._swiftmapLossArmed) continue;
             canvas._swiftmapLossArmed = true;
@@ -774,6 +776,8 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 weight: l.weight,
                 opacity: l.opacity,
                 fillOpacity: l.fillOpacity,
+                arrows: l.arrows,
+                dash: l.dash,
                 highlight: l.highlight_style,
                 overrides: l.style_overrides,
                 featureStyles: l.feature_styles,

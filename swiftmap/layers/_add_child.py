@@ -56,6 +56,8 @@ _SUB_LAYER_ATTRS = (
     # A multi-part line's part-length table. Dropped at merge, the renderer would
     # read the flat buffer as ONE run and draw the phantom segment between parts.
     "parts",
+    # Line decoration flags; a merged member keeps its own arrows and pattern.
+    "arrows", "dash",
     # The add-time options record update_layer(data=...) re-applies.
     "added_with",
     # bounds was missing here for the whole life of the merge, which silently broke

@@ -666,6 +666,14 @@ def scenario_polygon_table_wkt_color_col():
     return m
 
 
+def scenario_line_arrows_dash():
+    """Direction and pattern decoration on a track."""
+    m = Map(show_logo=False)
+    m.add_line([[36.00, -5.30], [36.05, -5.25], [36.10, -5.20]],
+               name="Flow", arrows=True, dash="8 4", color="#0055ff")
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -726,6 +734,7 @@ SCENARIOS = [
     scenario_heatmap_time,
     scenario_polygon_fan_color_col,
     scenario_polygon_table_wkt_color_col,
+    scenario_line_arrows_dash,
 ]
 
 

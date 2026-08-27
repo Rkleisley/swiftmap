@@ -114,7 +114,8 @@ const SUB_LAYER_ATTRS = new Set([
     "radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity",
     "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations",
     "location", "geojson", "rings", "legend", "legend_size", "label", "labels",
-    "parts", "added_with", "bounds", "subdomains", "wms", "url", "image_format",
+    "parts", "arrows", "dash",
+    "added_with", "bounds", "subdomains", "wms", "url", "image_format",
     "popup_fields", "popup_names", "popup_template", "popup_style",
     "popup_max_width", "tooltip_fields", "tooltip_names", "tooltip_template",
     "tooltip_style",
@@ -730,6 +731,7 @@ export function createMapModel(options = {}) {
         const dataColors = dataDrivenColors(columns, dataOpts, fallbackColor, label);
         const dataLegend = dataDrivenLegend(columns, dataOpts, fallbackColor);
         const labelOpt = opt(options, "label", "label") ?? null;
+        const deco = type === "polyline" ? lineDecoOptions(options) : {};
         // A uniform fan (one literal name for every feature) assembles into a
         // single merged entry placed once -- Python's add_children_merged.
         const uniform = !nameIsColumn && features.length > 1;
@@ -745,6 +747,7 @@ export function createMapModel(options = {}) {
             const layer = {
                 id: nextId(), type, name,
                 visible: options.visible !== undefined ? options.visible : true,
+                ...deco,
                 autobind_popup: true, autobind_tooltip: true,
                 ...(featureStyles ? featureStyles[i] : layerStyle),
                 properties: props,
@@ -775,6 +778,35 @@ export function createMapModel(options = {}) {
         return model;
     }
 
+    // Python's dash normalisation, verbatim: an on,off pixel pair from a
+    // string or a list, or null with the same warning. Golden-pinned.
+    function normalizeDash(dash, label) {
+        if (dash == null) return null;
+        let parts;
+        try {
+            parts = (typeof dash === "string"
+                ? dash.replace(/,/g, " ").split(/\s+/).filter(Boolean)
+                : [...dash]).map(Number);
+        } catch (err) {
+            parts = [];
+        }
+        if (parts.length >= 2 && parts[0] > 0 && parts[1] > 0) {
+            return parts.slice(0, 2);
+        }
+        console.warn(`swiftmap: ${label}: dash must give an on,off pixel pair -- `
+            + `dash='8 4' or dash=[8, 4] -- got ${JSON.stringify(dash)}. `
+            + `Drawing solid.`);
+        return null;
+    }
+
+    function lineDecoOptions(options) {
+        const dash = normalizeDash(opt(options, "dash", "dash"), "addLine");
+        return {
+            ...(options.arrows ? { arrows: true } : {}),
+            ...(dash ? { dash } : {}),
+        };
+    }
+
     function addLine(coords, options = {}) {
         if (isGeometryInput(coords)) return addVectorFeatures("polyline", coords, options);
         const table = tabularVectorInput(coords, LINE_GEOMETRY, "addLine");
@@ -787,6 +819,7 @@ export function createMapModel(options = {}) {
             return model;
         }
         const pairs = coords.map(p => [Number(p[0]), Number(p[1])]);
+        const deco = lineDecoOptions(options);
         const { explicit, staticStyle } = popStyleOptions(options, "addLine", "polyline");
         const { layerStyle } = resolveStyles(explicit, staticStyle, {}, 1,
                                              STYLE_DEFAULTS.polyline);
@@ -794,6 +827,7 @@ export function createMapModel(options = {}) {
             id: nextId(), type: "polyline",
             name: options.name || "Line",
             visible: options.visible !== undefined ? options.visible : true,
+            ...deco,
             autobind_popup: true, autobind_tooltip: true,
             ...layerStyle,
             properties: options.properties || {},
