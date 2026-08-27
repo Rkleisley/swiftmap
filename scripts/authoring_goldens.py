@@ -29,6 +29,7 @@ tightly as its state.
 import base64
 import json
 import sys
+import warnings
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -303,6 +304,32 @@ def scenario_time_epoch_pairs():
          "datetime_end": [1767229200, 1767315600]},
         name="Dwells")
     m.make_time_layer("Dwells", duration="PT2H", fade=True)
+    return m
+
+
+def scenario_time_epoch_origin():
+    """Epoch zero and negative epochs are instants, not junk: seconds vs ms
+    still told apart by |magnitude|, nothing reads as timeless."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1, 36.2, 36.3], "lon": [-5.3, -5.2, -5.1, -5.0],
+         "timestamp": [0, -1000, -14182980000, 1767225600]},
+        name="Origin")
+    m.make_time_layer("Origin", period="P10Y")
+    return m
+
+
+def scenario_cluster_time_refusal():
+    """make_time_layer refuses a clustered layer -- both models must decline
+    identically: no time config, no times buffer, the warning instead."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.01, 36.011, 36.4], "lon": [-5.31, -5.311, -5.0],
+         "timestamp": [1767225600, 1767312000, 1767398400]},
+        name="CT", cluster=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m.make_time_layer("CT")
     return m
 
 
@@ -721,6 +748,8 @@ SCENARIOS = [
     scenario_mut_update_line,
     scenario_time_points,
     scenario_time_epoch_pairs,
+    scenario_time_epoch_origin,
+    scenario_cluster_time_refusal,
     scenario_time_clear,
     scenario_time_append,
     scenario_time_config,

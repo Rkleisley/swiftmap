@@ -1397,6 +1397,16 @@ export function createMapModel(options = {}) {
             duration = "period";
         }
         for (const layer of matched) {
+            // Python's refusal, mirrored: a clustered layer would carry a
+            // times buffer and join the slider's extent while the renderer
+            // keeps clustering and never windows it -- the silent skip the
+            // warning exists to prevent.
+            if (layer.cluster) {
+                console.warn(`swiftmap: makeTimeLayer: '${layer.name}' is clustered; `
+                    + `clustering and time animation are not composable yet. The `
+                    + `layer keeps clustering and stays visible at every tick.`);
+                continue;
+            }
             const props = layer.properties || {};
             if (timeField && !(timeField in props)) {
                 console.warn(`swiftmap: makeTimeLayer: '${timeField}' is not a property of `

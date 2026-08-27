@@ -6,9 +6,10 @@
 // readable time (always shown, never animated). Byte-parity with Python is
 // held by the authoring goldens, which is why the corner rules are replicated
 // exactly:
-//   - a bare number <= 0 or non-finite is NaN; >= 1e10 is already ms, below
-//     that it is epoch seconds and is scaled (nothing plottable happened
-//     before 1971 in ms);
+//   - a non-finite bare number is NaN; |value| >= 1e10 is already ms, below
+//     that it is epoch seconds and is scaled (within ~four months of the
+//     epoch in ms nothing plottable happens). The epoch itself and negative
+//     values are valid instants -- the ISO branch has always produced them;
 //   - an ISO string with no offset is UTC (Python's fromisoformat + a UTC
 //     replace) -- NEVER the browser's local time;
 //   - booleans are NaN (bool subclasses int in Python; the trap is mirrored);
@@ -36,8 +37,8 @@ export function parseTimestamp(value) {
     if (value instanceof Date) return value.getTime();
     if (typeof value === "boolean") return NaN;
     if (typeof value === "number") {
-        if (!isFinite(value) || value <= 0) return NaN;
-        return value >= 1e10 ? value : value * 1000;
+        if (!isFinite(value)) return NaN;
+        return Math.abs(value) >= 1e10 ? value : value * 1000;
     }
     if (typeof value !== "string") return NaN;
     const m = ISO_RE.exec(value.trim());

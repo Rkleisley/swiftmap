@@ -1,0 +1,221 @@
+{
+ "buffers": {
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTAZmZmZmYmQkAAAAAAAAAUwA==",
+  "layer_2::times": "AAAAAAAAAAAAAAAAAAAAAAAAAACAhC7BAAAAAICELsEAAADN+GoKwgAAAM34agrCAACAqm23eUIAAICqbbd5Qg=="
+ },
+ "doc": "Epoch zero and negative epochs are instants, not junk: seconds vs ms\n    still told apart by |magnitude|, nothing reads as timeless.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 16,
+     "max_zoom": 22,
+     "name": "World Gray Canvas",
+     "type": "basemap",
+     "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTAZmZmZmYmQkAAAAAAAAAUwA==",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.3,
+       -5.0
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Circle Markers Group",
+     "name": "Origin",
+     "opacity": 1.0,
+     "properties": {
+      "timestamp": [
+       0,
+       -1000,
+       -14182980000,
+       1767225600
+      ]
+     },
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAAAAAAAAAAAAAAAAAAACAhC7BAAAAAICELsEAAADN+GoKwgAAAM34agrCAACAqm23eUIAAICqbbd5Qg==",
+   "op": {
+    "id": "layer_2::times",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "properties": {},
+     "time": {
+      "duration": "period",
+      "field": "timestamp",
+      "stripped": [
+       "timestamp"
+      ]
+     }
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  }
+ ],
+ "scenario": "time_epoch_origin",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.3
+    ],
+    [
+     36.3,
+     -5.0
+    ]
+   ],
+   "max_zoom": 15,
+   "padding": 30,
+   "seq": 1,
+   "zoom_offset": 0
+  },
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Circle Markers Group": {
+    "multi_select": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 16,
+    "max_zoom": 22,
+    "name": "World Gray Canvas",
+    "type": "basemap",
+    "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.3
+     ],
+     [
+      36.3,
+      -5.0
+     ]
+    ],
+    "color": "#3388ff",
+    "fillColor": "#3388ff",
+    "fillOpacity": 0.2,
+    "id": "layer_2",
+    "layer_group": "Circle Markers Group",
+    "name": "Origin",
+    "opacity": 1.0,
+    "properties": {},
+    "radius": 10,
+    "time": {
+     "duration": "period",
+     "field": "timestamp",
+     "stripped": [
+      "timestamp"
+     ]
+    },
+    "type": "circle_markers",
+    "visible": true,
+    "weight": 3
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {
+   "period": "P10Y"
+  },
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}

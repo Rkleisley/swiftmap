@@ -45,7 +45,10 @@ def parse_timestamp(value: Any) -> float:
     ISO strings are the common case, since _json_safe converts every datetime to one at the
     add_* boundary. A trailing 'Z' is normalised for fromisoformat, which only accepts it
     from Python 3.11. Bare numbers are taken as epoch seconds or milliseconds, told apart
-    by magnitude: nothing plottable happened before 1971 in ms (< 1e10 must be seconds).
+    by |magnitude|: within ~four months of the epoch in ms (|value| < 1e10) nothing
+    plottable happens, so those read as seconds. The epoch itself and negative values are
+    valid instants -- the ISO branch has always produced them -- so only non-finite input
+    is unreadable.
     """
     if value is None:
         return math.nan
@@ -58,9 +61,9 @@ def parse_timestamp(value: Any) -> float:
     if isinstance(value, bool):
         return math.nan
     if isinstance(value, (int, float)):
-        if not math.isfinite(value) or value <= 0:
+        if not math.isfinite(value):
             return math.nan
-        return float(value) if value >= 1e10 else float(value) * 1000.0
+        return float(value) if abs(value) >= 1e10 else float(value) * 1000.0
     if isinstance(value, str):
         text = value.strip()
         if text.endswith(("Z", "z")):
@@ -130,8 +133,8 @@ def _numeric_epochs(values: List[Any]):
     if not values or set(map(type, values)) - {int, float, type(None)}:
         return None
     arr = np.asarray(values, dtype=np.float64)
-    invalid = ~np.isfinite(arr) | (arr <= 0)
-    arr = np.where(arr >= 1e10, arr, arr * 1000.0)
+    invalid = ~np.isfinite(arr)
+    arr = np.where(np.abs(arr) >= 1e10, arr, arr * 1000.0)
     arr[invalid] = np.nan
     return arr
 

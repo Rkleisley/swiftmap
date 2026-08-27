@@ -64,10 +64,52 @@ def test_datetimes_survive_having_already_been_isoformatted():
     assert parse_timestamp(dt) == T0
 
 
-@pytest.mark.parametrize("value", ["not a date", "", None, True, -5, float("inf")],
-                         ids=["text", "empty", "none", "bool", "negative", "inf"])
+@pytest.mark.parametrize("value", ["not a date", "", None, True,
+                                   float("inf"), float("nan")],
+                         ids=["text", "empty", "none", "bool", "inf", "nan"])
 def test_unreadable_values_are_nan_not_errors(value):
     assert math.isnan(parse_timestamp(value))
+
+
+# --- the epoch and before it are instants, not junk ----------------------------------
+@pytest.mark.parametrize("value,expected", [
+    pytest.param(0, 0.0, id="epoch-zero"),
+    pytest.param(-1000, -1000000.0, id="negative-seconds"),
+    pytest.param(-14182980000, -14182980000.0, id="negative-ms"),
+])
+def test_pre_epoch_numbers_parse_like_their_iso_twins(value, expected):
+    # The ISO branch always produced these instants; the numeric branch now
+    # agrees. Seconds vs ms stays a |magnitude| test.
+    assert parse_timestamp(value) == expected
+
+
+def test_numeric_and_iso_agree_at_the_moon_landing():
+    assert parse_timestamp(-14182980000) == parse_timestamp("1969-07-20T20:17:00Z")
+    assert parse_timestamp(0) == parse_timestamp("1970-01-01T00:00:00Z")
+
+
+def test_vectorised_epochs_match_the_loop_at_and_before_zero():
+    from swiftmap.layers import _time
+    values = [0, -1000, -14182980000, 1767225600, None]
+    arr = _time._numeric_epochs(values)
+    loop = [parse_timestamp(v) for v in values]
+    for got, want in zip(arr, loop):
+        assert (math.isnan(got) and math.isnan(want)) or got == want
+
+
+def test_epoch_zero_rows_animate_instead_of_reading_timeless():
+    m = quiet_map()
+    m.add_circle_markers({"lat": [36.0, 36.1, 36.2], "lon": [-5.3, -5.2, -5.1],
+                          "timestamp": [0, 1000, 2000]}, name="Bench")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SwiftMapWarning)
+        m.make_time_layer("Bench")   # no "carry no parseable time" warning
+    layer = m.get_layer("Bench")
+    assert layer.time
+    import numpy as np
+    times = np.frombuffer(m.coordinate_buffers[f"{layer.id}::times"], dtype=np.float64)
+    assert not np.isnan(times).any()
+    assert times[0] == 0.0
 
 
 # --- finding the field ----------------------------------------------------------------

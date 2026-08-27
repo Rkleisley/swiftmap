@@ -20,7 +20,16 @@ test("parseTimestamp corner rules hold", () => {
     assert.equal(parseTimestamp("2026-01-01T02:00:00+02:00"), Date.UTC(2026, 0, 1));
     assert.equal(parseTimestamp(1767225600), 1767225600000, "epoch seconds scale");
     assert.ok(Number.isNaN(parseTimestamp(true)), "booleans are not timestamps");
-    assert.ok(Number.isNaN(parseTimestamp(-5)));
+    assert.ok(Number.isNaN(parseTimestamp(Infinity)));
+});
+
+test("the epoch and before it are instants, matching the ISO branch", () => {
+    assert.equal(parseTimestamp(0), 0, "epoch zero is 1970, not timeless");
+    assert.equal(parseTimestamp(-1000), -1000000, "negative seconds scale to ms");
+    assert.equal(parseTimestamp(-14182980000),
+        parseTimestamp("1969-07-20T20:17:00Z"),
+        "negative ms pass through by |magnitude|, agreeing with ISO");
+    assert.equal(parseTimestamp(0), parseTimestamp("1970-01-01T00:00:00Z"));
 });
 
 test("containsLatLon answers polygons, holes and drawn circles", () => {

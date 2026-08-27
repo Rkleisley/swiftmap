@@ -183,6 +183,26 @@ const SCENARIOS = {
         return m;
     },
 
+    time_epoch_origin: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1, 36.2, 36.3],
+                             lon: [-5.3, -5.2, -5.1, -5.0],
+                             timestamp: [0, -1000, -14182980000, 1767225600] },
+                           { name: "Origin" });
+        m.makeTimeLayer("Origin", { period: "P10Y" });
+        return m;
+    },
+
+    cluster_time_refusal: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.01, 36.011, 36.4],
+                             lon: [-5.31, -5.311, -5.0],
+                             timestamp: [1767225600, 1767312000, 1767398400] },
+                           { name: "CT", cluster: true });
+        m.makeTimeLayer("CT");
+        return m;
+    },
+
     time_clear: () => {
         const m = createMapModel();
         m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2], value: [1.0, 9.0],
@@ -571,6 +591,32 @@ test("every golden has a scenario and vice versa", () => {
         .map(f => f.replace(/\.json$/, "")).sort();
     assert.deepEqual(Object.keys(SCENARIOS).sort(), files,
         "the Python and JS scenario lists are the same list");
+});
+
+test("makeTimeLayer declines a clustered layer, like Python", () => {
+    // Without the guard the layer claims animation, ships a times buffer and
+    // joins the slider's extent while the renderer keeps clustering and never
+    // windows it -- the silent skip the Python warning exists to prevent.
+    const warned = [];
+    const original = console.warn;
+    console.warn = (msg) => warned.push(String(msg));
+    try {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.01, 36.011], lon: [-5.31, -5.311],
+                             timestamp: [1767225600, 1767312000] },
+                           { name: "CT", cluster: true });
+        m.makeTimeLayer("CT");
+        const layer = m.props().layers.find(l => l.name === "CT");
+        assert.ok(warned.some(w => w.includes("clustered")
+            && w.includes("not composable")), "the refusal says why");
+        assert.equal(layer.time, undefined, "no time config lands");
+        assert.equal(m.wireState().coordinate_buffers[`${layer.id}::times`], undefined,
+            "no times buffer is packed");
+        assert.ok(layer.properties.timestamp,
+            "the time column is not stripped from a declined layer");
+    } finally {
+        console.warn = original;
+    }
 });
 
 test("a table through the vector builders never throws (round-8 R)", () => {
