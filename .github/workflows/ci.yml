@@ -1,0 +1,51 @@
+# The suites the project already lives by, run where contributors can see
+# them: the Python tiers with every optional data source installed, the
+# notebook gallery as the API smoke test it doubles as, and the JS tiers
+# including the pixel harness -- whose SwiftShader flags exist precisely so
+# it runs on CI images with no GPU.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: python ${{ matrix.python }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.9" }
+          - { os: ubuntu-latest, python: "3.12" }
+          - { os: windows-latest, python: "3.12" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e .[test]
+      - run: python -m pytest -q
+      - run: python scripts/run_examples.py
+
+  js:
+    name: js tiers (node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Tier 3's static-export suite generates its fixture through the real
+      # Python path, so the JS job needs the package importable too.
+      - run: pip install -e .[test]
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
