@@ -762,6 +762,12 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
 
     if (pointsList.length === 0) return null;
 
+    // glify hands the hit point back as the SAME array reference it was fed,
+    // so identity is the key -- and indexOf was a linear reference-scan over
+    // the whole merged bucket per mousemove: an O(1M) walk to show a tooltip
+    // on the landing page's hero. Built once, looked up in O(1).
+    const pointIndex = new Map(pointsList.map((p, i) => [p, i]));
+
     const glLayer = L.Layer.extend({
         onAdd: function(m) {
             this._map = m;
@@ -817,7 +823,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     // out-of-window point must not enter the arbitration at all, so
                     // whatever sits beneath it -- a visible feature, or the
                     // empty-map fallback -- wins instead.
-                    const idx = pointsList.indexOf(point);
+                    const idx = pointIndex.get(point) ?? -1;
                     const preInfo = indexMapping[idx];
                     if (!preInfo || !visibleNow(preInfo.layer, preInfo.originalIndex)) {
                         return;
@@ -846,7 +852,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                         const maxDist = type === "markers" ? 25 : 12;
                         if (pixelDist > maxDist) return;
 
-                        const idx = pointsList.indexOf(point);
+                        const idx = pointIndex.get(point) ?? -1;
                         const info = indexMapping[idx];
                         if (!info || !visibleNow(info.layer, info.originalIndex)) {
                             return;
