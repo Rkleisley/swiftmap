@@ -54,6 +54,10 @@ const SCENARIOS = {
           count: [3, 9] },
         { name: "Cells", colorCol: "count" }),
 
+    clustered_points: () => createMapModel().addCircleMarkers(
+        { lat: [36.01, 36.011, 36.4], lon: [-5.31, -5.311, -5.0] },
+        { name: "Sites", cluster: true, clusterRadius: 50, clusterMaxZoom: 15 }),
+
     line_arrows_dash: () => createMapModel().addLine(
         [[36.00, -5.30], [36.05, -5.25], [36.10, -5.20]],
         { name: "Flow", arrows: true, dash: "8 4", color: "#0055ff" }),

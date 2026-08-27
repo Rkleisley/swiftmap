@@ -5,6 +5,7 @@ import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
 import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey,
          heatMetaKey, heatTimeKey, findLayerById } from "./layers.js";
+import { clusterMetaKey } from "./cluster.js";
 import { parsePeriod, generateTicks, collectTimeExtent, hasTimeLayers,
          layerInWindow, renderTimeControl, advance, periodToMs, gcdGridMs,
          collectDurationsMs, POSITIONS, timesFor, windowFor, featureInWindow,
@@ -738,7 +739,17 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                         || existing.heatTimeKey !== heatTimeKey(layer,
                             layer.source ? findLayerById(layers, layer.source) : null,
                             timeState));
-                if (existing.layerType !== layer.type || staleImage || staleHeat) {
+                const staleCluster = layer.cluster
+                    && (existing.clusterMeta !== clusterMetaKey(layer)
+                        || existing.clusterCoordSource
+                            !== (coordinateBuffers[layer.id] || null)
+                        || existing.clusterColorsSource
+                            !== (coordinateBuffers[`${layer.id}::colors`] || null));
+                // A layer that stops (or starts) clustering swaps rendering
+                // paths entirely; layerType alone cannot see that.
+                const clusterFlip = Boolean(layer.cluster) !== Boolean(existing.clusterMeta);
+                if (existing.layerType !== layer.type || staleImage || staleHeat
+                        || staleCluster || clusterFlip) {
                     existing.remove();
                     delete activeOverlayLayers[layer.id];
                 } else {
@@ -747,7 +758,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
             }
 
             const instance = await renderLayer(map, layer, coordinateBuffers[layer.id],
-                coordinateBuffers, layers, timeState);
+                coordinateBuffers, layers, timeState, layerEvents);
             // A host may destroy the map while a sync is in flight (an unmount, or
             // React strict mode's throwaway mount): nothing past this point may
             // touch a map that no longer has panes.

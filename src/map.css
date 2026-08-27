@@ -247,3 +247,20 @@
     height: 18px;
     padding: 2px 2px 0 0;
 }
+
+/* Cluster badges: markercluster's familiar ladder, GL-era underneath. */
+.swiftmap-cluster {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font: 600 12px/1 system-ui, sans-serif;
+    color: #fff;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.35);
+    cursor: pointer;
+}
+.swiftmap-cluster-small  { width: 34px; height: 34px; background: rgba( 97,171, 79,0.9); }
+.swiftmap-cluster-medium { width: 42px; height: 42px; background: rgba(240,164, 60,0.9); }
+.swiftmap-cluster-large  { width: 50px; height: 50px; background: rgba(232, 92, 74,0.9); font-size: 13px; }

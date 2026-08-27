@@ -1590,6 +1590,54 @@ suite("a whole-map GPU loss rebuilds every bucket in one rung", async () => {
     }, "widget.html");
 });
 
+suite("clustered points badge up, and dissolve past the max zoom", async () => {
+    await withPage(async (page, errors) => {
+        const counts = await page.evaluate(async () => {
+            const m = await import("/dist/anywidget.js");
+            const el = document.createElement("div");
+            el.id = "clustered";
+            el.style.cssText = "width:500px;height:400px";
+            document.body.appendChild(el);
+            // Two knots of 30 around distinct centres, plus one loner.
+            const pts = [];
+            for (let i = 0; i < 30; i++) {
+                pts.push(36.01 + 0.0005 * Math.sin(i), -5.31 + 0.0005 * Math.cos(i));
+                pts.push(36.01 + 0.0005 * Math.sin(i), -5.25 + 0.0005 * Math.cos(i));
+            }
+            pts.push(36.01, -5.10);
+            const coords = new Float64Array(pts);
+            const model = m.createHostStub({
+                layers: [{ id: "c", type: "circle_markers", name: "Sites",
+                           layer_group: "L", visible: true, radius: 5,
+                           color: "#3388ff", cluster: true, cluster_radius: 60,
+                           cluster_max_zoom: 15, properties: {} }],
+                group_configs: {},
+                coordinate_buffers: { c: new DataView(coords.buffer) },
+                center: [36.01, -5.25], zoom: 11, crs: "EPSG:3857",
+                auto_sync: true, sync_trigger: 0, show_logo: false,
+            }, { comm: null });
+            window.__clusterModel = model;
+            await m.default.render({ model, el });
+            await new Promise(r => setTimeout(r, 600));
+            const badges = [...el.querySelectorAll(".swiftmap-cluster span")]
+                .map(s => s.textContent);
+            const zoomNow = (window.L && el.querySelector(".leaflet-container"))
+                ? "n/a" : "n/a";
+            window.__clusterModel.set("zoom", 17);   // past cluster_max_zoom
+            await new Promise(r => setTimeout(r, 800));
+            const after = el.querySelectorAll(".swiftmap-cluster").length;
+            return { badges, after };
+        });
+        assert.ok(counts.badges.length >= 2,
+            "each knot shows at least one badge zoomed out");
+        assert.ok(counts.badges.some(t => Number(t) >= 15),
+            "badge counts read as real membership, not decoration");
+        assert.equal(counts.after, 0,
+            "past cluster_max_zoom every point stands alone -- no badges");
+        assert.deepEqual(errors, [], "no errors from the cluster pipeline");
+    });
+});
+
 suite("arrows and dashes draw, and draw differently from a solid line", async () => {
     await withPage(async (page, errors) => {
         const counts = await page.evaluate(async () => {

@@ -21,6 +21,9 @@ def add_markers(
     name: Optional[str] = None,
     layer_group: Optional[str] = None,
     group_multi_select: Optional[bool] = None,
+    cluster: bool = False,
+    cluster_radius: int = 60,
+    cluster_max_zoom: Optional[int] = None,
     **kwargs
 ) -> "Map":
     """
@@ -216,6 +219,12 @@ def add_markers(
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
             "bounds": sub_bounds,
+            # Clustering renders through its own instance -- grid clusters as
+            # badges, singles on GL -- so the flags ride the config only when
+            # asked for; the merged buckets skip clustered layers entirely.
+            **({"cluster": True, "cluster_radius": cluster_radius,
+                **({"cluster_max_zoom": int(cluster_max_zoom)}
+                   if cluster_max_zoom is not None else {})} if cluster else {}),
             **({"legend": legend_block} if legend_block else {}),
             **({"legend_size": size_legend} if size_legend else {}),
             **({"labels": (feature_labels if whole

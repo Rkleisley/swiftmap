@@ -37,6 +37,9 @@ export function collectWebglLayers(layers, groupConfigs) {
             return;
         }
         if (layer.visible === false) return;
+        // Clustered layers render through their own instance (badges + a
+        // singles pass), never the merged buckets.
+        if (layer.cluster) return;
 
         const bucket = layer.type === "circle" ? "polygon" : layer.type;
         if (buckets[bucket]) buckets[bucket].push(layer);
@@ -90,7 +93,7 @@ export function collectPointLayersAll(layers, groupConfigs) {
             return;
         }
         const bucket = layer.type === "circle" ? "polygon" : layer.type;
-        if (!out[bucket]) return;
+        if (!out[bucket] || layer.cluster) return;
         const vis = isSub ? parentVisible && layer.visible !== false
             : parentVisible && isLayerEffectiveVisible(layer, groupConfigs);
         out[bucket].push({ layer, vis });

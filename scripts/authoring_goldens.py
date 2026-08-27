@@ -666,6 +666,15 @@ def scenario_polygon_table_wkt_color_col():
     return m
 
 
+def scenario_clustered_points():
+    """Clustering flags on the config; the clustering itself is client-side."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.01, 36.011, 36.4], "lon": [-5.31, -5.311, -5.0]},
+        name="Sites", cluster=True, cluster_radius=50, cluster_max_zoom=15)
+    return m
+
+
 def scenario_line_arrows_dash():
     """Direction and pattern decoration on a track."""
     m = Map(show_logo=False)
@@ -735,6 +744,7 @@ SCENARIOS = [
     scenario_polygon_fan_color_col,
     scenario_polygon_table_wkt_color_col,
     scenario_line_arrows_dash,
+    scenario_clustered_points,
 ]
 
 

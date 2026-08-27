@@ -58,6 +58,8 @@ _SUB_LAYER_ATTRS = (
     "parts",
     # Line decoration flags; a merged member keeps its own arrows and pattern.
     "arrows", "dash",
+    # Clustering flags; a merged member keeps its own rendering path.
+    "cluster", "cluster_radius", "cluster_max_zoom",
     # The add-time options record update_layer(data=...) re-applies.
     "added_with",
     # bounds was missing here for the whole life of the merge, which silently broke

@@ -115,6 +115,7 @@ const SUB_LAYER_ATTRS = new Set([
     "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations",
     "location", "geojson", "rings", "legend", "legend_size", "label", "labels",
     "parts", "arrows", "dash",
+    "cluster", "cluster_radius", "cluster_max_zoom",
     "added_with", "bounds", "subdomains", "wms", "url", "image_format",
     "popup_fields", "popup_names", "popup_template", "popup_style",
     "popup_max_width", "tooltip_fields", "tooltip_names", "tooltip_template",
@@ -639,12 +640,20 @@ export function createMapModel(options = {}) {
             for (const [k, v] of Object.entries(properties)) {
                 subProps[k] = whole ? v : indices.map(i => v[i]);
             }
+            const clusterOn = opt(options, "cluster", "cluster") || false;
             const layer = {
                 id: nextId(), type, name, layer_group: path,
                 visible: options.visible !== undefined ? options.visible : true,
                 autobind_popup: true, autobind_tooltip: true,
                 ...(type === "circle_markers"
                     ? { radius: options.radius !== undefined ? options.radius : 10 } : {}),
+                ...(clusterOn ? {
+                    cluster: true,
+                    cluster_radius: opt(options, "clusterRadius", "cluster_radius", 60),
+                    ...(opt(options, "clusterMaxZoom", "cluster_max_zoom") != null
+                        ? { cluster_max_zoom: opt(options, "clusterMaxZoom", "cluster_max_zoom") }
+                        : {}),
+                } : {}),
                 ...layerStyle,
                 properties: subProps,
             };

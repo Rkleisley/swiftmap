@@ -109,7 +109,7 @@ this one to a live feed and a draw-an-AOI filter.
 | Method | Draws | Notes |
 | --- | --- | --- |
 | `add_markers` | Pin icons | Custom GLSL shader — anti-aliased pins with drop shadows, at scale |
-| `add_circle_markers` | Circle points | `radius` in **pixels**; the cheaper primitive, better default for many points |
+| `add_circle_markers` | Circle points | `radius` in **pixels**; the cheaper primitive, better default for many points. `cluster=True` collapses dense areas into count badges that dissolve as you zoom |
 | `add_line` / `add_polyline` | Polylines | Long-format rows (`line_id_col`, `order_col`), WKT, GeoJSON, GeoPandas... A MultiLineString is one layer drawn as disjoint parts. `arrows=True` marks direction; `dash="8 4"` patterns the stroke |
 | `add_polygon` (+ `add_polygons`, `add_shape`, `add_shapes`) | Polygons | Interior holes and MultiPolygons render correctly; one MultiPolygon is one layer |
 | `add_circle` | Geodesic circle | Center plus `radius` in **meters** — note the unit difference from circle markers |

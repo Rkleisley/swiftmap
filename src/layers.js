@@ -11,6 +11,7 @@ import { durationSeconds } from "./gputime.js";
 import { lineDecoVertexShader, lineDecoFragmentShader, arrowVertexShader,
          ARROW_FRAGMENT, buildLineDistances, buildArrowPoints, arrowTimeAttrs,
          wireLineDeco, wireArrowDeco, combineTimeHandles } from "./linedeco.js";
+import { createClusterLayer, clusterMetaKey } from "./cluster.js";
 
 function setupGlifyProjection(glInstance) {
     if (glInstance && glInstance.layer) {
@@ -203,9 +204,20 @@ function renderHeatLayer(map, layer, coordinateBuffers, allLayers, timeState) {
 // A non-GL layer (image overlay, or a group of them) as a Leaflet layer. Takes the
 // LIVE buffer map the core keeps -- patches land there, never in a host trait.
 export async function renderLayer(map, layer, coordBuffer, coordinateBuffers = {},
-                                  allLayers = [], timeState = null) {
+                                  allLayers = [], timeState = null, events = null) {
     if (layer.type === "heatmap") {
         return renderHeatLayer(map, layer, coordinateBuffers, allLayers, timeState);
+    }
+    if (layer.cluster && (layer.type === "circle_markers" || layer.type === "markers")) {
+        if (!coordBuffer) return null;
+        const instance = createClusterLayer(layer, coordBuffer, coordinateBuffers,
+            events && events.onFeatureClick);
+        instance.addTo(map);
+        instance.layerType = layer.type;
+        instance.clusterMeta = clusterMetaKey(layer);
+        instance.clusterCoordSource = coordBuffer;
+        instance.clusterColorsSource = coordinateBuffers[`${layer.id}::colors`] || null;
+        return instance;
     }
     if (layer.type === "image") {
         return renderImageLayer(map, layer, coordBuffer);
@@ -213,11 +225,15 @@ export async function renderLayer(map, layer, coordBuffer, coordinateBuffers = {
     if (layer.type === "group") {
         const group = L.layerGroup();
         for (const sub of layer.layers) {
-            if (sub.type === "circle_markers" || sub.type === "markers" || sub.type === "polyline" || sub.type === "polygon" || sub.type === "circle") {
+            // Merged-bucket kinds render there -- EXCEPT clustered members,
+            // which own their instance like any clustered layer.
+            if (!sub.cluster && (sub.type === "circle_markers" || sub.type === "markers"
+                    || sub.type === "polyline" || sub.type === "polygon"
+                    || sub.type === "circle")) {
                 continue;
             }
             const instance = await renderLayer(map, sub, coordinateBuffers[sub.id],
-                coordinateBuffers, allLayers, timeState);
+                coordinateBuffers, allLayers, timeState, events);
             if (instance) {
                 group.addLayer(instance);
             }

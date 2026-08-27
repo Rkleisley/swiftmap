@@ -98,6 +98,12 @@ def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = Non
 
     with self.batch():
         for layer in matched:
+            if layer.get("cluster"):
+                warn(f"make_time_layer: {layer.get('name')!r} is clustered; "
+                     f"clustering and time animation are not composable yet. "
+                     f"The layer keeps clustering and stays visible at every "
+                     f"tick.")
+                continue
             props = layer.get("properties") or {}
             # An explicit field that misses gets its own message: falling through
             # to the generic "pass time_field=" told the user to do the thing
