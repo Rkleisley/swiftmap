@@ -1391,6 +1391,7 @@ export function createMapModel(options = {}) {
             console.warn("swiftmap: makeTimeLayer matched no layers. Nothing was animated.");
             return model;
         }
+        let animated = false;
         if (duration !== null && duration !== "period" && !isValidPeriod(duration)) {
             console.warn(`swiftmap: makeTimeLayer: duration '${duration}' is not an ISO8601 `
                 + `duration (like 'PT1H'). Falling back to 'period'.`);
@@ -1449,8 +1450,11 @@ export function createMapModel(options = {}) {
                 }
             }
             setLayerFields([layer], updates);
+            animated = true;
         }
-        if (period != null) configureTime({ period });
+        // Python's gate exactly: the shared period belongs to layers that
+        // actually animate -- a fully declined call must leave no residue.
+        if (period != null && animated) configureTime({ period });
         return model;
     }
 

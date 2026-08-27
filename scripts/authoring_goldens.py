@@ -321,7 +321,9 @@ def scenario_time_epoch_origin():
 
 def scenario_cluster_time_refusal():
     """make_time_layer refuses a clustered layer -- both models must decline
-    identically: no time config, no times buffer, the warning instead."""
+    identically: no time config, no times buffer, the warning instead. The
+    period is passed deliberately: a fully declined call must not leave it
+    behind in time_config as residue."""
     m = Map(show_logo=False)
     m.add_circle_markers(
         {"lat": [36.01, 36.011, 36.4], "lon": [-5.31, -5.311, -5.0],
@@ -329,7 +331,7 @@ def scenario_cluster_time_refusal():
         name="CT", cluster=True)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m.make_time_layer("CT")
+        m.make_time_layer("CT", period="PT1H")
     return m
 
 

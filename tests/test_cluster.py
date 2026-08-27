@@ -39,10 +39,36 @@ def test_make_time_layer_refuses_clustered_layers():
     m = Map()
     m.add_circle_markers(df, name="Feed", cluster=True)
     with pytest.warns(Warning, match="not composable yet"):
-        m.make_time_layer("Feed")
+        m.make_time_layer("Feed", period="PT1H")
     layer = m.get_layer("Feed")
     assert layer.get("time") is None
     assert f"{layer.id}::times" not in m.coordinate_buffers
+    # A fully declined call leaves NO residue: with the period recorded, the
+    # shared config would be the only difference between a successful call and
+    # a declined one.
+    assert m.time_config == {}
+
+
+def test_any_fully_declined_call_leaves_no_period_residue():
+    # Not clustering-specific: a layer with no readable time declines the same
+    # way and must strand no shared period either.
+    m = Map()
+    m.add_circle_markers(DF, name="NoTimes")
+    with pytest.warns(Warning, match="has no time property"):
+        m.make_time_layer("NoTimes", period="PT1H")
+    assert m.time_config == {}
+
+
+def test_a_partly_declined_call_still_animates_the_rest():
+    df = DF.assign(timestamp=["2026-01-01", "2026-01-02", "2026-01-03"])
+    m = Map()
+    m.add_circle_markers(df, name="Feed", cluster=True)
+    m.add_circle_markers(df, name="Track")
+    with pytest.warns(Warning, match="not composable yet"):
+        m.make_time_layer(types="circle_markers", period="PT1H")
+    assert m.get_layer("Feed").get("time") is None
+    assert m.get_layer("Track").get("time")
+    assert m.time_config.get("period") == "PT1H"
 
 
 def test_merged_members_keep_their_clustering():

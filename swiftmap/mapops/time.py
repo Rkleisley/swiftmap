@@ -97,6 +97,7 @@ def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = Non
         duration = "period"
 
     with self.batch():
+        animated = False
         for layer in matched:
             if layer.get("cluster"):
                 warn(f"make_time_layer: {layer.get('name')!r} is clustered; "
@@ -154,7 +155,13 @@ def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = Non
                     updates["properties"] = {k: v for k, v in props.items()
                                              if k not in names}
             self._set_layer_fields([layer], updates)
-        if period is not None:
+            animated = True
+        # The shared period belongs to layers that actually animate. When every
+        # matched layer declined -- clustered, no readable time -- writing it
+        # anyway would leave time_config as the one difference between a
+        # successful call and a fully declined one; each decline already said
+        # why nothing will move.
+        if period is not None and animated:
             self.configure_time(period=period)
     return self
 

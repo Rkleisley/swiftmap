@@ -2,7 +2,7 @@
  "buffers": {
   "layer_2": "4XoUrkcBQkA9CtejcD0VwMUgsHJoAUJAWDm0yHY+FcAzMzMzMzNCQAAAAAAAABTA"
  },
- "doc": "make_time_layer refuses a clustered layer -- both models must decline\n    identically: no time config, no times buffer, the warning instead.",
+ "doc": "make_time_layer refuses a clustered layer -- both models must decline\n    identically: no time config, no times buffer, the warning instead. The\n    period is passed deliberately: a fully declined call must not leave it\n    behind in time_config as residue.",
  "ops": [
   {
    "buffer": null,

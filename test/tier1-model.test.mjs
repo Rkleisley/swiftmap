@@ -199,7 +199,7 @@ const SCENARIOS = {
                              lon: [-5.31, -5.311, -5.0],
                              timestamp: [1767225600, 1767312000, 1767398400] },
                            { name: "CT", cluster: true });
-        m.makeTimeLayer("CT");
+        m.makeTimeLayer("CT", { period: "PT1H" });
         return m;
     },
 
@@ -605,7 +605,7 @@ test("makeTimeLayer declines a clustered layer, like Python", () => {
         m.addCircleMarkers({ lat: [36.01, 36.011], lon: [-5.31, -5.311],
                              timestamp: [1767225600, 1767312000] },
                            { name: "CT", cluster: true });
-        m.makeTimeLayer("CT");
+        m.makeTimeLayer("CT", { period: "PT1H" });
         const layer = m.props().layers.find(l => l.name === "CT");
         assert.ok(warned.some(w => w.includes("clustered")
             && w.includes("not composable")), "the refusal says why");
@@ -614,6 +614,8 @@ test("makeTimeLayer declines a clustered layer, like Python", () => {
             "no times buffer is packed");
         assert.ok(layer.properties.timestamp,
             "the time column is not stripped from a declined layer");
+        assert.deepEqual(m.wireState().time_config, {},
+            "a fully declined call leaves no period residue in time_config");
     } finally {
         console.warn = original;
     }
