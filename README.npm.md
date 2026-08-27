@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/Rkleisley/swiftmap/main/assets/swiftmap-mark.svg" alt="" height="44" align="left" hspace="12">
+
 # swiftmap-core
 
 The framework-agnostic rendering core behind [swiftmap](https://github.com/Rkleisley/swiftmap) —

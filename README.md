@@ -1,4 +1,4 @@
-# swiftmap
+<img src="https://raw.githubusercontent.com/Rkleisley/swiftmap/main/assets/swiftmap-lockup.svg" alt="swiftmap" height="52">
 
 `swiftmap` is a Python mapping library that keeps Leaflet's ergonomics while replacing its
 vector drawing with WebGL pipelines — so the map you build with a few `add_*` calls keeps

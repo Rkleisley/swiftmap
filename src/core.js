@@ -475,16 +475,14 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
 
     // Logo
     // The logo card: two app-supplied slots from logo_config, no branding of
-    // its own. With the card on and neither slot set, a generic mark stands in
+    // its own. With the card on and neither slot set, swiftmap's own mark stands in
     // -- inline SVG, so it needs no network and survives a static export.
     // Built with elements, not innerHTML, so an alt text cannot inject markup.
     const LOGO_POSITIONS = new Set(["top-left", "top-right", "bottom-left", "bottom-right"]);
+    // The swiftmap mark: an S sampled from map points on a graticule. Inline,
+    // so it needs no network and rides into a static export like everything else.
     const DEFAULT_LOGO = "data:image/svg+xml;utf8," + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 40">'
-        + '<rect width="140" height="40" rx="8" fill="#1f6feb"/>'
-        + '<text x="70" y="26" font-family="Segoe UI, Helvetica, Arial, sans-serif" '
-        + 'font-size="18" font-weight="600" fill="#fff" text-anchor="middle">swiftmap</text>'
-        + '</svg>');
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g stroke="#2b7a9e" stroke-width=".7" opacity=".26"><line x1="6" y1="21" x2="58" y2="21"/><line x1="6" y1="43" x2="58" y2="43"/></g><g fill="#2b7a9e"><circle cx="39.78" cy="13.22" r="1.6"/><circle cx="36.21" cy="10.84" r="2.2"/><circle cx="32" cy="10" r="2.7"/><circle cx="27.79" cy="10.84" r="2.9"/><circle cx="24.22" cy="13.22" r="3"/><circle cx="21.84" cy="16.79" r="3"/><circle cx="21" cy="21" r="3"/><circle cx="21.84" cy="25.21" r="3"/><circle cx="24.22" cy="28.78" r="3"/><circle cx="27.79" cy="31.16" r="3"/><circle cx="32" cy="32" r="3"/><circle cx="36.21" cy="32.84" r="3"/><circle cx="39.78" cy="35.22" r="3"/><circle cx="42.16" cy="38.79" r="3"/><circle cx="43" cy="43" r="3"/><circle cx="42.16" cy="47.21" r="3"/><circle cx="39.78" cy="50.78" r="2.9"/><circle cx="36.21" cy="53.16" r="2.7"/><circle cx="32" cy="54" r="2.2"/><circle cx="27.79" cy="53.16" r="1.9"/><circle cx="24.22" cy="50.78" r="1.6"/></g></svg>');
     const logoDiv = document.createElement("div");
     logoDiv.className = "swiftmap-logo";
     logoDiv.style.position = "absolute";

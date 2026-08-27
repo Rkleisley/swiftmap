@@ -367,3 +367,10 @@ footer.site .built { margin-left: auto; font-family: var(--mono); font-size: 12p
 }
 .gaps .gap p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-faint); }
 .gaps .gap code { font-family: var(--mono); font-size: 12.5px; }
+
+/* Brand lockup in the topbar: the mark beside the wordmark, as one link. */
+.topbar .brand {
+    display: inline-flex; align-items: center; gap: 9px;
+    text-decoration: none; color: inherit;
+}
+.topbar .brand img { display: block; }

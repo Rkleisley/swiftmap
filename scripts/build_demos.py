@@ -728,6 +728,7 @@ def page_html(cards, tiers, hero_bytes, stamp, version):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>swiftmap &mdash; Leaflet ergonomics, WebGL scale</title>
 <meta name="description" content="A Python mapping library that keeps Leaflet's ergonomics and replaces its vector drawing with WebGL pipelines. Every map on this page is live.">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="stylesheet" href="assets/swiftmap.css">
 <link rel="stylesheet" href="assets/site.css">
 </head>
@@ -735,7 +736,10 @@ def page_html(cards, tiers, hero_bytes, stamp, version):
 
 <header class="topbar">
   <div class="wrap">
-    <span class="brand">swift<span>map</span></span>
+    <a class="brand" href="./">
+      <img src="assets/favicon.svg" alt="" width="26" height="26">
+      <span>swift<span>map</span></span>
+    </a>
     <span class="pill">v{html.escape(version)}</span>
     <nav>
       <a href="#gallery">Gallery</a>
