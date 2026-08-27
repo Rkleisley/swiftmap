@@ -683,6 +683,17 @@ def scenario_line_arrows_dash():
     return m
 
 
+def scenario_line_arrow_modes():
+    """The arrow placement vocabulary: end caps, per-segment, tuned spacing."""
+    m = Map(show_logo=False)
+    track = [[36.00, -5.30], [36.05, -5.25], [36.10, -5.20]]
+    m.add_line(track, name="Caps", arrows="end")
+    m.add_line(track, name="Legs", arrows="segments")
+    m.add_line(track, name="Sparse", arrows=True, arrow_spacing=200)
+    m.add_line(track, name="Metric", arrows=True, arrow_spacing="2km")
+    return m
+
+
 SCENARIOS = [
     scenario_empty_map,
     scenario_points_defaults,
@@ -744,6 +755,7 @@ SCENARIOS = [
     scenario_polygon_fan_color_col,
     scenario_polygon_table_wkt_color_col,
     scenario_line_arrows_dash,
+    scenario_line_arrow_modes,
     scenario_clustered_points,
 ]
 

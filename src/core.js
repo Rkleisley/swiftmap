@@ -788,6 +788,8 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 opacity: l.opacity,
                 fillOpacity: l.fillOpacity,
                 arrows: l.arrows,
+                arrowSpacingPx: l.arrow_spacing_px,
+                arrowSpacingM: l.arrow_spacing_m,
                 dash: l.dash,
                 highlight: l.highlight_style,
                 overrides: l.style_overrides,

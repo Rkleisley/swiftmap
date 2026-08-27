@@ -57,7 +57,7 @@ _SUB_LAYER_ATTRS = (
     # read the flat buffer as ONE run and draw the phantom segment between parts.
     "parts",
     # Line decoration flags; a merged member keeps its own arrows and pattern.
-    "arrows", "dash",
+    "arrows", "arrow_spacing_px", "arrow_spacing_m", "dash",
     # Clustering flags; a merged member keeps its own rendering path.
     "cluster", "cluster_radius", "cluster_max_zoom",
     # The add-time options record update_layer(data=...) re-applies.

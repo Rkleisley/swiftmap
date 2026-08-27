@@ -49,7 +49,7 @@
    "buffer": null,
    "op": {
     "layer": {
-     "arrows": true,
+     "arrows": "spacing",
      "autobind_popup": true,
      "autobind_tooltip": true,
      "bounds": [
@@ -140,7 +140,7 @@
     "visible": false
    },
    {
-    "arrows": true,
+    "arrows": "spacing",
     "autobind_popup": true,
     "autobind_tooltip": true,
     "bounds": [

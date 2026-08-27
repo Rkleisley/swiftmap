@@ -114,7 +114,7 @@ const SUB_LAYER_ATTRS = new Set([
     "radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity",
     "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations",
     "location", "geojson", "rings", "legend", "legend_size", "label", "labels",
-    "parts", "arrows", "dash",
+    "parts", "arrows", "arrow_spacing_px", "arrow_spacing_m", "dash",
     "cluster", "cluster_radius", "cluster_max_zoom",
     "added_with", "bounds", "subdomains", "wms", "url", "image_format",
     "popup_fields", "popup_names", "popup_template", "popup_style",
@@ -808,10 +808,62 @@ export function createMapModel(options = {}) {
         return null;
     }
 
+    // Python's arrow normalisation, verbatim: `arrows` is a placement
+    // vocabulary (true = spaced, "end", "segments"), `arrow_spacing` a screen
+    // pixel count or a ground distance with a unit suffix. Golden-pinned.
+    function normalizeArrows(options) {
+        const a = opt(options, "arrows", "arrows");
+        const spacingOpt = opt(options, "arrowSpacing", "arrow_spacing");
+        let mode = null;
+        if (a) {
+            if (a === true || a === "spacing") mode = "spacing";
+            else if (a === "end" || a === "segments") mode = a;
+            else {
+                console.warn(`swiftmap: addLine: arrows must be true, 'end', `
+                    + `or 'segments' -- got ${JSON.stringify(a)}. `
+                    + `Drawing spaced arrows.`);
+                mode = "spacing";
+            }
+        }
+        let px = null, meters = null;
+        if (spacingOpt != null) {
+            if (mode !== "spacing") {
+                console.warn("swiftmap: addLine: arrow_spacing applies to "
+                    + "spaced arrows only (arrows=true). Ignored.");
+            } else {
+                if (typeof spacingOpt === "string") {
+                    const s = spacingOpt.trim().toLowerCase().replace(/\s+/g, "");
+                    if (s.endsWith("km")) meters = Number(s.slice(0, -2)) * 1000;
+                    else if (s.endsWith("px")) px = Number(s.slice(0, -2));
+                    else if (s.endsWith("m")) meters = Number(s.slice(0, -1));
+                    else px = Number(s);
+                } else {
+                    px = Number(spacingOpt);
+                }
+                if (!(px > 0) && !(meters > 0)) {
+                    console.warn(`swiftmap: addLine: arrow_spacing must be `
+                        + `pixels (120, '120px') or a ground distance `
+                        + `('500m', '2km') -- got ${JSON.stringify(spacingOpt)}. `
+                        + `Using the default spacing.`);
+                    px = meters = null;
+                } else if (!(px > 0)) {
+                    px = null;
+                } else {
+                    meters = null;
+                }
+            }
+        }
+        return {
+            ...(mode ? { arrows: mode } : {}),
+            ...(px ? { arrow_spacing_px: px } : {}),
+            ...(meters ? { arrow_spacing_m: meters } : {}),
+        };
+    }
+
     function lineDecoOptions(options) {
         const dash = normalizeDash(opt(options, "dash", "dash"), "addLine");
         return {
-            ...(options.arrows ? { arrows: true } : {}),
+            ...normalizeArrows(options),
             ...(dash ? { dash } : {}),
         };
     }

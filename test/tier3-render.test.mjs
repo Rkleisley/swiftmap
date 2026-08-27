@@ -1680,6 +1680,54 @@ suite("arrows and dashes draw, and draw differently from a solid line", async ()
     });
 });
 
+suite("the end cap survives any zoom; spacing thins where per-segment blobs", async () => {
+    // The blob report: per-segment arrows are anchored to their segments, so a
+    // dense track zoomed out stacked hundreds of chevrons into a smear -- and
+    // the old minimum-segment gate then hid ALL of them once segments shrank,
+    // so a zoomed-out track showed no direction at all. Now the default gate
+    // is a screen-pixel spacing grid (on-screen count locked) and every part
+    // carries an unconditional END CAP. At a zoom where the whole track is a
+    // dozen pixels, the cap is the difference between these screenshots; the
+    // old shader drew nothing there.
+    await withPage(async (page, errors) => {
+        const shots = await page.evaluate(async () => {
+            const m = await import("/dist/anywidget.js");
+            // A dense 60-vertex track: every segment far below the 48px gate
+            // at zoom 8, the whole path far below one 120px spacing cell.
+            const flat = [];
+            for (let i = 0; i < 60; i++) flat.push(36.00 + i * 0.0008, -5.32 + i * 0.0012);
+            const mk = async (id, deco) => {
+                const el = document.createElement("div");
+                el.id = id;
+                el.style.cssText = "width:400px;height:300px;display:inline-block";
+                document.body.appendChild(el);
+                const coords = new Float64Array(flat);
+                await m.default.render({ model: m.createHostStub({
+                    layers: [{ id: "t", type: "polyline", name: "Track",
+                               layer_group: "L", visible: true, color: "#ff0000",
+                               weight: 4, opacity: 1, ...deco }],
+                    group_configs: {},
+                    coordinate_buffers: { t: new DataView(coords.buffer) },
+                    center: [36.024, -5.284], zoom: 8, crs: "EPSG:3857",
+                    auto_sync: true, sync_trigger: 0, show_logo: false,
+                }, { comm: null }), el });
+                return el;
+            };
+            await mk("bare", {});
+            await mk("capped", { arrows: "spacing" });
+            await new Promise(r => setTimeout(r, 800));
+            return true;
+        });
+        assert.ok(shots);
+        const bare = await page.locator("#bare").screenshot();
+        const capped = await page.locator("#capped").screenshot();
+        assert.notEqual(Buffer.compare(bare, capped), 0,
+            "zoomed far out, the unconditional end cap still marks direction "
+            + "-- equal pixels mean the cap was gated away like the old arrows");
+        assert.deepEqual(errors, [], "no errors from the gated-arrow pipeline");
+    });
+});
+
 suite("destroying a map mid-zoom-animation throws nothing later", async () => {
     // Leaflet arms a bare setTimeout(_onZoomTransitionEnd, 250) when a zoom
     // animation starts, and map.remove() does not clear it -- so a map torn

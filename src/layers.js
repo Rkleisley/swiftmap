@@ -564,8 +564,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                                 fragmentShaderSource: () => ARROW_FRAGMENT,
                             });
                             setupGlifyProjection(this.glArrows);
-                            this._arrowDeco = wireArrowDeco(
-                                this.glArrows, arrows.angles, arrows.segLens);
+                            this._arrowDeco = wireArrowDeco(this.glArrows, arrows);
                             if (vectorTime) {
                                 const layerPos = new Map(
                                     layersList.map((l, i) => [l, i]));

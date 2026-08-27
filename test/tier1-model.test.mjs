@@ -62,6 +62,16 @@ const SCENARIOS = {
         [[36.00, -5.30], [36.05, -5.25], [36.10, -5.20]],
         { name: "Flow", arrows: true, dash: "8 4", color: "#0055ff" }),
 
+    line_arrow_modes: () => {
+        const m = createMapModel();
+        const track = [[36.00, -5.30], [36.05, -5.25], [36.10, -5.20]];
+        m.addLine(track, { name: "Caps", arrows: "end" });
+        m.addLine(track, { name: "Legs", arrows: "segments" });
+        m.addLine(track, { name: "Sparse", arrows: true, arrowSpacing: 200 });
+        m.addLine(track, { name: "Metric", arrows: true, arrowSpacing: "2km" });
+        return m;
+    },
+
     heatmap_time: () => {
         const m = createMapModel();
         m.addHeatmap(

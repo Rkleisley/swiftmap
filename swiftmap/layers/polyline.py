@@ -23,7 +23,8 @@ def add_line(
     line_id_col: Optional[str] = None,
     order_col: Optional[str] = None,
     coord_order: str = "auto",
-    arrows: bool = False,
+    arrows: Any = False,
+    arrow_spacing: Any = None,
     dash: Any = None,
     name: Optional[str] = None,
     layer_group: Optional[str] = None,
@@ -75,6 +76,18 @@ def add_line(
         - 'lat_lon': Traditional format (Y = Latitude, X = Longitude).
 
         WKT values declare their own axis order and are never subject to the heuristic.
+    arrows : bool or str, default False
+        Direction arrows along each line. True spaces them evenly in screen
+        pixels, so the number on screen stays steady at every zoom; 'segments'
+        draws one per leg (thinned only when a leg is too short on screen);
+        'end' draws only the terminal cap. Every mode always draws the end
+        cap, so a line declares its direction at any zoom.
+    arrow_spacing : int, float or str, optional
+        The spacing grid for `arrows=True`: screen pixels (120, '120px') or a
+        ground distance ('500m', '2km'). Default 120 pixels.
+    dash : str or list, optional
+        An on,off pixel pair ('8 4' or [8, 4]) patterning the stroke,
+        screen-stable at every zoom.
     name : str, optional
         Layer name displayed in the sidebar control. If it matches a property key in the
         data, each line is named from its own value of that property.
@@ -174,10 +187,54 @@ def add_line(
                                    layer_style.get("color", "#3388ff"), "add_line")
     legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#3388ff"))
 
-    # Direction and pattern decoration. `arrows=True` draws a chevron per
-    # segment, oriented with travel, thinned automatically as segments shrink
-    # on screen -- a paused track finally shows which way it goes. `dash` is an
-    # on,off pixel pair ("8 4" or [8, 4]), screen-stable at every zoom.
+    # Direction and pattern decoration. `arrows` is a placement vocabulary:
+    # True spaces chevrons evenly in SCREEN pixels, so the on-screen count is
+    # locked at every zoom (a dense track zoomed out shows a handful, never a
+    # blob); "segments" is one per leg for sparse geometry; "end" is caps
+    # only. Every mode always shows the end cap. `arrow_spacing` tunes the
+    # grid -- pixels (120, "120px") or ground distance ("500m", "2km").
+    # `dash` is an on,off pixel pair ("8 4" or [8, 4]), screen-stable at
+    # every zoom.
+    arrow_mode = None
+    if arrows:
+        if arrows is True or arrows == "spacing":
+            arrow_mode = "spacing"
+        elif arrows in ("end", "segments"):
+            arrow_mode = arrows
+        else:
+            warn(f"add_line: arrows must be True, 'end', or 'segments' -- got "
+                 f"{arrows!r}. Drawing spaced arrows.")
+            arrow_mode = "spacing"
+    spacing_px = spacing_m = None
+    if arrow_spacing is not None:
+        if arrow_mode != "spacing":
+            warn("add_line: arrow_spacing applies to spaced arrows only "
+                 "(arrows=True). Ignored.")
+        else:
+            try:
+                if isinstance(arrow_spacing, str):
+                    s = arrow_spacing.strip().lower().replace(" ", "")
+                    if s.endswith("km"):
+                        spacing_m = float(s[:-2]) * 1000.0
+                    elif s.endswith("px"):
+                        spacing_px = float(s[:-2])
+                    elif s.endswith("m"):
+                        spacing_m = float(s[:-1])
+                    else:
+                        spacing_px = float(s)
+                else:
+                    spacing_px = float(arrow_spacing)
+            except (TypeError, ValueError):
+                pass
+            if not ((spacing_px or 0) > 0 or (spacing_m or 0) > 0):
+                warn(f"add_line: arrow_spacing must be pixels (120, '120px') "
+                     f"or a ground distance ('500m', '2km') -- got "
+                     f"{arrow_spacing!r}. Using the default spacing.")
+                spacing_px = spacing_m = None
+            elif not ((spacing_px or 0) > 0):
+                spacing_px = None
+            else:
+                spacing_m = None
     dash_list = None
     if dash is not None:
         try:
@@ -231,7 +288,9 @@ def add_line(
             "layer_group": resolve_group_path(group_specs, props, i, "Line Group"),
             "group_multi_select": group_multi_select,
             "visible": True,
-            **({"arrows": True} if arrows else {}),
+            **({"arrows": arrow_mode} if arrow_mode else {}),
+            **({"arrow_spacing_px": spacing_px} if spacing_px else {}),
+            **({"arrow_spacing_m": spacing_m} if spacing_m else {}),
             **({"dash": dash_list} if dash_list else {}),
             **({"parts": parts} if parts else {}),
             "bounds": bounds_of_coords(flat),
