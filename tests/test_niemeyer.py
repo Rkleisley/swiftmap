@@ -2,20 +2,33 @@
 The Niemeyer codec, pinned character-for-character to geostructures.
 
 swiftmap's implementation is independent (pure arithmetic, no dependency),
-but the FORMAT is geostructures' -- charsets, bit orders, and the base-16/64
-+/-180 latitude domain included -- so the parity suite here is the contract:
-any divergence from geostructures is a bug on this side by definition.
+but the FORMAT is geostructures' -- charsets, bit orders and latitude
+domains -- so the parity suite here is the contract: any divergence from
+geostructures is a bug on this side by definition. The reference is
+geostructures >= 0.14, which fixed the base-16/64 latitude domain from
++/-180 to +/-90; against an older install the parity test skips rather
+than certify agreement with the superseded domain.
 """
 import random
+import re
 
 import pytest
 
 from swiftmap import _niemeyer as nm
 
 gs_geohash = pytest.importorskip("geostructures.geohash")
+import geostructures  # noqa: E402
 from geostructures import Coordinate  # noqa: E402
 
 
+def _reference_is_current():
+    match = re.match(r"v?(\d+)\.(\d+)", getattr(geostructures, "__version__", ""))
+    return bool(match) and (int(match.group(1)), int(match.group(2))) >= (0, 14)
+
+
+@pytest.mark.skipif(not _reference_is_current(),
+                    reason="geostructures < 0.14 still bisects base-16/64 "
+                           "latitude over +/-180; the codec tracks the fix")
 @pytest.mark.parametrize("base", [16, 32, 64])
 def test_encode_and_decode_match_geostructures(base):
     rng = random.Random(base)

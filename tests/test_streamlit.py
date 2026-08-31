@@ -78,6 +78,10 @@ def test_the_fingerprint_moves_only_when_the_map_changes():
 
 
 def test_the_return_shape_is_stable_before_any_interaction(monkeypatch):
+    # The monkeypatched component sits BEHIND the is-streamlit-installed gate:
+    # without the real dependency st_swiftmap warns and returns the defaults
+    # before ever calling it, and calls[] stays empty.
+    pytest.importorskip("streamlit")
     calls = []
 
     def component(**kwargs):

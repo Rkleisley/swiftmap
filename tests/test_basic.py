@@ -372,7 +372,9 @@ def test_legend_and_geostructures():
     line = GeoLineString([c1, c2], properties={'name': 'Flight Route'})
     poly = GeoPolygon([c1, Coordinate(-118.20, 34.05), Coordinate(-118.20, 34.10), Coordinate(-118.24, 34.10), c1], properties={'name': 'Zone Area'})
     circle = GeoCircle(c1, radius=1000, properties={'name': 'Circle Zone'})
-    box = GeoBox(c1, c2, properties={'name': 'Box Area'})
+    # c2 is the north-west corner (west of and north of c1); geostructures
+    # >= 0.14 validates the corner order it always documented.
+    box = GeoBox(c2, c1, properties={'name': 'Box Area'})
     ring = GeoRing(c1, inner_radius=500, outer_radius=1000, properties={'name': 'Ring Zone'})
     multipoly = MultiGeoPolygon([poly], properties={'name': 'Multi Zone'})
 

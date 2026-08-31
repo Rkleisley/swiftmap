@@ -7,19 +7,24 @@ every base whose alphabet contains its characters, decoding to a different
 rectangle in each. The base is therefore part of the format, not of the
 string: everything here takes it explicitly, with no default, mirroring
 geostructures' own NiemeyerHasher. The charsets and domains below are the
-format's spec (base 16 and 64 bisect latitude over +/-180, exactly as
-geostructures defines them); the parity suite pins this module to
-geostructures character-for-character.
+format's spec as geostructures >= 0.14 defines it; the parity suite pins
+this module to geostructures character-for-character.
+
+COMPATIBILITY NOTE: geostructures 0.14.0 fixed the base-16/64 latitude
+domain from +/-180 to +/-90 (base 32 always used +/-90). A base-16/64 hash
+minted by geostructures <= 0.13 therefore decodes to a DIFFERENT cell here
+than the library that wrote it intended -- re-hash such data with a current
+geostructures before plotting it.
 """
 from typing import Dict, List, Tuple
 
 # base -> (bits per character high-to-low, charset, lat domain half-width)
 _CONFIG: Dict[int, Tuple[Tuple[int, ...], str, float]] = {
-    16: ((8, 4, 2, 1), "0123456789abcdef", 180.0),
+    16: ((8, 4, 2, 1), "0123456789abcdef", 90.0),
     32: ((16, 8, 4, 2, 1), "0123456789bcdefghjkmnpqrstuvwxyz", 90.0),
     64: ((32, 16, 8, 4, 2, 1),
          "0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
-         180.0),
+         90.0),
 }
 
 BASES = tuple(sorted(_CONFIG))

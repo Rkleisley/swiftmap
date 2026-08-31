@@ -25,6 +25,13 @@ def coord(pt):
     return Coordinate(pt[1], pt[0])
 
 
+def box(sw, ne):
+    """A GeoBox from two (lat, lon) corners. geostructures >= 0.14 validates
+    that nw_bound really is north-west of se_bound; older releases accepted
+    any pair, which is how these fixtures got away with sloppy corners."""
+    return GeoBox(coord((ne[0], sw[1])), coord((sw[0], ne[1])))
+
+
 @pytest.fixture
 def point():
     return GeoPoint(coord(A))
@@ -57,7 +64,7 @@ def test_polygon_ring_is_closed(polygon):
 
 
 @pytest.mark.parametrize("shape_factory", [
-    pytest.param(lambda: GeoBox(coord(A), coord(B)), id="GeoBox"),
+    pytest.param(lambda: box(A, B), id="GeoBox"),
     pytest.param(lambda: GeoCircle(coord(A), radius=500), id="GeoCircle"),
 ])
 def test_derived_polygon_shapes_parse_as_polygons(shape_factory):
@@ -264,7 +271,7 @@ def test_multigeopolygon_parses_without_error():
     pytest.param(lambda: GeoPoint(coord(A)), id="GeoPoint"),
     pytest.param(lambda: GeoLineString([coord(A), coord(B)]), id="GeoLineString"),
     pytest.param(lambda: GeoPolygon([coord(A), coord(C), coord(B), coord(A)]), id="GeoPolygon"),
-    pytest.param(lambda: GeoBox(coord(A), coord(B)), id="GeoBox"),
+    pytest.param(lambda: box(A, B), id="GeoBox"),
     pytest.param(lambda: GeoCircle(coord(A), radius=500), id="GeoCircle"),
     pytest.param(lambda: GeoRing(coord(A), inner_radius=1, outer_radius=2), id="GeoRing"),
     pytest.param(lambda: MultiGeoPoint([GeoPoint(coord(A))]), id="MultiGeoPoint"),
