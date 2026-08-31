@@ -18,6 +18,14 @@ from pathlib import Path
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
+# The optional extras, exactly as the test suite treats them: a parser or
+# imagery test module skips itself when its library is absent, and a notebook
+# demonstrating that same surface skips for the same reason. Anything NOT in
+# this set failing to import is a real failure -- a broken example, not a
+# lean environment.
+OPTIONAL_MODULES = {"rasterio", "h3", "polars", "pyarrow", "geopandas",
+                    "shapely", "geostructures", "streamlit"}
+
 # Some notebooks write files when run (the export steps). Executing in a scratch
 # directory keeps those artifacts out of the repo no matter where this is launched.
 os.chdir(tempfile.mkdtemp(prefix="swiftmap-examples-"))
@@ -32,6 +40,20 @@ for nb_path in sorted(EXAMPLES.glob("*.ipynb")):
         src = cell["source"] if isinstance(cell["source"], str) else "".join(cell["source"])
         try:
             exec(compile(src, f"{nb_path.name}:cell-{i}", "exec"), ns)
+        except ImportError as exc:
+            # Three spellings of the same situation: a bare ModuleNotFoundError,
+            # a library's own "pyarrow is required for ..." ImportError, and
+            # swiftmap's "needs the h3 package" hint. Each names the module.
+            root = (getattr(exc, "name", None) or "").split(".")[0]
+            named = root if root in OPTIONAL_MODULES else next(
+                (m for m in OPTIONAL_MODULES if m in str(exc)), None)
+            if named:
+                print(f"SKIP {nb_path.name} (optional dependency "
+                      f"'{named}' is not installed)")
+            else:
+                print(f"FAIL {nb_path.name} cell {i}: {type(exc).__name__}: {exc}")
+                failed = True
+            break
         except Exception as exc:
             print(f"FAIL {nb_path.name} cell {i}: {type(exc).__name__}: {exc}")
             failed = True

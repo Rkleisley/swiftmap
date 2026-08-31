@@ -75,6 +75,9 @@ test = [
     "pytest",
     "pandas",
     "polars",
+    # polars needs it to read pandas extension dtypes (nullable 'Int64' etc.);
+    # without it the pandas->polars interop the gallery demonstrates raises.
+    "pyarrow",
     "geopandas",
     "shapely",
     "geostructures",
