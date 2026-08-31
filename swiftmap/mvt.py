@@ -78,8 +78,8 @@ def read_mvt(url: str, bounds, zoom: int,
     ----------
     url : str
         An XYZ template with {z}, {x}, {y} placeholders -- an http(s) URL or
-        a local path ("tiles/{z}/{x}/{y}.pbf"). An optional {s} rotates
-        through a, b, c.
+        a local path ("tiles/{z}/{x}/{y}.pbf"). {-y} in place of {y} flips
+        the row for TMS tile schemes; an optional {s} rotates through a, b, c.
     bounds : [[lat_min, lon_min], [lat_max, lon_max]]
         The area to read, the shape bounds_of returns.
     zoom : int
@@ -100,9 +100,10 @@ def read_mvt(url: str, bounds, zoom: int,
     if isinstance(zoom, bool) or not isinstance(zoom, int) or not 0 <= zoom <= 24:
         raise ValueError(f"read_mvt zoom must be an integer from 0 to 24, "
                          f"got {zoom!r}.")
-    if "{z}" not in url or "{x}" not in url or "{y}" not in url:
+    if "{z}" not in url or "{x}" not in url or (
+            "{y}" not in url and "{-y}" not in url):
         raise ValueError("read_mvt url must be an XYZ template containing "
-                         "{z}, {x} and {y}.")
+                         "{z}, {x} and {y} (or {-y} for TMS tile schemes).")
     xs, ys = _tile_range(bounds, zoom)
     count = len(xs) * len(ys)
     if count > MAX_TILES:
@@ -114,7 +115,9 @@ def read_mvt(url: str, bounds, zoom: int,
     rows: List[Dict[str, Any]] = []
     for x in xs:
         for y in ys:
+            # {-y} is the TMS convention: same tiles, y counted from the south.
             tile_url = (url.replace("{z}", str(zoom)).replace("{x}", str(x))
+                           .replace("{-y}", str(2 ** zoom - 1 - y))
                            .replace("{y}", str(y))
                            .replace("{s}", next(subdomains)))
             data = _fetch(tile_url, headers)

@@ -2,6 +2,7 @@ from .map import Map
 from ._colormaps import register_colormap
 from .hexbin import hexbin, geohash_bin
 from .mvt import read_mvt
+from .wfs import read_wfs
 
 # Read from the installed package's own metadata, so this can never disagree with
 # the wheel it shipped in; the fallback covers a source tree that was never
@@ -18,5 +19,6 @@ __all__ = [
     "hexbin",
     "geohash_bin",
     "read_mvt",
+    "read_wfs",
     "__version__",
 ]

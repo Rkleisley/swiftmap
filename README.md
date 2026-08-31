@@ -135,11 +135,15 @@ Every `add_*` method accepts the same range of inputs:
 - **Raw lists and dicts** of coordinates, with a range-based heuristic for axis order
   (`coord_order="lat_lon"`/`"lon_lat"` to state it explicitly; WKT and GeoJSON declare
   their own order and are never guessed at)
-- **Vector tiles**, via one hop — `swiftmap.read_mvt(url, bounds, zoom)` fetches the
-  MVT tiles covering a view from an `{z}/{x}/{y}` template (an http(s) URL or a local
-  tile directory; decoder and fetching are swiftmap's own, no added dependency) and
-  returns an ordinary table: WKT `geometry`, `mvt_layer`, and every feature property,
-  ready for any `add_*` method
+- **Vector tiles and WFS layers**, via one hop — the `read_*` functions are where
+  swiftmap fetches (the `add_*` methods never do). `swiftmap.read_mvt(url, bounds,
+  zoom)` reads the MVT tiles covering a view from an `{z}/{x}/{y}` template (an
+  http(s) URL or a local tile directory; `{-y}` for TMS schemes; decoder and fetching
+  are swiftmap's own, no added dependency). `swiftmap.read_wfs(url, layer)` reads an
+  OGC WFS feature layer — paging past the server's per-request cap until the layer is
+  complete, and raising rather than silently returning a truncated one. Both hand back
+  an ordinary table: WKT `geometry` plus every feature property, ready for any `add_*`
+  method
 
 A method that cannot read what you passed **warns and adds nothing** rather than raising —
 a map is built by a chain of `add_*` calls, and an exception partway through would discard
