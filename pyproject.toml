@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swiftmap"
-version = "0.5.1"
+version = "0.6.0"
 description = "WebGL-accelerated Leaflet maps with one core and four stacks -- Jupyter/Shiny widget, React, Streamlit, and self-contained static exports; offline-first for closed networks"
 readme = "README.md"
 license = "MIT"
