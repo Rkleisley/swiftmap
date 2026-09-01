@@ -165,8 +165,17 @@ export function applySwiftmapPatch(state, ops, buffers) {
             });
         } else if (op.op === "add" || op.op === "replace") {
             const incoming = op.layer;
-            const id = incoming ? incoming.id : op.id;
-            const idx = layers.findIndex(l => l.id === id);
+            // The op's id names the layer being replaced, which a merge
+            // promotion's payload no longer shares -- the group is minted a
+            // new id. Preferring the payload's id here made findIndex miss
+            // and the entry duplicate (one in Python, two on screen). The
+            // payload id stays as the fallback for hand-built ops without
+            // one, and as a second lookup for op streams from older senders.
+            const id = op.id != null ? op.id : (incoming ? incoming.id : undefined);
+            let idx = layers.findIndex(l => l.id === id);
+            if (idx === -1 && incoming && incoming.id !== id) {
+                idx = layers.findIndex(l => l.id === incoming.id);
+            }
             if (idx === -1) {
                 layers = [...layers, incoming];
             } else {

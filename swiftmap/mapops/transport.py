@@ -137,7 +137,13 @@ def _layers_replace(self, existing: Any, config: Any,
         cache[1][(config.get("layer_group"), config.get("name"))] = config
         self._merge_cache = (new_layers, cache[1])
     if emit_ops is None:
-        emit_ops = [{"op": "replace", "id": config.get("id"), "layer": _layer_to_dict(config)}]
+        # Keyed by the layer being REPLACED, not by the payload: a merge
+        # promotion mints the group a NEW id, and an op keyed by that unseen
+        # id missed the frontend's mirror, which appended instead -- one entry
+        # in Python, two rows on screen (the MAST mirror-replay report). For
+        # every other replace the two ids agree and nothing changes.
+        emit_ops = [{"op": "replace", "id": existing.get("id"),
+                     "layer": _layer_to_dict(config)}]
     for op in emit_ops:
         self._emit(op)
 

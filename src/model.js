@@ -408,7 +408,11 @@ export function createMapModel(options = {}) {
             };
         }
         state.layers = state.layers.map((l, i) => (i === twinIndex ? group : l));
-        emit({ op: "replace", id: group.id, layer: group });
+        // Keyed by the TWIN -- the layer being replaced. A first promotion
+        // mints the group a new id the mirror has never seen; keying the op
+        // by it made applySwiftmapPatch append a duplicate (Python's
+        // _layers_replace had the identical bug, fixed in step).
+        emit({ op: "replace", id: twin.id, layer: group });
     }
 
     // One fan, one op: a uniform fan's members assemble into a single group
@@ -429,7 +433,8 @@ export function createMapModel(options = {}) {
     // smaller ops when the change can be said in less (Python's _layers_replace).
     function replaceInState(existing, config, emitOps = null) {
         state.layers = state.layers.map(l => (l === existing ? config : l));
-        for (const op of emitOps || [{ op: "replace", id: config.id, layer: config }]) {
+        for (const op of emitOps
+                || [{ op: "replace", id: existing.id, layer: config }]) {
             emit(op);
         }
     }

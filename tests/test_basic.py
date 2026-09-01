@@ -602,3 +602,47 @@ def test_clear_time_layer_keeps_the_layers_other_buffers():
     assert f"{layer_id}::times" not in m.coordinate_buffers, "the animation went"
     assert layer_id in m.coordinate_buffers, "the coordinates stayed"
     assert f"{layer_id}::colors" in m.coordinate_buffers, "the colours stayed"
+
+
+def test_promotion_ops_converge_a_frontend_mirror():
+    # The MAST mirror-replay report: a merge promotion mints the group a NEW
+    # id, and the replace op used to be keyed by it -- an id the frontend had
+    # never seen, so its patch resolution appended instead of replacing: one
+    # entry in Python, two rows on screen. The op must be keyed by the layer
+    # being REPLACED, and a mirror replaying the wire must end up holding
+    # exactly Python's layers.
+    m = Map()
+    ops = []
+    orig = m._emit
+    m._emit = lambda op, buffer=None: (ops.append(op), orig(op, buffer))[1]
+
+    m.add_polygon("POLYGON ((-5.3 36.0, -5.2 36.0, -5.2 36.1, -5.3 36.0))",
+                  name="Dwell 1", layer_group="Dwells")
+    poly_id = m.layers[-1].id
+    m.add_markers({"lat": [36.14], "lon": [-5.44]},
+                  name="Dwell 1", layer_group="Dwells")
+
+    replaces = [o for o in ops if o.get("op") == "replace"]
+    assert len(replaces) == 1
+    assert replaces[0]["id"] == poly_id, \
+        "the replace is keyed by the layer being replaced, not by the new group id"
+
+    # The frontend's add/replace/remove resolution, replayed exactly.
+    mirror = []
+    for o in ops:
+        if o.get("op") in ("add", "replace"):
+            incoming = o["layer"]
+            key = o.get("id") if o.get("id") is not None else incoming["id"]
+            hit = [n for n, l in enumerate(mirror) if l["id"] == key]
+            if hit:
+                mirror[hit[0]] = incoming
+            else:
+                mirror.append(incoming)
+        elif o.get("op") == "remove":
+            mirror = [l for l in mirror if l["id"] != o["id"]]
+    # The seeded basemaps predate the hook (the widget's initial state message
+    # carries them); the replay covers everything emitted after.
+    expected = [l.get("id") for l in m.layers
+                if l.get("layer_group") != "Basemaps"]
+    assert [l["id"] for l in mirror] == expected, \
+        "the mirror converges on Python's layers, id for id"

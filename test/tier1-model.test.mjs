@@ -12,6 +12,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createMapModel } from "../src/model.js";
+import { applySwiftmapPatch } from "../src/patch.js";
 
 const GOLDENS = join(dirname(fileURLToPath(import.meta.url)), "goldens", "authoring");
 
@@ -542,6 +543,20 @@ for (const file of readdirSync(GOLDENS).filter(f => f.endsWith(".json")).sort())
         }));
         assert.deepEqual(normalize(emitted), golden.ops,
             "the op stream matches Python's, op for op");
+
+        // The third leg of parity: the ops must CONVERGE the frontend mirror
+        // on this same state. State parity and op parity both held while the
+        // mirror diverged -- a promotion's replace was keyed by an id the
+        // mirror had never seen, so applySwiftmapPatch appended a duplicate:
+        // one entry in the model, two rows on screen (the MAST mirror-replay
+        // report). Replaying every golden's wire ops through the real patch
+        // resolution pins the whole class.
+        const mirror = applySwiftmapPatch(
+            { layers: [], buffers: {} }, golden.ops.map(e => e.op), []);
+        assert.deepEqual(mirror.layers.map(l => l && l.id),
+            golden.state.layers.map(l => l.id),
+            "replaying the wire ops leaves the mirror holding the model's "
+            + "layers, id for id, in order");
     });
 }
 
