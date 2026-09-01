@@ -1728,6 +1728,51 @@ suite("the end cap survives any zoom; spacing thins where per-segment blobs", as
     });
 });
 
+suite("a mixed-type same-name merge is ONE sidebar row", async () => {
+    // The MAST report's expected contract, pinned: two layers added under one
+    // name and folder merge into one entry, and the sidebar renders that entry
+    // as a single leaf row -- never expanded into name-repeating member rows.
+    // The leaf's checkbox cascades to every member (gap H), so one row IS the
+    // whole control.
+    await withPage(async (page, errors) => {
+        const result = await page.evaluate(async () => {
+            const m = await import("/dist/anywidget.js");
+            const el = document.createElement("div");
+            el.style.cssText = "width:600px;height:400px";
+            document.body.appendChild(el);
+            const poly = new Float64Array([36.0, -5.3, 36.0, -5.2, 36.1, -5.2, 36.0, -5.3]);
+            const pins = new Float64Array([36.13, -5.44]);
+            await m.default.render({ model: m.createHostStub({
+                layers: [{ id: "g1", type: "group", name: "Dwell 1",
+                           layer_group: "Dwells", visible: true,
+                           layers: [
+                               { id: "p1", type: "polygon", name: "Dwell 1",
+                                 layer_group: "Dwells", visible: true,
+                                 color: "#3388ff", weight: 3, opacity: 1 },
+                               { id: "m1", type: "markers", name: "Dwell 1",
+                                 layer_group: "Dwells", visible: true,
+                                 color: "#3388ff", weight: 3, opacity: 1 },
+                           ] }],
+                group_configs: {},
+                coordinate_buffers: { p1: new DataView(poly.buffer),
+                                      m1: new DataView(pins.buffer) },
+                center: [36.05, -5.3], zoom: 10, crs: "EPSG:3857",
+                auto_sync: true, sync_trigger: 0, show_logo: false,
+            }, { comm: null }), el });
+            await new Promise(r => setTimeout(r, 600));
+            const bar = el.querySelector(".swiftmap-sidebar")
+                || document.querySelector("[class*=sidebar]");
+            const text = bar ? bar.innerText : "";
+            return { text,
+                     rows: (text.match(/Dwell 1/g) || []).length };
+        });
+        assert.equal(result.rows, 1,
+            `the name appears once, as one row -- sidebar read: ${result.text}`);
+        assert.ok(result.text.includes("Dwells"), "the folder still shows");
+        assert.deepEqual(errors, [], "no errors rendering the merged entry");
+    });
+});
+
 suite("destroying a map mid-zoom-animation throws nothing later", async () => {
     // Leaflet arms a bare setTimeout(_onZoomTransitionEnd, 250) when a zoom
     // animation starts, and map.remove() does not clear it -- so a map torn
