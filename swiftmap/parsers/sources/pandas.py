@@ -63,7 +63,9 @@ def _order_values(series: Any) -> list:
 
 
 def parse_pandas_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
-    return parse_tabular_points(data, lat_col, lon_col, label="DataFrame")
+    return parse_tabular_points(data, lat_col, lon_col, label="DataFrame",
+                                geohash_col=kwargs.get("geohash_col"),
+                                geohash_base=kwargs.get("geohash_base"))
 
 
 def parse_pandas_lines(

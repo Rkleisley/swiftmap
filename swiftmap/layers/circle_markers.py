@@ -17,6 +17,8 @@ def add_circle_markers(
     data: Any,
     lat_col: Optional[str] = None,
     lon_col: Optional[str] = None,
+    geohash_col: Optional[str] = None,
+    geohash_base: Optional[int] = None,
     coord_order: str = "auto",
     radius: int = 10,
     name: Optional[str] = None,
@@ -38,6 +40,16 @@ def add_circle_markers(
         Column name for latitude coordinates. Auto-detected if omitted.
     lon_col : str, optional
         Column name for longitude coordinates. Auto-detected if omitted.
+    geohash_col : str, optional
+        Column holding cell hashes -- each cell plots as a point at its
+        CENTER. H3 cell ids are recognised by value and need nothing else
+        (an H3-named column is also auto-detected when no coordinates
+        exist); Niemeyer geohashes additionally require `geohash_base`. A
+        row's value may be one hash or a list of hashes; a list contributes
+        one point per cell, all sharing the row's properties.
+    geohash_base : int, optional
+        The Niemeyer base: 16, 32 or 64. Never guessed -- the same string is
+        a valid hash in every base, decoding to a different place in each.
     coord_order : {'auto', 'lat_lon', 'lon_lat'}, default 'auto'
         Coordinate pairing convention, used only for raw coordinate lists. Every other
         source states its own axis order -- named lat/lon columns, WKT, the GeoJSON spec,
@@ -113,7 +125,8 @@ def add_circle_markers(
     data_opts = pop_data_options(kwargs, "add_circle_markers", "circle_markers")
     label = kwargs.pop("label", None)
     try:
-        lats, lons, props = parse_points(data, lat_col, lon_col, coord_order=coord_order)
+        lats, lons, props = parse_points(data, lat_col, lon_col, coord_order=coord_order,
+                                         geohash_col=geohash_col, geohash_base=geohash_base)
     except TypeError as exc:
         # The registry raises for a source it cannot dispatch. Direct parse_* callers should
         # see that, but here it would escape the add_* chain and discard every layer already
@@ -239,7 +252,8 @@ def add_circle_markers(
             # sibling layers, which v1 of update_layer declines to re-fan.
             "added_with": record_added_with(
                 "add_circle_markers",
-                parser={"lat_col": lat_col, "lon_col": lon_col, "coord_order": coord_order},
+                parser={"lat_col": lat_col, "lon_col": lon_col, "coord_order": coord_order,
+                        "geohash_col": geohash_col, "geohash_base": geohash_base},
                 data_opts=data_opts, explicit_style=explicit_style,
                 static_style=static_style, label=label,
                 fanned=name_is_col or static_path is None,

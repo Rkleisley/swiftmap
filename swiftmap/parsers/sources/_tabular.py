@@ -16,6 +16,7 @@ from ._utils import (
     as_pair_block,
     h3_cell_str,
     h3_cell_ring,
+    h3_cell_center,
     h3_module,
     is_h3_cell,
     warn_h3_missing,
@@ -116,7 +117,11 @@ def parse_tabular_polygons_by_geohash_column(
             verdict = (_h3_column_verdict(data, geohash_col)
                        if geohash_col in cols else "no")
             if verdict == "h3":
-                return None       # tier 1b reads it, handed on as hash_col
+                # Delegated directly, not deferred: an explicit pointer must
+                # beat every later tier (a WKT column elsewhere in the table
+                # would otherwise win the fall-through).
+                return parse_tabular_polygons_by_h3_column(
+                    data, cols, hash_col=geohash_col)
             if verdict == "missing":
                 warn_h3_missing(f"Column {geohash_col!r}")
                 return None
@@ -476,9 +481,127 @@ def match_wide_vertex_columns(cols: List[str]) -> Tuple[Dict[int, str], Dict[int
     return lat_pairs, lon_pairs
 
 
-def parse_tabular_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, label: str = "DataFrame") -> Tuple:
+def _points_from_cells(data: Any, cols: List[str], column: str, center,
+                       kind: str) -> Tuple:
+    """
+    Each row's cell hash(es) as CENTER points -- `center(value)` maps one hash
+    to (lat, lon) or None. A list-valued row contributes one point per cell,
+    all sharing the row's properties (the MULTIPOINT rule); the hash column
+    survives into the properties, as everywhere.
+    """
+    lats, lons, props_list = [], [], []
+    skipped, total, bad_cells = 0, 0, 0
+    for row in iter_row_dicts(data):
+        total += 1
+        value = row.get(column)
+        ids = value if isinstance(value, (list, tuple, np.ndarray)) else [value]
+        centers = [pt for pt in (center(v) for v in ids) if pt is not None]
+        if not centers:
+            skipped += 1
+            continue
+        bad_cells += len(ids) - len(centers)
+        row_props = {c: row.get(c) for c in cols}
+        for lat, lon in centers:
+            lats.append(lat)
+            lons.append(lon)
+            props_list.append(row_props)
+    if skipped:
+        warnings.warn(
+            f"[SwiftMap] Skipped {skipped} of {total} row(s) whose {column!r} "
+            f"value holds no valid {kind}.",
+            stacklevel=5,
+        )
+    if bad_cells:
+        warnings.warn(
+            f"[SwiftMap] Dropped {bad_cells} value(s) in {column!r} that are "
+            f"not valid {kind}s; the rows kept their remaining cells.",
+            stacklevel=5,
+        )
+    props = {c: [p.get(c) for p in props_list] for c in cols} if props_list else {}
+    return (np.array(lats, dtype=np.float64),
+            np.array(lons, dtype=np.float64), props)
+
+
+def parse_tabular_points_by_hash_column(
+    data: Any, cols: List[str],
+    geohash_col: Optional[str] = None, geohash_base: Optional[int] = None,
+) -> Optional[Tuple]:
+    """
+    Tier 0 of points parsing: a column of cell hashes, each cell contributing
+    its CENTER as the point. None if not applicable.
+
+    The polygon tier's rules exactly: an explicit base means Niemeyer and is
+    never second-guessed; a pointer without a base accepts H3 (the ids state
+    what they are) and otherwise earns the base hint. Nothing fires without
+    a pointer or a base -- lat/lon columns stay the fast path, and unpointed
+    H3 columns are picked up in the no-coordinates fallback below.
+    """
+    from ..._niemeyer import BASES, decode, valid_geohash
+
+    if geohash_col is None and geohash_base is None:
+        return None
+    if geohash_base is None:
+        verdict = (_h3_column_verdict(data, geohash_col)
+                   if geohash_col in cols else "no")
+        if verdict == "h3":
+            return _points_from_cells(data, cols, geohash_col,
+                                      h3_cell_center, "H3 cell")
+        if verdict == "missing":
+            warn_h3_missing(f"Column {geohash_col!r}")
+            return None
+        warnings.warn(
+            f"[SwiftMap] geohash_col={geohash_col!r} was given without "
+            f"geohash_base, and its values are not H3 cell ids (which need "
+            f"no base). A Niemeyer hash cannot state its own base -- pass "
+            f"geohash_base=16, 32 or 64. The column was left as data.",
+            stacklevel=5,
+        )
+        return None
+    if geohash_base not in BASES:
+        warnings.warn(
+            f"[SwiftMap] geohash_base must be one of {BASES}, got "
+            f"{geohash_base!r}. Nothing was parsed.",
+            stacklevel=5,
+        )
+        return None
+    if geohash_col is not None and geohash_col not in cols:
+        warnings.warn(
+            f"[SwiftMap] geohash_col={geohash_col!r} is not a column of the "
+            f"supplied data. Nothing was parsed.",
+            stacklevel=5,
+        )
+        return None
+    column = geohash_col or find_column_or_key(cols, GEOHASH_COL_CANDIDATES)
+    if not column:
+        warnings.warn(
+            f"[SwiftMap] geohash_base was given but no geohash column was "
+            f"found (looked for {', '.join(GEOHASH_COL_CANDIDATES)}); point "
+            f"at one with geohash_col=. Nothing was parsed.",
+            stacklevel=5,
+        )
+        return None
+
+    def niemeyer_center(value):
+        if not valid_geohash(value, geohash_base):
+            return None
+        lon, lat, _lon_err, _lat_err = decode(value, geohash_base)
+        return lat, lon
+
+    return _points_from_cells(data, cols, column, niemeyer_center,
+                              f"base-{geohash_base} geohash")
+
+
+def parse_tabular_points(data: Any, lat_col: Optional[str] = None,
+                         lon_col: Optional[str] = None, label: str = "DataFrame",
+                         geohash_col: Optional[str] = None,
+                         geohash_base: Optional[int] = None) -> Tuple:
     """Points parser shared by any source exposing `.columns` and column `.to_numpy()`/`.to_list()` (pandas, polars)."""
     cols = list(data.columns)
+
+    result = parse_tabular_points_by_hash_column(data, cols, geohash_col, geohash_base)
+    if result is not None:
+        return result
+
     actual_lat = lat_col or find_column_or_key(cols, LAT_CANDIDATES)
     actual_lon = lon_col or find_column_or_key(cols, LON_CANDIDATES)
 
@@ -488,6 +611,12 @@ def parse_tabular_points(data: Any, lat_col: Optional[str] = None, lon_col: Opti
         wkt_column = find_wkt_column(data)
         if wkt_column:
             return _parse_wkt_points(data, cols, wkt_column)
+        # An unpointed H3 column parses here too: with no coordinates of any
+        # other kind, cell centers are what the table plots.
+        h3_column = find_h3_column(data)
+        if h3_column:
+            return _points_from_cells(data, cols, h3_column,
+                                      h3_cell_center, "H3 cell")
         # No coordinates of any kind. Returning empty rather than raising lets the
         # calling add_* decide: it knows whether points were actually asked for.
         return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}

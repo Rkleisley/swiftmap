@@ -288,3 +288,54 @@ def test_bad_cells_in_a_list_drop_and_are_counted():
     assert vector_coords(m, layers[0]) == expected_ring(DISK[0])
     messages = " ".join(str(w.message) for w in record)
     assert "Skipped 1" in messages and "Dropped 1" in messages
+
+
+# --- point builders: the cell's CENTER as the point --------------------------
+
+def point_layers(m):
+    return m.find_layers(types=("circle_markers", "markers"))
+
+
+def point_coords(m, layer):
+    raw = m.coordinate_buffers[layer.get("id")]
+    return np.frombuffer(raw, dtype=np.float64).reshape(-1, 2).tolist()
+
+
+def test_circle_markers_from_an_h3_column_plot_cell_centers():
+    df = pd.DataFrame({"h3": DISK[:3], "v": [1, 2, 3]})
+    m = Map()
+    m.add_circle_markers(df, name="Centers")
+    (layer,) = point_layers(m)
+    coords = point_coords(m, layer)
+    expected = [[float(a), float(b)] for a, b in map(h3.cell_to_latlng, DISK[:3])]
+    assert coords == expected
+    assert layer.get("properties")["v"] == [1, 2, 3]
+    assert layer.get("properties")["h3"] == DISK[:3], "the cell id survives as data"
+
+
+def test_markers_via_geohash_col_at_h3_need_no_base():
+    df = pd.DataFrame({"agg": [DISK[0]], "v": [9]})
+    m = Map()
+    m.add_markers(df, geohash_col="agg", name="Pin")
+    (layer,) = point_layers(m)
+    lat, lon = h3.cell_to_latlng(DISK[0])
+    assert point_coords(m, layer) == [[float(lat), float(lon)]]
+
+
+def test_a_list_row_contributes_one_point_per_cell_sharing_props():
+    df = pd.DataFrame({"h3": [DISK[:3]], "v": [7]})
+    m = Map()
+    m.add_circle_markers(df, name="Spread")
+    (layer,) = point_layers(m)
+    assert len(point_coords(m, layer)) == 3
+    assert layer.get("properties")["v"] == [7, 7, 7], \
+        "the MULTIPOINT rule: every cell's point carries the row's properties"
+
+
+def test_latlon_columns_still_beat_an_unpointed_h3_column():
+    df = pd.DataFrame({"lat": [10.0], "lon": [20.0], "h3": [DISK[0]]})
+    m = Map()
+    m.add_circle_markers(df, name="Fast")
+    (layer,) = point_layers(m)
+    assert point_coords(m, layer) == [[10.0, 20.0]], \
+        "explicit coordinates stay the fast path; the cell column stays data"

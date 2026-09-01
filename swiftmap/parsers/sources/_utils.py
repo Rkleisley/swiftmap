@@ -359,6 +359,20 @@ def h3_cell_ring(val: Any) -> Optional[List[List[float]]]:
     return _ensure_closed_ring([[float(lat), float(lon)] for lat, lon in boundary])
 
 
+def h3_cell_center(val: Any) -> Optional[Tuple[float, float]]:
+    """A cell's center as (lat, lon), or None for a non-cell -- the point
+    builders' reading of a cell id."""
+    text = h3_cell_str(val)
+    h3 = h3_module()
+    if text is None or h3 is None:
+        return None
+    try:
+        lat, lon = h3.cell_to_latlng(text.lower())
+    except (TypeError, ValueError):
+        return None
+    return float(lat), float(lon)
+
+
 def warn_h3_missing(context: str) -> None:
     warnings.warn(
         f"[SwiftMap] {context} looks like H3 cell ids, but the h3 package is not "

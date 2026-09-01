@@ -2,14 +2,18 @@ import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
 from ._utils import (find_column_or_key, _ensure_closed_ring, detect_coord_order,
                      detect_coord_order_multi, apply_coord_order, as_pair_block)
+from ._utils import h3_cell_center
 from ._tabular import (
     LAT_CANDIDATES,
     LON_CANDIDATES,
     RowsView,
     group_rows_into_paths,
     explicit_wkt_column,
+    find_h3_column,
+    _points_from_cells,
     parse_tabular_lines_by_coord_column,
     parse_tabular_lines_by_wide_columns,
+    parse_tabular_points_by_hash_column,
     parse_tabular_polygons_by_coord_column,
     parse_tabular_polygons_by_geohash_column,
     parse_tabular_polygons_by_h3_column,
@@ -35,11 +39,15 @@ def is_coordinate_list(data: Any) -> bool:
 
 
 def parse_list_of_dicts_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
+    hashed = _hash_points(data, kwargs)
+    if hashed is not None:
+        return hashed
     actual_lat = lat_col or find_column_or_key(list(data[0].keys()), LAT_CANDIDATES)
     actual_lon = lon_col or find_column_or_key(list(data[0].keys()), LON_CANDIDATES)
 
     if not actual_lat or not actual_lon:
-        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}
+        return _h3_fallback_points(data) or (
+            np.array([], dtype=np.float64), np.array([], dtype=np.float64), {})
         
     rows = [r for r in data if r.get(actual_lat) is not None and r.get(actual_lon) is not None]
     lats = np.array([float(r[actual_lat]) for r in rows], dtype=np.float64)
@@ -57,12 +65,37 @@ def parse_list_of_dicts_points(data: Any, lat_col: Optional[str] = None, lon_col
     return lats, lons, props
 
 
+def _hash_points(data: Any, kwargs: dict) -> Optional[Tuple]:
+    """The explicit-pointer hash tier, over a RowsView -- see _tabular."""
+    geohash_col = kwargs.get("geohash_col")
+    geohash_base = kwargs.get("geohash_base")
+    if geohash_col is None and geohash_base is None:
+        return None
+    view = RowsView(data)
+    return parse_tabular_points_by_hash_column(
+        view, view.columns, geohash_col, geohash_base)
+
+
+def _h3_fallback_points(data: Any) -> Optional[Tuple]:
+    """An unpointed H3 column, when no coordinates of any other kind exist."""
+    view = RowsView(data)
+    column = find_h3_column(view)
+    if not column:
+        return None
+    return _points_from_cells(view, view.columns, column,
+                              h3_cell_center, "H3 cell")
+
+
 def parse_dict_points(data: Any, lat_col: Optional[str] = None, lon_col: Optional[str] = None, **kwargs) -> Tuple:
+    hashed = _hash_points(data, kwargs)
+    if hashed is not None:
+        return hashed
     actual_lat = lat_col or find_column_or_key(list(data.keys()), LAT_CANDIDATES)
     actual_lon = lon_col or find_column_or_key(list(data.keys()), LON_CANDIDATES)
 
     if not actual_lat or not actual_lon:
-        return np.array([], dtype=np.float64), np.array([], dtype=np.float64), {}
+        return _h3_fallback_points(data) or (
+            np.array([], dtype=np.float64), np.array([], dtype=np.float64), {})
         
     lats = np.asarray(data[actual_lat], dtype=np.float64)
     lons = np.asarray(data[actual_lon], dtype=np.float64)

@@ -157,3 +157,27 @@ def test_the_no_base_warn_now_mentions_h3():
     assert any("not H3 cell ids" in str(w.message) for w in record), \
         "the base hint says H3 was considered and ruled out"
     assert polygon_layers(m) == []
+
+
+def test_circle_markers_from_geohashes_plot_cell_centers():
+    df = pd.DataFrame({"geohash": HASHES_32, "v": [1, 2, 3]})
+    m = Map()
+    m.add_circle_markers(df, geohash_base=32, name="Centers")
+    (layer,) = m.find_layers(types="circle_markers")
+    raw = m.coordinate_buffers[layer.get("id")]
+    coords = np.frombuffer(raw, dtype=np.float64).reshape(-1, 2).tolist()
+    expected = []
+    for h in HASHES_32:
+        lon, lat, _, _ = nm.decode(h, 32)
+        expected.append([lat, lon])
+    assert coords == expected
+    assert layer.get("properties")["geohash"] == HASHES_32
+
+
+def test_point_builders_refuse_a_baseless_niemeyer_column_too():
+    df = pd.DataFrame({"g": ["9c3f", "9c3g"]})
+    m = Map()
+    with pytest.warns(Warning) as record:
+        m.add_circle_markers(df, geohash_col="g")
+    assert any("not H3 cell ids" in str(w.message) for w in record)
+    assert m.find_layers(types="circle_markers") == []

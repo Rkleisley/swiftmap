@@ -117,12 +117,12 @@ def test_empty_and_unreadable_data_warn_and_add_nothing():
 
 
 def test_a_string_matching_no_layer_is_treated_as_data():
-    # An H3 cell string is point-less geometry, so heat honestly finds nothing --
-    # but the failure mode is the data path's, not a targeting error.
+    # An H3 cell string matches no layer, so it is DATA -- and since the point
+    # builders learned to read a cell as its center, the data path now heats
+    # that one point instead of warning that a cell is point-less geometry.
     m = Map()
-    with pytest.warns(Warning):
-        m.add_heatmap("8928308280fffff")
-    assert heat_layers(m) == []
+    m.add_heatmap("8928308280fffff")
+    assert len(heat_layers(m)) == 1
 
 
 def test_heat_survives_a_source_update():
