@@ -198,7 +198,9 @@ def _parse_rows(
         return result
 
     if close_rings:
-        result = parse_tabular_polygons_by_h3_column(view, cols, shape_id_col)
+        result = parse_tabular_polygons_by_h3_column(
+            view, cols, shape_id_col,
+            hash_col=geohash_col if geohash_base is None else None)
         if result is not None:
             return result
 

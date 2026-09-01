@@ -173,7 +173,12 @@ def parse_pandas_polygons(
     if result is not None:
         return result
 
-    result = parse_tabular_polygons_by_h3_column(data, cols, shape_id_col)
+    # geohash_col rides along: the one hash pointer serves both formats, and a
+    # column of H3 ids (which state what they are) needs no base. An explicit
+    # base means Niemeyer and was consumed above.
+    result = parse_tabular_polygons_by_h3_column(
+        data, cols, shape_id_col,
+        hash_col=geohash_col if geohash_base is None else None)
     if result is not None:
         return result
 

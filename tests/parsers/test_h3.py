@@ -213,3 +213,78 @@ def test_missing_lib_warns_for_a_column_too(monkeypatch):
         m.add_polygon(df)
     assert any("pip install h3" in str(w.message) for w in record)
     assert polygon_layers(m) == []
+
+
+# --- geohash_col points at H3: the one hash pointer serves both formats -----
+
+def test_geohash_col_pointing_at_h3_needs_no_base():
+    df = pd.DataFrame({"aggregation_cell": DISK[:3], "v": [1, 2, 3]})
+    m = Map()
+    m.add_polygon(df, geohash_col="aggregation_cell")
+    layers = polygon_layers(m)
+    assert len(layers) == 3
+    assert vector_coords(m, layers[0]) == expected_ring(DISK[0])
+    assert [l.get("properties")["v"] for l in layers] == [1, 2, 3]
+
+
+def test_explicit_base_reads_the_same_column_as_niemeyer():
+    # An H3 id is hex chars, so it is ALSO a valid base-16 Niemeyer string.
+    # A stated base is stated intent: rectangles, not hexagons.
+    from swiftmap import _niemeyer as nm
+    df = pd.DataFrame({"c": [CELL]})
+    m = Map()
+    m.add_polygon(df, geohash_col="c", geohash_base=16)
+    (layer,) = polygon_layers(m)
+    assert vector_coords(m, layer) == nm.cell_ring(CELL, 16)
+    assert len(vector_coords(m, layer)) == 5           # a rectangle, not a hexagon
+
+
+def test_geohash_col_at_h3_without_the_lib_says_so(monkeypatch):
+    monkeypatch.setattr(_utils, "_h3_module", None)
+    df = pd.DataFrame({"c": DISK[:2]})
+    m = Map()
+    with pytest.warns(Warning) as record:
+        m.add_polygon(df, geohash_col="c")
+    assert any("pip install h3" in str(w.message) for w in record)
+    assert not any("geohash_base" in str(w.message) for w in record), \
+        "an H3-shaped column must not be blamed for missing a Niemeyer base"
+
+
+# --- list-valued rows: one multipolygon feature per row ---------------------
+
+def test_a_list_of_cells_is_one_multipolygon_feature():
+    df = pd.DataFrame({"h3": [DISK[:3], [DISK[3]]], "v": [7, 8]})
+    m = Map()
+    m.add_polygon(df, name="Agg")
+    layers = polygon_layers(m)
+    assert len(layers) == 2, "two rows, two features -- never exploded per cell"
+    multi = layers[0]
+    assert multi.get("rings") == [[7], [7], [7]], \
+        "three cells as three parts of one feature"
+    assert len(vector_coords(m, multi)) == 21
+    assert multi.get("properties")["v"] == 7
+    single = layers[1]
+    assert single.get("rings") is None or single.get("rings") == [[7]]
+    assert vector_coords(m, single) == expected_ring(DISK[3])
+
+
+def test_scalar_and_list_rows_mix():
+    df = pd.DataFrame({"h3": [DISK[0], DISK[1:3]], "v": [1, 2]})
+    m = Map()
+    m.add_polygon(df, name="Mix")
+    layers = polygon_layers(m)
+    assert len(layers) == 2
+    assert vector_coords(m, layers[0]) == expected_ring(DISK[0])
+    assert layers[1].get("rings") == [[7], [7]]
+
+
+def test_bad_cells_in_a_list_drop_and_are_counted():
+    df = pd.DataFrame({"h3": [[DISK[0], HEX_JUNK], [HEX_JUNK]], "v": [1, 2]})
+    m = Map()
+    with pytest.warns(Warning) as record:
+        m.add_polygon(df, name="Rough")
+    layers = polygon_layers(m)
+    assert len(layers) == 1, "the all-junk row is skipped, the partial row kept"
+    assert vector_coords(m, layers[0]) == expected_ring(DISK[0])
+    messages = " ".join(str(w.message) for w in record)
+    assert "Skipped 1" in messages and "Dropped 1" in messages

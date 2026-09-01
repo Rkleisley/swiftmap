@@ -148,7 +148,9 @@ def parse_polars_polygons(
     if result is not None:
         return result
 
-    result = parse_tabular_polygons_by_h3_column(data, cols, shape_id_col)
+    result = parse_tabular_polygons_by_h3_column(
+        data, cols, shape_id_col,
+        hash_col=geohash_col if geohash_base is None else None)
     if result is not None:
         return result
 

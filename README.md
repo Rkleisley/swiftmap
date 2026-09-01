@@ -125,7 +125,11 @@ Every `add_*` method accepts the same range of inputs:
   (point at one explicitly via `shape_id_col`/`line_id_col` when its name would not be
   guessed); H3 cell-id columns, each cell drawn as its hexagon — an aggregated
   table needs nothing but the cell and value columns it already has (requires
-  `h3`, optional); wide vertex columns (`lat1, lon1, lat2, lon2, ...`)
+  `h3`, optional); Niemeyer geohash columns via `geohash_col` + `geohash_base`
+  (`geohash_col` alone also accepts H3 — the ids state what they are, only a
+  Niemeyer hash needs its base declared); a row may hold a **list** of cells,
+  drawn as one multipolygon feature so properties stay per row; wide vertex
+  columns (`lat1, lon1, lat2, lon2, ...`)
 - **GeoPandas** GeoDataFrames and GeoSeries
 - **geostructures** shapes, `FeatureCollection`s, and `Track`s
 - **GeoJSON** dicts or strings

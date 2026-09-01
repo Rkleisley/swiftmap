@@ -38,6 +38,10 @@ def add_polygon(
     - Lists of boundary coordinate rings
     - DataFrames with grouped shape rows (via `shape_id_col` and `order_col`)
     - DataFrames with WKT string columns ("POLYGON (...)") or delimited text
+    - DataFrames with cell-hash columns: H3 cell ids (auto-detected, or pointed
+      at via `geohash_col`/`shape_id_col`) and Niemeyer geohashes (`geohash_col`
+      + `geohash_base`). A row may hold ONE hash or a LIST of them -- a list
+      draws as one multipolygon feature, keeping properties per row
     - DataFrames with wide vertex columns (`lat1, lon1, lat2, lon2, ...`)
     - GeoPandas GeoDataFrames / GeoSeries (`Polygon`, `MultiPolygon`)
     - GeoJSON objects / FeatureCollections
@@ -60,6 +64,17 @@ def add_polygon(
         'shape', ...) would miss.
     order_col : str, optional
         Column name used to sequence boundary vertices along each polygon ring.
+    geohash_col : str, optional
+        Column holding cell hashes -- each cell drawn as its polygon. H3 cell
+        ids are recognised by value and need nothing else; Niemeyer geohashes
+        additionally require `geohash_base` (the same string is a valid hash
+        in every base, decoding to a different rectangle in each, so the base
+        is part of the format and is never guessed). A row's value may be one
+        hash or a list of hashes; a list becomes one multipolygon feature.
+    geohash_base : int, optional
+        The Niemeyer base: 16, 32 or 64. Stating it is what makes a Niemeyer
+        column parse at all; with it, the column is read as Niemeyer even if
+        its strings would also validate as H3.
     coord_order : {'auto', 'lat_lon', 'lon_lat'}, default 'auto'
         Coordinate pairing convention for raw arrays and delimited strings:
         - 'auto': Range-based heuristic. A first value beyond ±90° can only be a longitude,

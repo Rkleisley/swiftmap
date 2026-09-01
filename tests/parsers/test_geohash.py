@@ -125,3 +125,35 @@ def test_color_col_ramps_the_cells():
     fills = [l.get("fillColor") for l in polygon_layers(m)]
     assert all(f and f.startswith("#") for f in fills)
     assert fills[0] != fills[2]
+
+
+def test_a_list_of_geohashes_is_one_multipolygon_feature():
+    df = pd.DataFrame({"geohash": [HASHES_32[:2], [HASHES_32[2]]], "v": [1, 2]})
+    m = Map()
+    m.add_polygon(df, geohash_base=32, name="Agg")
+    layers = polygon_layers(m)
+    assert len(layers) == 2, "two rows, two features -- never exploded per cell"
+    assert layers[0].get("rings") == [[5], [5]], "two rectangles as one feature"
+    assert layers[0].get("properties")["v"] == 1
+    assert vector_coords(m, layers[1]) == nm.cell_ring(HASHES_32[2], 32)
+
+
+def test_bad_hashes_in_a_list_drop_and_are_counted():
+    df = pd.DataFrame({"geohash": [[HASHES_32[0], "??"], ["??"]]})
+    m = Map()
+    with pytest.warns(Warning) as record:
+        m.add_polygon(df, geohash_base=32, name="Rough")
+    layers = polygon_layers(m)
+    assert len(layers) == 1
+    messages = " ".join(str(w.message) for w in record)
+    assert "Skipped 1" in messages and "Dropped 1" in messages
+
+
+def test_the_no_base_warn_now_mentions_h3():
+    df = pd.DataFrame({"g": ["9c3f", "9c3g"]})
+    m = Map()
+    with pytest.warns(Warning) as record:
+        m.add_polygon(df, geohash_col="g")
+    assert any("not H3 cell ids" in str(w.message) for w in record), \
+        "the base hint says H3 was considered and ruled out"
+    assert polygon_layers(m) == []

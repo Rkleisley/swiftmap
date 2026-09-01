@@ -109,9 +109,21 @@ def parse_tabular_polygons_by_geohash_column(
 
     if geohash_base is None:
         if geohash_col is not None:
+            # The one pointer serves both hash formats. An H3 cell id
+            # validates structurally -- the value states what it is -- so an
+            # H3 column needs no base and routes to the H3 tier; only a
+            # Niemeyer hash, which cannot state its own base, requires one.
+            verdict = (_h3_column_verdict(data, geohash_col)
+                       if geohash_col in cols else "no")
+            if verdict == "h3":
+                return None       # tier 1b reads it, handed on as hash_col
+            if verdict == "missing":
+                warn_h3_missing(f"Column {geohash_col!r}")
+                return None
             warnings.warn(
                 f"[SwiftMap] geohash_col={geohash_col!r} was given without "
-                f"geohash_base. A Niemeyer hash cannot state its own base -- "
+                f"geohash_base, and its values are not H3 cell ids (which "
+                f"need no base). A Niemeyer hash cannot state its own base -- "
                 f"pass geohash_base=16, 32 or 64. The column was left as data.",
                 stacklevel=4,
             )
@@ -152,102 +164,152 @@ def parse_tabular_polygons_by_geohash_column(
         )
         return None
 
-    polygons, props_list, skipped, total = [], [], 0, 0
+    polygons, props_list, skipped, total, bad_cells = [], [], 0, 0, 0
     for row in iter_row_dicts(data):
         total += 1
         value = row.get(column)
-        if not valid_geohash(value, geohash_base):
+        # A row may hold ONE hash or a LIST of them: an aggregated row that
+        # covers several cells is one thing, so its cells become one
+        # multipolygon feature -- the row's properties, popup and colour stay
+        # per row instead of being cloned per cell.
+        hashes = value if isinstance(value, (list, tuple, np.ndarray)) else [value]
+        rings = [cell_ring(h, geohash_base) for h in hashes
+                 if valid_geohash(h, geohash_base)]
+        if not rings:
             skipped += 1
             continue
-        polygons.append(cell_ring(value, geohash_base))
+        bad_cells += len(hashes) - len(rings)
+        polygons.append(rings[0] if len(rings) == 1
+                        else PolygonGeom([[ring] for ring in rings]))
         props_list.append({c: row.get(c) for c in cols})
 
     if skipped:
         warnings.warn(
             f"[SwiftMap] Skipped {skipped} of {total} row(s) whose {column!r} "
-            f"value is not a valid base-{geohash_base} geohash.",
+            f"value holds no valid base-{geohash_base} geohash.",
+            stacklevel=4,
+        )
+    if bad_cells:
+        warnings.warn(
+            f"[SwiftMap] Dropped {bad_cells} value(s) in {column!r} that are "
+            f"not valid base-{geohash_base} geohashes; the rows kept their "
+            f"remaining cells.",
             stacklevel=4,
         )
     props = {c: [p.get(c) for p in props_list] for c in cols} if props_list else {}
     return polygons, props
 
 
-def find_h3_column(data: Any, id_col: Optional[str] = None) -> Optional[str]:
+def _h3_column_verdict(data: Any, column: str) -> str:
+    """
+    "h3" when the column's first few non-null values validate structurally as
+    H3 cell ids, "missing" when they are hex-shaped but the h3 package is not
+    installed to prove it, "no" otherwise. A row's value may be one id or a
+    LIST of them (checked element-wise); a value that is not even hex-shaped
+    rejects the column outright -- that is a data column.
+    """
+    shaped = 0
+    valid = 0
+    for checked, row in enumerate(iter_row_dicts(data)):
+        if checked >= 10:
+            break
+        value = row.get(column)
+        if value is None:
+            continue
+        vals = value if isinstance(value, (list, tuple, np.ndarray)) else [value]
+        for val in vals:
+            if val is None:
+                continue
+            if h3_cell_str(val) is None:
+                return "no"
+            shaped += 1
+            if is_h3_cell(val):
+                valid += 1
+    if not shaped:
+        return "no"
+    if h3_module() is None:
+        return "missing"
+    return "h3" if valid else "no"
+
+
+def find_h3_column(data: Any, id_col: Optional[str] = None,
+                   hash_col: Optional[str] = None) -> Optional[str]:
     """
     Returns the name of a column holding H3 cell ids, or None.
 
     Mirrors the WKT pair above: `shape_id_col` may point at a column the name-guess
-    would miss, and a likely name is not enough on its own -- 'cell' may hold tower
-    ids -- so at least one of the first few non-null values must actually validate.
-    Validation is structural (is_h3_cell checks the id's bit layout), so junk cannot
-    qualify a column; but one corrupt value must not disqualify a feed's column
-    either, so invalid rows are left for the parser's skip-and-count. A value that
-    is not even hex-shaped rejects the column outright: that is a data column.
+    would miss (`hash_col` is geohash_col handed on -- the one hash pointer serves
+    both formats), and a likely name is not enough on its own -- 'cell' may hold
+    tower ids -- so at least one of the first few non-null values must actually
+    validate. Validation is structural (is_h3_cell checks the id's bit layout), so
+    junk cannot qualify a column; but one corrupt value must not disqualify a
+    feed's column either, so invalid rows are left for the parser's skip-and-count.
     """
     try:
         cols = list(data.columns)
     except AttributeError:
         return None
 
-    candidates = [id_col] if id_col and id_col in cols else []
+    candidates = [c for c in (id_col, hash_col) if c and c in cols]
     guessed = find_column_or_key(cols, H3_COL_CANDIDATES)
     if guessed and guessed not in candidates:
         candidates.append(guessed)
 
     for column in candidates:
-        shaped = 0
-        valid = 0
-        ok = True
-        for checked, row in enumerate(iter_row_dicts(data)):
-            if checked >= 10:
-                break
-            val = row.get(column)
-            if val is None:
-                continue
-            if h3_cell_str(val) is None:
-                ok = False
-                break
-            shaped += 1
-            if is_h3_cell(val):
-                valid += 1
-        if not ok or not shaped:
-            continue
-        if h3_module() is None:
+        verdict = _h3_column_verdict(data, column)
+        if verdict == "missing":
             warn_h3_missing(f"Column {column!r}")
             return None
-        if valid:
+        if verdict == "h3":
             return column
     return None
 
 
 def parse_tabular_polygons_by_h3_column(
-    data: Any, cols: List[str], shape_id_col: Optional[str] = None
+    data: Any, cols: List[str], shape_id_col: Optional[str] = None,
+    hash_col: Optional[str] = None,
 ) -> Optional[Tuple[List[List[List[float]]], Dict[str, List[Any]]]]:
     """
-    Tier 1b: a column of H3 cell ids, one hexagon per row. None if not applicable.
+    Tier 1b: a column of H3 cell ids -- one hexagon per row, or one
+    multipolygon of hexagons for a row holding a LIST of ids. None if not
+    applicable.
 
     Unlike a WKT column, the cell column survives into the properties: a cell id is
     data -- the join key an aggregated table carries and the id a popup should show --
     where a WKT blob is only a spelling of the geometry.
     """
-    column = find_h3_column(data, shape_id_col)
+    column = find_h3_column(data, shape_id_col, hash_col)
     if not column:
         return None
 
-    polygons, props_list, skipped, total = [], [], 0, 0
+    polygons, props_list, skipped, total, bad_cells = [], [], 0, 0, 0
     for row in iter_row_dicts(data):
         total += 1
-        ring = h3_cell_ring(row.get(column))
-        if ring is None:
+        value = row.get(column)
+        # An aggregated row covering several cells is one thing: its cells
+        # become one multipolygon feature, keeping properties, popup and
+        # colour per ROW instead of cloned per cell.
+        ids = value if isinstance(value, (list, tuple, np.ndarray)) else [value]
+        rings = [ring for ring in (h3_cell_ring(v) for v in ids)
+                 if ring is not None]
+        if not rings:
             skipped += 1
             continue
-        polygons.append(ring)
+        bad_cells += len(ids) - len(rings)
+        polygons.append(rings[0] if len(rings) == 1
+                        else PolygonGeom([[ring] for ring in rings]))
         props_list.append({c: row.get(c) for c in cols})
 
     if skipped:
         warnings.warn(
-            f"[SwiftMap] Skipped {skipped} of {total} row(s) whose {column!r} value is "
-            f"not a valid H3 cell.",
+            f"[SwiftMap] Skipped {skipped} of {total} row(s) whose {column!r} value "
+            f"holds no valid H3 cell.",
+            stacklevel=4,
+        )
+    if bad_cells:
+        warnings.warn(
+            f"[SwiftMap] Dropped {bad_cells} value(s) in {column!r} that are not "
+            f"valid H3 cells; the rows kept their remaining cells.",
             stacklevel=4,
         )
     props = {c: [p.get(c) for p in props_list] for c in cols} if props_list else {}
