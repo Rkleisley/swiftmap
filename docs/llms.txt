@@ -1,0 +1,45 @@
+# swiftmap
+
+> A Python mapping library that keeps Leaflet's ergonomics and replaces its vector
+> drawing with WebGL pipelines — smooth at millions of points, not thousands.
+
+swiftmap targets the gap between folium/ipyleaflet (good ergonomics, a ceiling around
+tens of thousands of features, flat layer controls) and deck.gl (scales, but a different
+mental model behind a thin Python layer). One rendering core serves four stacks:
+Jupyter/anywidget notebooks, Shiny for Python, Streamlit, and React. Map state —
+viewport, layer visibility, clicks, draws, the time slider — syncs bidirectionally
+wherever there is a Python side to sync with. A finished map exports to a single static
+HTML file that opens with no backend.
+
+Everything runs offline: Leaflet, glify and Leaflet-Geoman ride inside the bundle that
+ships in the wheel, so nothing is fetched when a map is viewed. On an air-gapped network
+the wheel is the whole story.
+
+## Install
+
+- Python: `pip install swiftmap` (needs anywidget, numpy, xyzservices)
+- JavaScript: `npm install swiftmap-core`
+- Data sources: pandas, polars, geopandas and geostructures all work; none is a dependency.
+
+## Links
+
+- Docs and live demos: https://rkleisley.github.io/swiftmap/
+- Source: https://github.com/Rkleisley/swiftmap
+- PyPI: https://pypi.org/project/swiftmap/
+
+## How it compares
+
+- vs folium: same ease of use, roughly a hundredfold higher feature ceiling, plus
+  hierarchical layer controls instead of a flat list.
+- vs ipyleaflet: same widget model, WebGL rendering underneath, and it works outside
+  notebooks (Shiny, Streamlit, React, static export).
+- vs deck.gl: keeps the Leaflet mental model — `add_*` calls, no projection argument, no
+  viewstate to manage — rather than a layer/viewstate API.
+- vs kepler.gl: a library you call from code, not an application you configure.
+- vs datashader: interactive vector features you can click, hover and toggle, rather than
+  a rasterized image of your data.
+
+## Naming
+
+The npm package is `swiftmap-core`. The unscoped npm name `swiftmap` belongs to an
+unrelated D3/TopoJSON library last published in 2018.

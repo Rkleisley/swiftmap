@@ -36,7 +36,7 @@ cpSync("LICENSE", join(OUT, "LICENSE"));
 cpSync("README.npm.md", join(OUT, "README.md"));   // the whole point of staging
 
 const readme = readFileSync(join(OUT, "README.md"), "utf8");
-if (!readme.startsWith("# swiftmap-core")) {
+if (!/^# swiftmap-core\s*$/m.test(readme)) {
     console.error("staged README.md is not the npm one -- refusing to leave it staged.");
     rmSync(OUT, { recursive: true, force: true });
     process.exit(1);

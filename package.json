@@ -2,6 +2,36 @@
   "name": "swiftmap-core",
   "version": "0.6.0",
   "description": "High-performance Leaflet + WebGL map rendering core, usable standalone or via the swiftmap Python widget",
+  "keywords": [
+    "leaflet",
+    "webgl",
+    "map",
+    "maps",
+    "mapping",
+    "gis",
+    "geospatial",
+    "cartography",
+    "visualization",
+    "dataviz",
+    "data-visualization",
+    "leaflet-plugin",
+    "webgl-map",
+    "glify",
+    "large-dataset",
+    "react",
+    "react-component",
+    "anywidget",
+    "streamlit",
+    "offline"
+  ],
+  "homepage": "https://rkleisley.github.io/swiftmap/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rkleisley/swiftmap.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Rkleisley/swiftmap/issues"
+  },
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
