@@ -835,6 +835,7 @@ def page_html(cards, tiers, hero_bytes, stamp, version):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>swiftmap &mdash; Leaflet ergonomics, WebGL scale</title>
 <meta name="description" content="A Python mapping library that keeps Leaflet's ergonomics and replaces its vector drawing with WebGL pipelines. Every map on this page is live.">
+<meta name="google-site-verification" content="Qc1GHEEVtiCe3AzrJ52xiCUpN7o9rdNM_foykQm-JT4">
 <link rel="canonical" href="{SITE}">
 
 <meta property="og:type" content="website">
