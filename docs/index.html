@@ -631,36 +631,51 @@ m.<span class="t-fn">add_circle_markers</span>(sensors.<span class="t-fn">head</
     </div>
 
     <div class="table-scroll">
-      <table class="compare">
+      <table class="compare" style="min-width:900px">
         <thead>
           <tr>
-            <th></th><th>folium / ipyleaflet</th><th>deck.gl (pydeck)</th><th class="me-col">swiftmap</th>
+            <th></th><th>folium / ipyleaflet</th><th>deck.gl (pydeck)</th>
+            <th>kepler.gl</th><th>datashader</th><th class="me-col">swiftmap</th>
           </tr>
         </thead>
         <tbody>
-          <tr><td>Points before it stops being usable</td><td>tens of thousands</td><td>millions</td>
+          <tr><td>Points before it stops being usable</td><td>tens of thousands</td><td>millions</td><td>millions</td><td>hundreds of millions</td>
               <td class="me-col me">millions &mdash; drag the map above</td></tr>
-          <tr><td>Mental model</td><td>Leaflet</td><td>its own layer/view stack</td>
+          <tr><td>Mental model</td><td>Leaflet</td><td>its own layer/view stack</td><td>a configurable app</td><td>a rasterising pipeline</td>
               <td class="me-col me">Leaflet</td></tr>
-          <tr><td>Layer control</td><td>flat list</td><td>build it yourself</td>
-              <td class="me-col me">hierarchy from your columns</td></tr>
-          <tr><td>Coordinates on the wire</td><td>JSON per feature</td><td>typed arrays</td>
+          <tr><td>What reaches the browser</td><td>JSON per feature</td><td>typed arrays</td><td>JSON or Arrow</td><td>a rendered image</td>
               <td class="me-col me">binary float64 buffers</td></tr>
-          <tr><td>Cost of a layer toggle</td><td>re-render</td><td>re-render</td>
+          <tr><td>Per-feature click and hover</td><td>yes</td><td>yes</td><td>yes</td><td>no &mdash; pixels, not features</td>
+              <td class="me-col me">yes, at a million</td></tr>
+          <tr><td>Layer control</td><td>flat list</td><td>build it yourself</td><td>flat list in its own UI</td><td>you compose it</td>
+              <td class="me-col me">hierarchy from your columns</td></tr>
+          <tr><td>Cost of a layer toggle</td><td>re-render</td><td>re-render</td><td>re-render</td><td>re-raster</td>
               <td class="me-col me">a ~100-byte patch, at any scale</td></tr>
-          <tr><td>Python &harr; map sync</td><td>one way</td><td>one way</td>
+          <tr><td>Python &harr; map sync</td><td>one way</td><td>one way</td><td>one way</td><td>one way</td>
               <td class="me-col me">bidirectional (viewport, clicks, draws, time)</td></tr>
-          <tr><td>Time playback</td><td>plugin, DOM-based</td><td>manual</td>
+          <tr><td>Time playback</td><td>plugin, DOM-based</td><td>manual</td><td>built in</td><td>manual</td>
               <td class="me-col me">built in, filtered on the GPU</td></tr>
-          <tr><td>Offline / air-gapped</td><td>CDN at view time</td><td>CDN at view time</td>
+          <tr><td>Offline / air-gapped</td><td>CDN at view time</td><td>CDN at view time</td><td>CDN at view time</td><td>renders server-side</td>
               <td class="me-col me">everything inside the wheel</td></tr>
-          <tr><td>Static share</td><td>one HTML file</td><td>one HTML file</td>
+          <tr><td>Static share</td><td>one HTML file</td><td>one HTML file</td><td>one HTML file</td><td>an image, or a Panel app</td>
               <td class="me-col me">one HTML file, sidebar and time included</td></tr>
-          <tr><td>3D &mdash; extrusions, terrain</td><td>no</td><td>yes</td>
+          <tr><td>3D &mdash; extrusions, terrain</td><td>no</td><td>yes</td><td>yes</td><td>no</td>
               <td class="me-col">not yet</td></tr>
         </tbody>
       </table>
     </div>
+
+    <p class="measured">
+      <strong>Measured, not claimed:</strong> the hero on the home page draws 1,000,000
+      points in roughly 800&nbsp;ms from mount to first paint and stays interactive while
+      you drag it &mdash; the readout under it is live, not a graphic. The other columns
+      describe design centres; nothing here times them. Run your own comparison &mdash;
+      the code behind every map on this site is printed underneath it.
+    </p>
+
+    <p class="measured" style="margin-top:18px">
+      <a href="vs/">The same comparison as a page of its own &rarr;</a>
+    </p>
 
 
     <div class="sec-head" style="margin-top:56px">
@@ -669,7 +684,8 @@ m.<span class="t-fn">add_circle_markers</span>(sensors.<span class="t-fn">head</
         A comparison table that wins every row is a pitch, not an analysis. These are the
         places another library is the better answer today. They are known, they are on the
         list, and this section shrinks as they land &mdash; it has already lost density,
-        raster imagery, WMS and offline since it was first written.
+        raster imagery, WMS, offline, marker clustering and line direction since it
+        was first written.
       </p>
     </div>
 
@@ -681,14 +697,9 @@ m.<span class="t-fn">add_circle_markers</span>(sensors.<span class="t-fn">head</
       </div>
       <div class="gap">
         <h3>Vector tiles</h3>
-        <p>XYZ raster and WMS are covered; MVT is not, so a basemap or dataset served as
-        vector tiles has to come in another way.</p>
-      </div>
-      <div class="gap">
-        <h3>Marker clustering</h3>
-        <p>Density answers &ldquo;where is it thick&rdquo;; it does not answer
-        &ldquo;collapse these into countable groups&rdquo;. <code>hexbin</code> is the
-        nearest thing today.</p>
+        <p><code>read_mvt</code> brings a vector-tile dataset in as an ordinary table
+        &mdash; the bridge, not a renderer. There is still no vector-tile basemap, so a
+        style-driven basemap has to come in another way.</p>
       </div>
       <div class="gap">
         <h3>Earth-observation catalogues</h3>
@@ -696,16 +707,12 @@ m.<span class="t-fn">add_circle_markers</span>(sensors.<span class="t-fn">head</
         Engine integration is leafmap's territory, not this library's.</p>
       </div>
       <div class="gap">
-        <h3>Line direction</h3>
-        <p>Tracks animate and carry per-segment time, but there are no arrowheads or dash
-        patterns yet, so a paused track does not show which way it was going.</p>
-      </div>
-      <div class="gap">
         <h3>First paint at the top end</h3>
         <p>Millions of points drag smoothly once they are there. Getting them there still
         costs more than it should on the very largest maps.</p>
       </div>
     </div>
+
 
     <div class="sec-head" style="margin-top:56px">
       <h2>Install it</h2>
@@ -740,7 +747,7 @@ m.<span class="t-fn">add_circle_markers</span>(sensors.<span class="t-fn">head</
     <span><a href="https://github.com/Rkleisley/swiftmap">github.com/Rkleisley/swiftmap</a></span>
     <span><a href="https://github.com/Rkleisley/swiftmap/blob/main/README.md">Documentation</a></span>
     <span><a href="https://pypi.org/project/swiftmap/">PyPI</a></span>
-    <span class="built">generated 2026-08-27 &middot; scripts/build_demos.py</span>
+    <span class="built">generated 2026-09-02 &middot; scripts/build_demos.py</span>
   </div>
 </footer>
 

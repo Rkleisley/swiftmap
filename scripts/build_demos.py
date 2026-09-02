@@ -705,6 +705,112 @@ def card_html(card, size):
       </article>'''
 
 
+# ===========================================================================
+# the comparison -- rendered into both the home page's #why and /vs/, so the
+# two can never drift. Cells for the other libraries characterise their design
+# centre; they are not benchmarks. Only the swiftmap figures are measured.
+# ===========================================================================
+
+_COMPARE_ROWS = [
+    ("Points before it stops being usable",
+     "tens of thousands", "millions", "millions", "hundreds of millions",
+     "millions &mdash; drag the map above"),
+    ("Mental model",
+     "Leaflet", "its own layer/view stack", "a configurable app", "a rasterising pipeline",
+     "Leaflet"),
+    ("What reaches the browser",
+     "JSON per feature", "typed arrays", "JSON or Arrow", "a rendered image",
+     "binary float64 buffers"),
+    ("Per-feature click and hover",
+     "yes", "yes", "yes", "no &mdash; pixels, not features",
+     "yes, at a million"),
+    ("Layer control",
+     "flat list", "build it yourself", "flat list in its own UI", "you compose it",
+     "hierarchy from your columns"),
+    ("Cost of a layer toggle",
+     "re-render", "re-render", "re-render", "re-raster",
+     "a ~100-byte patch, at any scale"),
+    ("Python &harr; map sync",
+     "one way", "one way", "one way", "one way",
+     "bidirectional (viewport, clicks, draws, time)"),
+    ("Time playback",
+     "plugin, DOM-based", "manual", "built in", "manual",
+     "built in, filtered on the GPU"),
+    ("Offline / air-gapped",
+     "CDN at view time", "CDN at view time", "CDN at view time", "renders server-side",
+     "everything inside the wheel"),
+    ("Static share",
+     "one HTML file", "one HTML file", "one HTML file", "an image, or a Panel app",
+     "one HTML file, sidebar and time included"),
+    ("3D &mdash; extrusions, terrain",
+     "no", "yes", "yes", "no",
+     "not yet"),
+]
+
+# The row swiftmap loses keeps the column shading but drops the .me emphasis, so
+# the column reads as a column rather than a scoreboard.
+_COMPARE_LOSES = {"3D &mdash; extrusions, terrain"}
+
+
+def _compare_rows_html():
+    out = []
+    for label, folium, deck, kepler, ds, me in _COMPARE_ROWS:
+        emph = "" if label in _COMPARE_LOSES else " me"
+        out.append(
+            f'          <tr><td>{label}</td><td>{folium}</td><td>{deck}</td>'
+            f'<td>{kepler}</td><td>{ds}</td>\n'
+            f'              <td class="me-col{emph}">{me}</td></tr>')
+    return "\n".join(out)
+
+
+COMPARE_TABLE = f'''    <div class="table-scroll">
+      <table class="compare" style="min-width:900px">
+        <thead>
+          <tr>
+            <th></th><th>folium / ipyleaflet</th><th>deck.gl (pydeck)</th>
+            <th>kepler.gl</th><th>datashader</th><th class="me-col">swiftmap</th>
+          </tr>
+        </thead>
+        <tbody>
+{_compare_rows_html()}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="measured">
+      <strong>Measured, not claimed:</strong> the hero on the home page draws 1,000,000
+      points in roughly 800&nbsp;ms from mount to first paint and stays interactive while
+      you drag it &mdash; the readout under it is live, not a graphic. The other columns
+      describe design centres; nothing here times them. Run your own comparison &mdash;
+      the code behind every map on this site is printed underneath it.
+    </p>
+'''
+
+GAPS_HTML = '''    <div class="gaps">
+      <div class="gap">
+        <h3>3D</h3>
+        <p>No extrusions, no terrain, no camera pitch. deck.gl owns this, and a
+        Leaflet-shaped library will always be a step behind it here.</p>
+      </div>
+      <div class="gap">
+        <h3>Vector tiles</h3>
+        <p><code>read_mvt</code> brings a vector-tile dataset in as an ordinary table
+        &mdash; the bridge, not a renderer. There is still no vector-tile basemap, so a
+        style-driven basemap has to come in another way.</p>
+      </div>
+      <div class="gap">
+        <h3>Earth-observation catalogues</h3>
+        <p><code>add_imagery</code> warps a raster you already have. STAC, COG and Earth
+        Engine integration is leafmap's territory, not this library's.</p>
+      </div>
+      <div class="gap">
+        <h3>First paint at the top end</h3>
+        <p>Millions of points drag smoothly once they are there. Getting them there still
+        costs more than it should on the very largest maps.</p>
+      </div>
+    </div>
+'''
+
 def page_html(cards, tiers, hero_bytes, stamp, version):
     tier_buttons = "\n".join(
         f'''<button class="tier" type="button" data-tier="{t["slug"]}"
@@ -863,37 +969,10 @@ def page_html(cards, tiers, hero_bytes, stamp, version):
       </p>
     </div>
 
-    <div class="table-scroll">
-      <table class="compare">
-        <thead>
-          <tr>
-            <th></th><th>folium / ipyleaflet</th><th>deck.gl (pydeck)</th><th class="me-col">swiftmap</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>Points before it stops being usable</td><td>tens of thousands</td><td>millions</td>
-              <td class="me-col me">millions &mdash; drag the map above</td></tr>
-          <tr><td>Mental model</td><td>Leaflet</td><td>its own layer/view stack</td>
-              <td class="me-col me">Leaflet</td></tr>
-          <tr><td>Layer control</td><td>flat list</td><td>build it yourself</td>
-              <td class="me-col me">hierarchy from your columns</td></tr>
-          <tr><td>Coordinates on the wire</td><td>JSON per feature</td><td>typed arrays</td>
-              <td class="me-col me">binary float64 buffers</td></tr>
-          <tr><td>Cost of a layer toggle</td><td>re-render</td><td>re-render</td>
-              <td class="me-col me">a ~100-byte patch, at any scale</td></tr>
-          <tr><td>Python &harr; map sync</td><td>one way</td><td>one way</td>
-              <td class="me-col me">bidirectional (viewport, clicks, draws, time)</td></tr>
-          <tr><td>Time playback</td><td>plugin, DOM-based</td><td>manual</td>
-              <td class="me-col me">built in, filtered on the GPU</td></tr>
-          <tr><td>Offline / air-gapped</td><td>CDN at view time</td><td>CDN at view time</td>
-              <td class="me-col me">everything inside the wheel</td></tr>
-          <tr><td>Static share</td><td>one HTML file</td><td>one HTML file</td>
-              <td class="me-col me">one HTML file, sidebar and time included</td></tr>
-          <tr><td>3D &mdash; extrusions, terrain</td><td>no</td><td>yes</td>
-              <td class="me-col">not yet</td></tr>
-        </tbody>
-      </table>
-    </div>
+{COMPARE_TABLE}
+    <p class="measured" style="margin-top:18px">
+      <a href="vs/">The same comparison as a page of its own &rarr;</a>
+    </p>
 
 
     <div class="sec-head" style="margin-top:56px">
@@ -902,43 +981,12 @@ def page_html(cards, tiers, hero_bytes, stamp, version):
         A comparison table that wins every row is a pitch, not an analysis. These are the
         places another library is the better answer today. They are known, they are on the
         list, and this section shrinks as they land &mdash; it has already lost density,
-        raster imagery, WMS and offline since it was first written.
+        raster imagery, WMS, offline, marker clustering and line direction since it
+        was first written.
       </p>
     </div>
 
-    <div class="gaps">
-      <div class="gap">
-        <h3>3D</h3>
-        <p>No extrusions, no terrain, no camera pitch. deck.gl owns this, and a
-        Leaflet-shaped library will always be a step behind it here.</p>
-      </div>
-      <div class="gap">
-        <h3>Vector tiles</h3>
-        <p>XYZ raster and WMS are covered; MVT is not, so a basemap or dataset served as
-        vector tiles has to come in another way.</p>
-      </div>
-      <div class="gap">
-        <h3>Marker clustering</h3>
-        <p>Density answers &ldquo;where is it thick&rdquo;; it does not answer
-        &ldquo;collapse these into countable groups&rdquo;. <code>hexbin</code> is the
-        nearest thing today.</p>
-      </div>
-      <div class="gap">
-        <h3>Earth-observation catalogues</h3>
-        <p><code>add_imagery</code> warps a raster you already have. STAC, COG and Earth
-        Engine integration is leafmap's territory, not this library's.</p>
-      </div>
-      <div class="gap">
-        <h3>Line direction</h3>
-        <p>Tracks animate and carry per-segment time, but there are no arrowheads or dash
-        patterns yet, so a paused track does not show which way it was going.</p>
-      </div>
-      <div class="gap">
-        <h3>First paint at the top end</h3>
-        <p>Millions of points drag smoothly once they are there. Getting them there still
-        costs more than it should on the very largest maps.</p>
-      </div>
-    </div>
+{GAPS_HTML}
 
     <div class="sec-head" style="margin-top:56px">
       <h2>Install it</h2>
@@ -978,6 +1026,128 @@ def page_html(cards, tiers, hero_bytes, stamp, version):
 </footer>
 
 <script type="module" src="assets/gallery.js"></script>
+</body>
+</html>
+'''
+
+
+
+def vs_page_html(stamp, version):
+    """The comparison as a page of its own.
+
+    The same table and the same honest-gaps grid the home page carries, at a URL
+    that can be linked, ranked and cited -- an anchor on the home page cannot be
+    any of the three. Both render from COMPARE_TABLE and GAPS_HTML, so the two
+    copies cannot drift apart. No script: the page is prose and a table.
+    """
+    return f'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>swiftmap vs folium, ipyleaflet, deck.gl, kepler.gl and datashader</title>
+<meta name="description" content="How swiftmap compares with folium, ipyleaflet, deck.gl, kepler.gl and datashader for Python mapping at scale: feature ceiling, per-feature interaction, layer control, offline use -- and where each of the others is the better answer.">
+<link rel="canonical" href="{SITE}vs/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="swiftmap">
+<meta property="og:title" content="swiftmap vs folium, ipyleaflet, deck.gl, kepler.gl and datashader">
+<meta property="og:description" content="A side-by-side comparison for Python mapping at scale, including the rows where the other libraries win.">
+<meta property="og:url" content="{SITE}vs/">
+<meta property="og:image" content="{SITE}assets/og.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="swiftmap vs folium, ipyleaflet, deck.gl, kepler.gl and datashader">
+<meta name="twitter:description" content="A side-by-side comparison for Python mapping at scale, including the rows where the other libraries win.">
+<meta name="twitter:image" content="{SITE}assets/og.png">
+
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<link rel="stylesheet" href="../assets/swiftmap.css">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="../">
+      <img src="../assets/favicon.svg" alt="" width="26" height="26">
+      <span>swift<span>map</span></span>
+    </a>
+    <span class="pill">v{html.escape(version)}</span>
+    <nav>
+      <a href="../#gallery">Gallery</a>
+      <a href="../#stacks">Stacks</a>
+      <a href="../#why">Why</a>
+      <a href="{REPO}">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<section id="vs">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">Comparison</div>
+      <h1>swiftmap vs folium, deck.gl, kepler.gl and datashader</h1>
+      <p>
+        Five libraries that all put data on a map, separated by what they optimise for.
+        folium and ipyleaflet have Leaflet's ergonomics but hit a ceiling in the tens of
+        thousands of features. deck.gl scales, with its own layer and view-state model and
+        a thin Python layer over it. kepler.gl is an application you configure rather than
+        a library you call. datashader goes further than any of them on raw volume by
+        rasterising server-side &mdash; which is also why what arrives in the browser is a
+        picture rather than features you can click.
+      </p>
+      <p>
+        swiftmap keeps the Leaflet model and puts WebGL pipelines under it, so the map you
+        write in a few <code>add_*</code> calls stays interactive at a million features.
+        The table below includes the row where that trade-off loses.
+      </p>
+    </div>
+
+{COMPARE_TABLE}
+
+    <div class="sec-head" style="margin-top:56px">
+      <h2>Where it misses, honestly</h2>
+      <p>
+        A comparison table that wins every row is a pitch, not an analysis. These are the
+        places another library is the better answer today. They are known, they are on the
+        list, and this section shrinks as they land &mdash; it has already lost density,
+        raster imagery, WMS, offline, marker clustering and line direction since it
+        was first written.
+      </p>
+    </div>
+
+{GAPS_HTML}
+
+    <div class="sec-head" style="margin-top:56px">
+      <h2>Try it against your own data</h2>
+      <p>
+        The fastest way to settle a comparison is to run it. Every map on the
+        <a href="../">home page</a> is live and the code that built it is printed
+        underneath &mdash; six lines, most of the time.
+      </p>
+    </div>
+    <div class="code" style="border:1px solid var(--line);border-radius:12px;max-width:520px">
+      <pre><code>pip install swiftmap</code></pre>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span><a href="{REPO}">github.com/Rkleisley/swiftmap</a></span>
+    <span><a href="{REPO}/blob/main/README.md">Documentation</a></span>
+    <span><a href="https://pypi.org/project/swiftmap/">PyPI</a></span>
+    <span class="built">generated {stamp} &middot; scripts/build_demos.py</span>
+  </div>
+</footer>
+
 </body>
 </html>
 '''
@@ -1116,6 +1286,12 @@ def main():
     stamp = date.today().isoformat()
     (out / "index.html").write_text(
         page_html(built, tiers, hero_bytes, stamp, version()), encoding="utf-8")
+
+    # The comparison, addressable. An anchor on the home page cannot be linked to,
+    # ranked for a "x vs y" query, or cited on its own; a page can be all three.
+    (out / "vs").mkdir(parents=True, exist_ok=True)
+    (out / "vs" / "index.html").write_text(
+        vs_page_html(stamp, version()), encoding="utf-8")
 
     shutil.rmtree(scratch, ignore_errors=True)
 
