@@ -49,6 +49,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = Path(__file__).resolve().parent / "demo_assets"
 REPO = "https://github.com/Rkleisley/swiftmap"
+SITE = "https://rkleisley.github.io/swiftmap/"
 
 sys.path.insert(0, str(ROOT))
 
@@ -728,6 +729,23 @@ def page_html(cards, tiers, hero_bytes, stamp, version):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>swiftmap &mdash; Leaflet ergonomics, WebGL scale</title>
 <meta name="description" content="A Python mapping library that keeps Leaflet's ergonomics and replaces its vector drawing with WebGL pipelines. Every map on this page is live.">
+<link rel="canonical" href="{SITE}">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="swiftmap">
+<meta property="og:title" content="swiftmap &mdash; Leaflet ergonomics, WebGL scale">
+<meta property="og:description" content="A Python mapping library that renders millions of points smoothly &mdash; in Jupyter, Shiny, Streamlit and React. Every map on this page is live.">
+<meta property="og:url" content="{SITE}">
+<meta property="og:image" content="{SITE}assets/og.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="A swiftmap map drawing one million points, mid-drag.">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="swiftmap &mdash; Leaflet ergonomics, WebGL scale">
+<meta name="twitter:description" content="A Python mapping library that renders millions of points smoothly &mdash; in Jupyter, Shiny, Streamlit and React. Every map on this page is live.">
+<meta name="twitter:image" content="{SITE}assets/og.png">
+
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="stylesheet" href="assets/swiftmap.css">
 <link rel="stylesheet" href="assets/site.css">
