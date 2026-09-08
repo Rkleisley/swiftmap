@@ -128,7 +128,26 @@ def test_categorical_color_col_on_lines_overrides_stroke():
     assert all(l.get("color").startswith("#") for l in lines)
 
 
-def test_color_col_on_polygons_drives_the_fill_not_the_border():
+def test_color_col_on_polygons_ramps_stroke_and_fill_together():
+    # Zoomed out a polygon is mostly border, and a uniform stroke over ramped
+    # fills hid the classes exactly when the map was small enough to need
+    # them -- Robert's call: color_col drives BOTH by default.
+    df = pd.DataFrame({
+        "zone": ["A", "B"],
+        "value": [1.0, 9.0],
+        "wkt": ["POLYGON ((0 0, 1 0, 1 1, 0 0))", "POLYGON ((5 5, 6 5, 6 6, 5 5))"],
+    })
+    m = Map()
+    m.add_polygon(df, name="zone", color_col="value")
+    polys = [l for l in m.layers if l.get("type") == "polygon"]
+    assert polys[0].fillColor != polys[1].fillColor
+    assert [p.color for p in polys] == [p.fillColor for p in polys], \
+        "the stroke takes each feature's ramp colour, not the base"
+
+
+def test_explicit_color_keeps_the_uniform_choropleth_border():
+    # The stated exception: color= alongside color_col pins the border, so the
+    # ramped-fills-under-one-stroke look stays one kwarg away.
     df = pd.DataFrame({
         "zone": ["A", "B"],
         "value": [1.0, 9.0],

@@ -735,11 +735,13 @@ export function createMapModel(options = {}) {
         const { explicit, staticStyle } = popStyleOptions(options, label, type);
         const { layerStyle, featureStyles } = resolveStyles(
             explicit, staticStyle, columns, features.length, STYLE_DEFAULTS[type]);
-        // color_col ramps the fan exactly as Python's builders do: polygons take
-        // the fill (choropleth -- the border keeps `color`), lines take the
-        // stroke, and every fanned layer carries the one shared legend block.
-        // Dropped silently before (React round-8 Q): the map rendered, every
-        // feature just came out default blue.
+        // color_col ramps the fan exactly as Python's builders do: polygons
+        // take BOTH the fill and the stroke (zoomed out a polygon is mostly
+        // border, and a uniform stroke over ramped fills hid the classes);
+        // an EXPLICIT color= keeps the uniform-border choropleth look. Lines
+        // take the stroke, and every fanned layer carries the one shared
+        // legend block. Dropped silently before (React round-8 Q): the map
+        // rendered, every feature just came out default blue.
         const dataOpts = dataOptsOf(options);
         const fallbackColor = layerStyle.color || STYLE_DEFAULTS[type].color;
         const dataColors = dataDrivenColors(columns, dataOpts, fallbackColor, label);
@@ -768,8 +770,12 @@ export function createMapModel(options = {}) {
             };
             if (dataColors) {
                 const hex = rgbHex(dataColors.subarray(i * 4, i * 4 + 4));
-                if (type === "polygon") layer.fillColor = hex;
-                else layer.color = hex;
+                if (type === "polygon") {
+                    layer.fillColor = hex;
+                    if (!("color" in explicit)) layer.color = hex;
+                } else {
+                    layer.color = hex;
+                }
             }
             if (dataLegend) layer.legend = dataLegend;
             const featureLabel = resolveFeatureLabel(labelOpt, columns, i);

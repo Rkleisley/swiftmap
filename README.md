@@ -244,8 +244,9 @@ m.add_circle_markers(df, name="Sensors",
                      radius_col="volume", radius_range=(4, 20))
 
 m.add_polygon(districts, name="Districts",
-              color_col="median_income", colormap="greens")   # choropleth:
-                                                              # fill ramps, border keeps `color`
+              color_col="median_income", colormap="greens")   # fill AND stroke ramp;
+                                                              # pass color= to pin a
+                                                              # uniform border instead
 ```
 
 - **Numeric columns** ramp between the data's own extremes, or between `vmin`/`vmax` when

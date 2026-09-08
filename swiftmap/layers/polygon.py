@@ -171,10 +171,15 @@ def add_polygon(
     layer_style, feature_styles = resolve_styles(
         explicit_style, static_style, props, len(polygons_coords), {"color": "#3388ff", "fill_opacity": 0.2, "weight": 3, "opacity": 1.0})
 
-    # color_col drives the FILL, choropleth-style; the border keeps `color`. Each
-    # polygon is its own config entry, so this is a per-feature fillColor override.
+    # color_col drives BOTH the fill and the stroke: zoomed out, a polygon is
+    # mostly border, and a uniform stroke over ramped fills made the classes
+    # indistinguishable exactly when the map was small enough to need them.
+    # An EXPLICIT color= alongside color_col is the stated exception -- ramped
+    # fills under a uniform border, the old choropleth look, one kwarg away.
+    # Each polygon is its own config entry, so both are per-feature overrides.
     colors_u8 = data_driven_colors(props, data_opts,
                                    layer_style.get("color", "#3388ff"), "add_polygon")
+    ramp_stroke = colors_u8 is not None and "color" not in explicit_style
     legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#3388ff"))
 
     # A uniform fan -- every feature sharing one literal name and one static
@@ -235,6 +240,7 @@ def add_polygon(
             **display_config,
             **kwargs,
             **({"fillColor": rgb_hex(colors_u8[i])} if colors_u8 is not None else {}),
+            **({"color": rgb_hex(colors_u8[i])} if ramp_stroke else {}),
             **({"legend": legend_block} if legend_block else {}),
             **({"label": resolve_feature_label(label, props, i)} if label is not None else {})
         })
