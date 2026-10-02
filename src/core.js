@@ -742,7 +742,9 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                         || existing.clusterCoordSource
                             !== (coordinateBuffers[layer.id] || null)
                         || existing.clusterColorsSource
-                            !== (coordinateBuffers[`${layer.id}::colors`] || null));
+                            !== (coordinateBuffers[`${layer.id}::colors`] || null)
+                        || existing.clusterRadiiSource
+                            !== (coordinateBuffers[`${layer.id}::radii`] || null));
                 // A layer that stops (or starts) clustering swaps rendering
                 // paths entirely; layerType alone cannot see that.
                 const clusterFlip = Boolean(layer.cluster) !== Boolean(existing.clusterMeta);

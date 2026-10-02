@@ -1638,6 +1638,104 @@ suite("clustered points badge up, and dissolve past the max zoom", async () => {
     });
 });
 
+suite("a dissolved cluster draws EXACTLY like the unclustered layer", async () => {
+    // Robert's report: zooming into a cluster kept "breaking it down" until the
+    // last badge vanished and NO points drew. The singles were a second,
+    // hand-rolled point renderer that had drifted -- a hex STRING as the
+    // colour (glify read .r/.g/.b off it: black, invisible on a dark
+    // basemap), the default overlay pane under the polygon/line canvases, no
+    // CRS projection, no pin shader, no radius_col. The suite above checked
+    // only that badges VANISH. This one demands the payload: past the max
+    // zoom, the clustered layer's pixels equal the plain layer's, so any
+    // future drift between the two renderers fails here.
+    await withPage(async (page, errors) => {
+        await page.evaluate(async () => {
+            const m = await import("/dist/anywidget.js");
+            // Within the view at zoom 17, and far enough apart that draw order
+            // between the two renderers cannot matter.
+            const pts = [36.0100, -5.2970, 36.0105, -5.2960, 36.0096, -5.2952];
+            const mk = async (id, extra) => {
+                const el = document.createElement("div");
+                el.id = id;
+                el.style.cssText = "width:400px;height:300px;display:inline-block";
+                document.body.appendChild(el);
+                await m.default.render({ model: m.createHostStub({
+                    layers: [{ id: "c", type: "circle_markers", name: "Sites",
+                               layer_group: "L", visible: true, radius: 8,
+                               color: "#ff8800", opacity: 1, properties: {},
+                               ...extra }],
+                    group_configs: {},
+                    coordinate_buffers: { c: new DataView(new Float64Array(pts).buffer) },
+                    center: [36.0100, -5.2962], zoom: 17, crs: "EPSG:3857",
+                    auto_sync: true, sync_trigger: 0, show_logo: false,
+                }, { comm: null }), el });
+            };
+            await mk("plainPts", {});
+            await mk("dissolvedPts", { cluster: true, cluster_radius: 60,
+                                       cluster_max_zoom: 15 });
+            await new Promise(r => setTimeout(r, 1200));
+        });
+        // The map BODY, below each element's top edge: page layout bleeds a
+        // dozen pixels of neighbouring chrome into that edge (measured: 21
+        // pixels, all in rows 0-12, none near a point), which says nothing
+        // about either point renderer.
+        await page.locator("#plainPts").scrollIntoViewIfNeeded();
+        const body = async (id) => {
+            const box = await page.locator("#" + id).boundingBox();
+            return page.screenshot({ clip: { x: Math.round(box.x), y: Math.round(box.y) + 20,
+                                             width: 400, height: 270 } });
+        };
+        const plain = await body("plainPts");
+        const dissolved = await body("dissolvedPts");
+        const bareCount = await page.evaluate(() =>
+            document.querySelectorAll("#dissolvedPts .swiftmap-cluster").length);
+        assert.equal(bareCount, 0, "past cluster_max_zoom no badge remains");
+        assert.equal(Buffer.compare(plain, dissolved), 0,
+            "dissolved singles are pixel-identical to the unclustered layer -- "
+            + "colour, size, pane and projection all agree");
+        assert.deepEqual(errors, [], "no errors from either point renderer");
+    });
+});
+
+suite("coincident points resolve at the map's max zoom instead of badging forever", async () => {
+    // Repeated pings at ONE position share a grid cell at every zoom; the grid
+    // alone would badge them forever and a badge click could never reveal
+    // them. At the deepest zoom the map allows, clustering dissolves.
+    await withPage(async (page, errors) => {
+        const result = await page.evaluate(async () => {
+            const m = await import("/dist/anywidget.js");
+            const el = document.createElement("div");
+            el.style.cssText = "width:400px;height:300px";
+            document.body.appendChild(el);
+            const pts = new Float64Array([36.01, -5.30, 36.01, -5.30, 36.01, -5.30]);
+            const model = m.createHostStub({
+                layers: [{ id: "c", type: "circle_markers", name: "Pings",
+                           layer_group: "L", visible: true, radius: 8,
+                           color: "#ff8800", cluster: true, cluster_radius: 60,
+                           properties: {} }],
+                group_configs: {},
+                coordinate_buffers: { c: new DataView(pts.buffer) },
+                center: [36.01, -5.30], zoom: 14, crs: "EPSG:3857",
+                auto_sync: true, sync_trigger: 0, show_logo: false,
+            }, { comm: null });
+            await m.default.render({ model, el });
+            await new Promise(r => setTimeout(r, 600));
+            const before = el.querySelectorAll(".swiftmap-cluster span").length;
+            // No basemap bounds this map, so the cap is 18 -- exactly where a
+            // badge click now lands for a zero-extent cluster.
+            model.set("zoom", 18);
+            await new Promise(r => setTimeout(r, 900));
+            return { before,
+                     after: el.querySelectorAll(".swiftmap-cluster").length,
+                     canvases: el.querySelectorAll(".leaflet-pane canvas").length };
+        });
+        assert.equal(result.before, 1, "three coincident pings badge as one cluster");
+        assert.equal(result.after, 0, "at the map's max zoom the badge dissolves");
+        assert.ok(result.canvases >= 1, "and the pings draw as points");
+        assert.deepEqual(errors, [], "no errors resolving coincident points");
+    });
+});
+
 suite("arrows and dashes draw, and draw differently from a solid line", async () => {
     await withPage(async (page, errors) => {
         const counts = await page.evaluate(async () => {

@@ -11,7 +11,8 @@
 // never per frame: panning moves badges through Leaflet's own pane transform.
 import { L } from "./libs.js";
 import { mercatorX, mercatorY } from "./heat.js";
-import { getIndexedProperties } from "./layers.js";
+import { getIndexedProperties, pointStyler, setupGlifyProjection } from "./layers.js";
+import { pinShader } from "./shaders.js";
 import { bindPopup } from "./utils.js";
 
 // Points as mercator zoom-0 coordinates, built once per layer from the same
@@ -76,6 +77,27 @@ export function clusterPass(points, zoom, radiusPx, view) {
     return { clusters, singles };
 }
 
+// The in-view points' indices with no clustering at all -- the dissolved
+// state, past cluster_max_zoom or at the map's own max zoom.
+export function pointsInView(points, view) {
+    const { xs, ys, count } = points;
+    const out = [];
+    for (let i = 0; i < count; i++) {
+        const x = xs[i], y = ys[i];
+        if (view && (x < view.minX || x > view.maxX
+                || y < view.minY || y > view.maxY)) continue;
+        out.push(i);
+    }
+    return out;
+}
+
+// The deepest zoom a badge click may reach, and where clustering dissolves:
+// the map's own max zoom, or 18 when nothing on the map bounds it.
+export function clusterZoomCap(map) {
+    const max = map.getMaxZoom();
+    return Number.isFinite(max) ? max : 18;
+}
+
 // Inverse of the zoom-0 mercator projection, for placing badges.
 export function unproject(x, y) {
     const lon = (x / 256 - 0.5) * 360;
@@ -115,10 +137,10 @@ export function createClusterLayer(layer, latlonView, coordinateBuffers, onFeatu
     const points = projectClusterPoints(latlonView);
     const f64 = new Float64Array(
         latlonView.buffer, latlonView.byteOffset, latlonView.byteLength / 8);
-    const colorsView = coordinateBuffers[`${layer.id}::colors`] || null;
-    const colors = colorsView
-        ? new Uint8Array(colorsView.buffer, colorsView.byteOffset, colorsView.byteLength)
-        : null;
+    // The SAME per-point styling the unclustered renderer uses -- colour,
+    // radius, color_col/radius_col buffers, highlight and selection -- so a
+    // dissolved cluster looks exactly like the layer it came from.
+    const styleOf = pointStyler(layer, coordinateBuffers, layer.type);
 
     const ClusterLayer = L.Layer.extend({
         onAdd(map) {
@@ -151,9 +173,17 @@ export function createClusterLayer(layer, latlonView, coordinateBuffers, onFeatu
             const map = this._map;
             if (!map) return;
             const zoom = map.getZoom();
-            const past = maxZoom != null && zoom > maxZoom;
-            const { clusters, singles } = clusterPass(
-                points, zoom, past ? 0.0001 : radiusPx, this._view());
+            const cap = clusterZoomCap(map);
+            // Past cluster_max_zoom, or at the deepest zoom the map allows,
+            // every point stands alone. The second matters for COINCIDENT
+            // points -- repeated pings at one position share a grid cell at
+            // every zoom, so without it they badged forever, and a badge
+            // click could never reveal them.
+            const dissolved = (maxZoom != null && zoom > maxZoom) || zoom >= cap;
+            const view = this._view();
+            const { clusters, singles } = dissolved
+                ? { clusters: [], singles: pointsInView(points, view) }
+                : clusterPass(points, zoom, radiusPx, view);
 
             this._badges.clearLayers();
             for (const c of clusters) {
@@ -166,12 +196,14 @@ export function createClusterLayer(layer, latlonView, coordinateBuffers, onFeatu
                     }),
                     keyboard: false,
                 });
-                // A badge click frames its members: the classic gesture.
+                // A badge click frames its members: the classic gesture. The
+                // cap is the map's own max zoom, where clustering dissolves --
+                // so even a knot of coincident points resolves in one click.
                 marker.on("click", () => {
                     const [south, west] = unproject(c.minX, c.maxY);
                     const [north, east] = unproject(c.maxX, c.minY);
                     map.fitBounds([[south, west], [north, east]],
-                                  { padding: [40, 40], maxZoom: 18 });
+                                  { padding: [40, 40], maxZoom: cap });
                 });
                 this._badges.addLayer(marker);
             }
@@ -185,19 +217,17 @@ export function createClusterLayer(layer, latlonView, coordinateBuffers, onFeatu
                 // Identity map, not indexOf: the hover fix's lesson, applied
                 // before this instance can relearn it.
                 const dataIndex = new Map(data.map((p, k) => [p, k]));
-                const fallback = layer.color || "#3388ff";
+                const styles = singles.map(i => styleOf(i));
                 this.glSingles = L.glify.points({
                     map,
                     data,
-                    size: () => (layer.radius != null ? Number(layer.radius) : 6),
-                    color: (k) => {
-                        const i = singles[k];
-                        if (colors && colors.length >= (i + 1) * 4) {
-                            return { r: colors[i * 4] / 255, g: colors[i * 4 + 1] / 255,
-                                     b: colors[i * 4 + 2] / 255, a: colors[i * 4 + 3] / 255 };
-                        }
-                        return fallback;
-                    },
+                    // The unclustered points' pane, not glify's default overlay
+                    // pane -- which sits UNDER the polygon and line canvases.
+                    pane: "pointsPane",
+                    size: (k) => styles[k].size,
+                    color: (k) => styles[k].colorRGB,
+                    ...(layer.type === "markers"
+                        ? { fragmentShaderSource: () => pinShader } : {}),
                     click: (e, point) => {
                         const k = dataIndex.get(point) ?? -1;
                         if (k < 0) return;
@@ -210,6 +240,9 @@ export function createClusterLayer(layer, latlonView, coordinateBuffers, onFeatu
                         }
                     },
                 });
+                // The map's CRS, not glify's built-in web-mercator math -- on
+                // an EPSG:4326 map the singles were drawn somewhere else.
+                setupGlifyProjection(this.glSingles);
             }
         },
     });
@@ -217,8 +250,12 @@ export function createClusterLayer(layer, latlonView, coordinateBuffers, onFeatu
 }
 
 // Everything a cluster instance bakes besides the buffers: recreate on change,
-// the image/heat pattern.
+// the image/heat pattern. The singles take the full point styling, so
+// highlight and selection belong here too -- or select() on a clustered layer
+// would land in state and never repaint (the meta-key lesson, again).
 export function clusterMetaKey(layer) {
     return JSON.stringify([layer.cluster_radius || 60, layer.cluster_max_zoom ?? null,
-        layer.radius ?? null, layer.color || null]);
+        layer.radius ?? null, layer.color || null,
+        layer.highlight_style ?? null, layer.style_overrides ?? null,
+        layer.feature_styles ?? null]);
 }

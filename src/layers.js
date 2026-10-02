@@ -13,7 +13,72 @@ import { lineDecoVertexShader, lineDecoFragmentShader, arrowVertexShader,
          wireLineDeco, wireArrowDeco, combineTimeHandles } from "./linedeco.js";
 import { createClusterLayer, clusterMetaKey } from "./cluster.js";
 
-function setupGlifyProjection(glInstance) {
+// How ONE point of a point layer looks: colour and size, per the precedence the
+// whole renderer agrees on -- selection overrides, then whole-layer highlight,
+// then per-feature styles, then the data-driven ::colors/::radii buffers, then
+// the layer's own colour and radius. Shared by every renderer that draws a
+// point (the merged buckets and the clustered singles): the singles once
+// carried their own copy, which drifted until they drew black, in the wrong
+// pane, at the wrong size -- invisible on a dark basemap.
+export function pointFallbackColor(type) {
+    return type === "markers" ? "#e61a26" : "#3388ff";
+}
+
+// glify's fallback when a layer declares no radius. Pins need far more room than a
+// circle because the glyph is drawn inside the point's own quad by the shader.
+export function pointDefaultSize(type) {
+    return type === "markers" ? 64 : 5;
+}
+
+export function pointStyler(layer, coordinateBuffers, type) {
+    const fallbackColor = pointFallbackColor(type);
+    const colorRGB = parseColor(layer.color, fallbackColor);
+    const layerSize = layer.radius != null ? Number(layer.radius) : pointDefaultSize(type);
+    const perFeature = Array.isArray(layer.feature_styles) ? layer.feature_styles : null;
+    const highlight = layer.highlight_style || null;
+    const overrides = layer.style_overrides || null;
+    // Data-driven styling arrives as binary buffers beside the coordinates --
+    // u8 RGBA under "<id>::colors", f32 pixels under "<id>::radii" -- computed
+    // in Python from color_col/radius_col. Buffers, never per-feature style
+    // dicts: at millions of points, style dicts in the layers JSON are the
+    // payload that used to kill sessions. Explicit styles still outrank them.
+    const colorsRaw = coordinateBuffers[`${layer.id}::colors`];
+    const bufColors = colorsRaw
+        ? new Uint8Array(colorsRaw.buffer || colorsRaw, colorsRaw.byteOffset || 0,
+                         colorsRaw.byteLength)
+        : null;
+    const radiiRaw = coordinateBuffers[`${layer.id}::radii`];
+    const bufRadii = radiiRaw
+        ? new Float32Array(radiiRaw.buffer || radiiRaw, radiiRaw.byteOffset || 0,
+                           radiiRaw.byteLength / 4)
+        : null;
+    const styleOf = (i) => {
+        const fromData = perFeature ? perFeature[i] : null;
+        const selected = overrides ? overrides[i] : null;
+        const color = (selected && selected.color)
+            || (highlight && highlight.color)
+            || (fromData && fromData.color);
+        const radius = selected && selected.radius != null ? selected.radius
+            : highlight && highlight.radius != null ? highlight.radius
+            : fromData && fromData.radius != null ? fromData.radius
+            : null;
+        return {
+            colorRGB: color ? parseColor(color, fallbackColor)
+                : bufColors ? { r: bufColors[i * 4] / 255,
+                                g: bufColors[i * 4 + 1] / 255,
+                                b: bufColors[i * 4 + 2] / 255,
+                                a: bufColors[i * 4 + 3] / 255 }
+                : colorRGB,
+            size: radius != null ? Number(radius)
+                : bufRadii ? bufRadii[i]
+                : layerSize,
+        };
+    };
+    styleOf.base = { colorRGB, size: layerSize };
+    return styleOf;
+}
+
+export function setupGlifyProjection(glInstance) {
     if (glInstance && glInstance.layer) {
         glInstance.layer._unclampedProject = function(latlng, zoom) {
             return this._map.options.crs.latLngToPoint(latlng, zoom);
@@ -217,6 +282,7 @@ export async function renderLayer(map, layer, coordBuffer, coordinateBuffers = {
         instance.clusterMeta = clusterMetaKey(layer);
         instance.clusterCoordSource = coordBuffer;
         instance.clusterColorsSource = coordinateBuffers[`${layer.id}::colors`] || null;
+        instance.clusterRadiiSource = coordinateBuffers[`${layer.id}::radii`] || null;
         return instance;
     }
     if (layer.type === "image") {
@@ -749,10 +815,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
     const pointsList = [];
     const indexMapping = [];
 
-    const fallbackColor = type === "markers" ? "#e61a26" : "#3388ff";
-    // glify's fallback when a layer declares no radius. Pins need far more room than a
-    // circle because the glyph is drawn inside the point's own quad by the shader.
-    const defaultSize = type === "markers" ? 64 : 5;
+    const defaultSize = pointDefaultSize(type);
 
     // GPU time path: when this bucket holds time layers, every point is fed to glify and
     // per-point time rides along as vertex attributes -- the window test happens in the
@@ -765,8 +828,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
     const gpuTime = Boolean(gpuAttrs.hasTime);
 
     for (const layer of layersList) {
-        const colorRGB = parseColor(layer.color, fallbackColor);
-        const layerSize = layer.radius != null ? Number(layer.radius) : defaultSize;
+        const styleOf = pointStyler(layer, coordinateBuffers, type);
 
         const coordBuffer = coordinateBuffers[layer.id];
         if (!coordBuffer) {
@@ -775,8 +837,8 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 indexMapping.push({
                     layer: layer,
                     originalIndex: 0,
-                    colorRGB: colorRGB,
-                    size: layerSize
+                    colorRGB: styleOf.base.colorRGB,
+                    size: styleOf.base.size
                 });
             }
             continue;
@@ -789,26 +851,6 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
         );
         const count = coords.length / 2;
 
-        const perFeature = Array.isArray(layer.feature_styles) ? layer.feature_styles : null;
-        // Selection styling, applied over the layer's own and its data-driven styles.
-        // Same precedence as styleFor: data, then whole-layer highlight, then per-feature.
-        const highlight = layer.highlight_style || null;
-        const overrides = layer.style_overrides || null;
-        // Data-driven styling arrives as binary buffers beside the coordinates --
-        // u8 RGBA under "<id>::colors", f32 pixels under "<id>::radii" -- computed
-        // in Python from color_col/radius_col. Buffers, never per-feature style
-        // dicts: at millions of points, style dicts in the layers JSON are the
-        // payload that used to kill sessions. Explicit styles still outrank them.
-        const colorsRaw = coordinateBuffers[`${layer.id}::colors`];
-        const bufColors = colorsRaw
-            ? new Uint8Array(colorsRaw.buffer || colorsRaw, colorsRaw.byteOffset || 0,
-                             colorsRaw.byteLength)
-            : null;
-        const radiiRaw = coordinateBuffers[`${layer.id}::radii`];
-        const bufRadii = radiiRaw
-            ? new Float32Array(radiiRaw.buffer || radiiRaw, radiiRaw.byteOffset || 0,
-                               radiiRaw.byteLength / 4)
-            : null;
         // The current time window, when this layer is animated. Features outside it are
         // simply not pushed; indexMapping carries originalIndex, so popups and properties
         // on the survivors keep pointing at the right rows.
@@ -819,29 +861,13 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
 
         for (let i = 0; i < count; i++) {
             if (times && !featureInWindow(times[i * 2], times[i * 2 + 1], win)) continue;
-            const fromData = perFeature ? perFeature[i] : null;
-            const selected = overrides ? overrides[i] : null;
-            const color = (selected && selected.color)
-                || (highlight && highlight.color)
-                || (fromData && fromData.color);
-            const radius = selected && selected.radius != null ? selected.radius
-                : highlight && highlight.radius != null ? highlight.radius
-                : fromData && fromData.radius != null ? fromData.radius
-                : null;
-
+            const style = styleOf(i);
             pointsList.push([coords[i * 2], coords[i * 2 + 1]]);
             indexMapping.push({
                 layer: layer,
                 originalIndex: i,
-                colorRGB: color ? parseColor(color, fallbackColor)
-                    : bufColors ? { r: bufColors[i * 4] / 255,
-                                    g: bufColors[i * 4 + 1] / 255,
-                                    b: bufColors[i * 4 + 2] / 255,
-                                    a: bufColors[i * 4 + 3] / 255 }
-                    : colorRGB,
-                size: radius != null ? Number(radius)
-                    : bufRadii ? bufRadii[i]
-                    : layerSize
+                colorRGB: style.colorRGB,
+                size: style.size
             });
         }
     }
