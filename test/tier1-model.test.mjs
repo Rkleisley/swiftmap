@@ -184,6 +184,16 @@ const SCENARIOS = {
         return m;
     },
 
+    time_reference: () => {
+        const m = createMapModel();
+        m.addCircleMarkers({ lat: [36.0, 36.1], lon: [-5.3, -5.2],
+                             timestamp: ["2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z"] },
+                           { name: "Feed" });
+        m.makeTimeLayer("Feed", { period: "PT6H", referenceTime: "2026-01-02T18:00:00Z" });
+        m.configureTime({ referenceTime: 1767312000 });
+        return m;
+    },
+
     time_epoch_origin: () => {
         const m = createMapModel();
         m.addCircleMarkers({ lat: [36.0, 36.1, 36.2, 36.3],
@@ -631,6 +641,25 @@ test("makeTimeLayer declines a clustered layer, like Python", () => {
             "the time column is not stripped from a declined layer");
         assert.deepEqual(m.wireState().time_config, {},
             "a fully declined call leaves no period residue in time_config");
+    } finally {
+        console.warn = original;
+    }
+});
+
+test("configureTime clears and guards reference_time like Python", () => {
+    const warned = [];
+    const original = console.warn;
+    console.warn = (msg) => warned.push(String(msg));
+    try {
+        const m = createMapModel();
+        m.configureTime({ referenceTime: "2026-01-02" });
+        const set = m.wireState().time_config.reference_time;
+        assert.equal(set, Date.UTC(2026, 0, 2));
+        m.configureTime({ referenceTime: "whenever" });
+        assert.ok(warned.some(w => w.includes("not a readable time")));
+        assert.equal(m.wireState().time_config.reference_time, set, "junk keeps the old");
+        m.configureTime({ referenceTime: null });
+        assert.ok(!("reference_time" in m.wireState().time_config), "null clears");
     } finally {
         console.warn = original;
     }

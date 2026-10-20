@@ -1871,6 +1871,63 @@ suite("a mixed-type same-name merge is ONE sidebar row", async () => {
     });
 });
 
+suite("reference_time draws a past rail, a line and an always-shown label -- slider only", async () => {
+    // Robert's design: a moment called out on the slider. Grey rail to its left
+    // (past), the existing rail to its right (future), a blue line at it, and its
+    // own label that thinning never removes and ordinary labels yield to. Out of
+    // range: no line, the whole rail one or the other. Nothing on the map reads it.
+    await withPage(async (page, errors) => {
+        const read = () => page.evaluate(() => {
+            const past = document.querySelector(".swiftmap-time-past");
+            const line = document.querySelector(".swiftmap-time-ref");
+            const labels = [...document.querySelectorAll(".swiftmap-time-mark-label")];
+            return {
+                pastShown: past.style.display !== "none",
+                pastWidth: parseFloat(past.style.width),
+                lineShown: line.style.display !== "none",
+                lineLeft: parseFloat(line.style.left),
+                refLabels: labels.filter(l => l.classList.contains("ref")).map(l => l.textContent),
+                plainLabels: labels.filter(l => !l.classList.contains("ref")).map(l => l.textContent),
+            };
+        });
+        const setRef = (ms) => page.evaluate(async (ms) => {
+            const m = window.__model;
+            const cfg = { ...(m.get("time_config") || {}) };
+            if (ms === null) delete cfg.reference_time; else cfg.reference_time = ms;
+            m.set("time_config", cfg);
+            await new Promise(r => setTimeout(r, 400));
+        }, ms);
+
+        const none = await read();
+        assert.ok(!none.pastShown && !none.lineShown && none.refLabels.length === 0,
+            "no reference_time: today's bar, untouched");
+
+        await setRef(Date.UTC(2026, 0, 2));
+        const mid = await read();
+        assert.ok(mid.pastShown && mid.lineShown, "in range: past rail and line both drawn");
+        assert.ok(mid.pastWidth > 0 && mid.pastWidth < 100);
+        assert.ok(Math.abs(mid.pastWidth - mid.lineLeft) < 0.01,
+            "the grey rail ends exactly at the line");
+        assert.deepEqual(mid.refLabels, ["01-02"], "the reference is labelled");
+        assert.ok(!mid.plainLabels.includes("01-02"), "the ordinary label yields to it");
+
+        await setRef(Date.UTC(2025, 0, 1));
+        const before = await read();
+        assert.ok(!before.pastShown && !before.lineShown && before.refLabels.length === 0,
+            "before the range: all future, no line");
+
+        await setRef(Date.UTC(2027, 0, 1));
+        const after = await read();
+        assert.ok(after.pastShown && after.pastWidth === 100 && !after.lineShown,
+            "after the range: all past, no line");
+
+        await setRef(null);
+        const cleared = await read();
+        assert.ok(!cleared.pastShown && !cleared.lineShown, "cleared: back to today's bar");
+        assert.deepEqual(errors, [], "no errors drawing the reference");
+    }, "widget-time.html");
+});
+
 suite("destroying a map mid-zoom-animation throws nothing later", async () => {
     // Leaflet arms a bare setTimeout(_onZoomTransitionEnd, 250) when a zoom
     // animation starts, and map.remove() does not clear it -- so a map torn

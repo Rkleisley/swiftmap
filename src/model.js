@@ -36,7 +36,7 @@ import { layersBoundsUnion } from "./utils.js";
 import { resolveColormap, dataDrivenColors, dataDrivenRadii,
          dataDrivenLegend, dataDrivenSizeLegend, rgbHex,
          COLORMAPS, DEFAULT_COLORMAP } from "./colormaps.js";
-import { isValidPeriod, normalizeLayerTimes } from "./times.js";
+import { isValidPeriod, normalizeLayerTimes, parseTimestamp } from "./times.js";
 import { XYZ, ALIASES as BASEMAP_ALIASES, PRESETS, WMS,
          DEFAULT_BASEMAPS, queryKey } from "./basemap-catalog.js";
 import { featuresOf, pointPairsOf, linePartsOf, polygonPartsOf, parseWKT,
@@ -1394,8 +1394,10 @@ export function createMapModel(options = {}) {
         let duration = opts.duration !== undefined ? opts.duration : "period";
         const fade = opts.fade || false;
         const keepField = opt(opts, "keepField", "keep_field") || false;
+        const referenceTime = opt(opts, "referenceTime", "reference_time") ?? null;
         for (const key of ["timeField", "time_field", "timeEndField", "time_end_field",
-                           "period", "duration", "fade", "keepField", "keep_field"])
+                           "period", "duration", "fade", "keepField", "keep_field",
+                           "referenceTime", "reference_time"])
             delete opts[key];
         const matched = findLayers(target, opts);
         if (!matched.length) {
@@ -1465,7 +1467,12 @@ export function createMapModel(options = {}) {
         }
         // Python's gate exactly: the shared period belongs to layers that
         // actually animate -- a fully declined call must leave no residue.
-        if (period != null && animated) configureTime({ period });
+        if (animated) {
+            const slider = {};
+            if (period != null) slider.period = period;
+            if (referenceTime != null) slider.reference_time = referenceTime;
+            if (Object.keys(slider).length) configureTime(slider);
+        }
         return model;
     }
 
@@ -1527,6 +1534,30 @@ export function createMapModel(options = {}) {
             console.warn(`swiftmap: configureTime: period '${opts.period}' is not an ISO8601 `
                 + `duration (like 'P1D' or 'PT1H'). Keeping the previous period.`);
             delete opts.period;
+        }
+        // Python's reference_time, verbatim: null clears (removing the key, like
+        // window), anything else parses to epoch ms or warns and keeps the old.
+        if ("referenceTime" in opts || "reference_time" in opts) {
+            const reference = "referenceTime" in opts ? opts.referenceTime : opts.reference_time;
+            delete opts.referenceTime;
+            delete opts.reference_time;
+            if (reference == null) {
+                if ("reference_time" in state.time_config) {
+                    const next = { ...state.time_config };
+                    delete next.reference_time;
+                    state.time_config = next;
+                }
+            } else {
+                const ms = parseTimestamp(reference);
+                if (Number.isNaN(ms)) {
+                    console.warn(`swiftmap: configureTime: reference_time `
+                        + `${JSON.stringify(reference)} is not a readable time (an ISO `
+                        + `string, Date, or epoch seconds/ms). Keeping the previous `
+                        + `reference time.`);
+                } else {
+                    opts.reference_time = ms;
+                }
+            }
         }
         if (Object.keys(opts).length) state.time_config = { ...state.time_config, ...opts };
         return model;

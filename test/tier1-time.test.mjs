@@ -554,3 +554,49 @@ test("a pair count that matches nothing stays a whole-layer span", () => {
     assert.equal(meta.perFeature[0].seg, undefined);
     assert.equal(meta.perFeature[0].start, 0);
 });
+
+// --- reference_time: a slider visual, its label never thinned away ----------------------
+import { formatReferenceLabel } from "../src/timecontrol.js";
+
+const WEEK = Array.from({ length: 7 }, (_, i) => T0 + i * DAY);
+
+test("the reference mark always carries its label", () => {
+    // 49 hourly ticks thin ordinary labels to every 9th -- the reference sits on
+    // an unlabelled tick and still gets one.
+    const hours = Array.from({ length: 49 }, (_, i) => T0 + i * 3600 * 1000);
+    const ref = T0 + 13 * 3600 * 1000;
+    const marks = buildRuler(hours, null, t => `T${t}`,
+                             { referenceMs: ref, formatReference: () => "REF" });
+    const refMark = marks.find(m => m.reference);
+    assert.ok(refMark, "a reference mark exists");
+    assert.equal(refMark.label, "REF");
+    assert.ok(Math.abs(refMark.fraction - 13 / 48) < 1e-12);
+});
+
+test("ordinary labels that would collide give way to the reference", () => {
+    const ref = T0 + 4 * DAY + 18 * 3600 * 1000;            // 01-05 18:00
+    const marks = buildRuler(WEEK, null, t => new Date(t).toISOString().slice(5, 10),
+                             { referenceMs: ref, formatReference: () => "REF" });
+    const labels = marks.filter(m => m.label).map(m => m.label);
+    assert.ok(labels.includes("REF"));
+    assert.ok(!labels.includes("01-05"), "01-05 sits under the reference label and yields");
+    assert.ok(labels.includes("01-01") && labels.includes("01-03"),
+        "labels clear of the reference stay");
+});
+
+test("a reference outside the slider's range has no mark at all", () => {
+    for (const ref of [T0 - DAY, T0 + 30 * DAY]) {
+        const marks = buildRuler(WEEK, null, () => "x", { referenceMs: ref });
+        assert.ok(!marks.some(m => m.reference));
+        assert.equal(marks.filter(m => m.label).length, 4, "no label was displaced");
+    }
+});
+
+test("the reference label keeps the time a daily tick label would drop", () => {
+    assert.equal(formatReferenceLabel(T0 + 4 * DAY + 18 * 3600 * 1000, DAY), "01-05 18:00");
+    assert.equal(formatReferenceLabel(T0 + 4 * DAY, DAY), "01-05",
+        "exactly midnight on a daily bar is just the date");
+    assert.equal(formatReferenceLabel(T0 + 2 * DAY + 9.5 * 3600 * 1000, 3600 * 1000),
+        "01-03 09:30", "an hourly bar still names the day");
+    assert.equal(formatReferenceLabel(T0 + 1234500, 1000), "00:20:34");
+});

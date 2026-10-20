@@ -420,6 +420,9 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
 
         timeState = { tick: timeUI.ticks[timeUI.index], period, window: timeUI.window };
         timeUI.position = cfg.position || "top-center";
+        // A slider visual only: the renderer draws the line, the past rail and the
+        // always-shown label; nothing on the map reads it.
+        timeUI.referenceTime = Number.isFinite(cfg.reference_time) ? cfg.reference_time : null;
 
         if (!timeUI.started) {
             timeUI.started = true;

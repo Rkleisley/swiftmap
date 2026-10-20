@@ -188,6 +188,34 @@
     border-radius: 3px;
     pointer-events: none;
 }
+/* reference_time: the rail left of the reference reads as the past. Same geometry as the
+   base rail so the split is a colour change, not a second bar. */
+.swiftmap-time-track .swiftmap-time-past {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    height: 6px;
+    background: #a3a3a3;
+    border-radius: 3px 0 0 3px;
+    pointer-events: none;
+}
+.swiftmap-time-track .swiftmap-time-past.whole { border-radius: 3px; }
+/* The reference line: a brighter blue than the window span (#74b9e0) and the thumb
+   (#31708f), and taller than the rail, so it cannot be mistaken for either. No z-index:
+   the native input comes later in the DOM and keeps the thumb on top of it. */
+.swiftmap-time-track .swiftmap-time-ref {
+    position: absolute;
+    top: 1px;
+    width: 2px;
+    margin-left: -1px;
+    height: 17px;
+    background: #1f6feb;
+    border-radius: 1px;
+    pointer-events: none;
+}
+.swiftmap-time-ruler .swiftmap-time-mark.ref { width: 2px; margin-left: -1px; background: #1f6feb; }
+.swiftmap-time-ruler .swiftmap-time-mark-label.ref { color: #1f6feb; font-weight: 600; }
+
 .swiftmap-time-track .swiftmap-time-slider {
     -webkit-appearance: none;
     appearance: none;

@@ -307,6 +307,19 @@ def scenario_time_epoch_pairs():
     return m
 
 
+def scenario_time_reference():
+    """reference_time through make_time_layer, then re-set via configure_time
+    as epoch seconds: both normalise to epoch ms on the shared config."""
+    m = Map(show_logo=False)
+    m.add_circle_markers(
+        {"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+         "timestamp": ["2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z"]},
+        name="Feed")
+    m.make_time_layer("Feed", period="PT6H", reference_time="2026-01-02T18:00:00Z")
+    m.configure_time(reference_time=1767312000)
+    return m
+
+
 def scenario_time_epoch_origin():
     """Epoch zero and negative epochs are instants, not junk: seconds vs ms
     still told apart by |magnitude|, nothing reads as timeless."""
@@ -751,6 +764,7 @@ SCENARIOS = [
     scenario_time_points,
     scenario_time_epoch_pairs,
     scenario_time_epoch_origin,
+    scenario_time_reference,
     scenario_cluster_time_refusal,
     scenario_time_clear,
     scenario_time_append,

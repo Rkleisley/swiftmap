@@ -624,3 +624,63 @@ def test_append_to_a_stripped_layer_keeps_history_and_stays_stripped():
     assert after[:len(before)] == before, "old spans survive byte-identical"
     assert len(after) == len(before) + 16
     assert "timestamp" not in layer["properties"], "the update did not resurrect it"
+
+
+# --- reference_time: a slider visual, normalised like every other time input ----------
+def _feed_map():
+    m = quiet_map()
+    m.add_circle_markers({"lat": [36.0, 36.1], "lon": [-5.3, -5.2],
+                          "timestamp": ["2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z"]},
+                         name="Feed")
+    return m
+
+
+def test_reference_time_normalises_to_epoch_ms():
+    m = _feed_map()
+    m.configure_time(reference_time="2026-01-02T18:00:00Z")
+    assert m.time_config["reference_time"] == parse_timestamp("2026-01-02T18:00:00Z")
+    m.configure_time(reference_time=1767312000)          # epoch SECONDS, same rule
+    assert m.time_config["reference_time"] == 1767312000 * 1000.0
+
+
+def test_reference_time_none_clears_like_window():
+    m = _feed_map()
+    m.configure_time(reference_time="2026-01-02")
+    m.configure_time(reference_time=None)
+    assert "reference_time" not in m.time_config
+
+
+def test_unreadable_reference_time_warns_and_keeps_the_previous():
+    m = _feed_map()
+    m.configure_time(reference_time="2026-01-02")
+    before = m.time_config["reference_time"]
+    with pytest.warns(SwiftMapWarning, match="not a readable time"):
+        m.configure_time(reference_time="whenever")
+    assert m.time_config["reference_time"] == before
+
+
+def test_make_time_layer_passes_reference_time_through():
+    m = _feed_map()
+    m.make_time_layer("Feed", period="PT6H", reference_time="2026-01-02T12:00:00Z")
+    assert m.time_config["period"] == "PT6H"
+    assert m.time_config["reference_time"] == parse_timestamp("2026-01-02T12:00:00Z")
+
+
+def test_a_declined_call_strands_no_reference_time():
+    # The residue rule: shared slider settings belong to layers that animate.
+    m = quiet_map()
+    m.add_circle_markers({"lat": [36.0], "lon": [-5.3]}, name="NoTimes")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m.make_time_layer("NoTimes", reference_time="2026-01-02")
+    assert "reference_time" not in m.time_config
+
+
+def test_reference_time_changes_nothing_on_the_layers():
+    m = _feed_map()
+    m.make_time_layer("Feed")
+    before = [dict(l.to_dict()) for l in m.layers]
+    buffers = dict(m.coordinate_buffers)
+    m.configure_time(reference_time="2026-01-02")
+    assert [dict(l.to_dict()) for l in m.layers] == before, "a slider visual only"
+    assert dict(m.coordinate_buffers) == buffers

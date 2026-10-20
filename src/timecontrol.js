@@ -283,15 +283,32 @@ export function collectDurationsMs(layers, windowIso) {
 // Tick marks for the track: majors at every interval boundary (sparsely labelled so long
 // timelines stay readable), unlabelled minors at the grid in between. Minor DISPLAY is
 // thinned when dense; the snap grid stays exact, so a mark is a guide, not a constraint.
-export function buildRuler(ticks, gridMs, formatLabel, { maxLabels = 6, maxMinors = 240 } = {}) {
+//
+// A reference time (configure_time(reference_time=...)) is its own mark whose label is
+// ALWAYS drawn -- the thinning that skips ordinary labels never skips it -- and any
+// ordinary label close enough to collide with it gives way instead. Outside the
+// slider's range it has no mark at all.
+export function buildRuler(ticks, gridMs, formatLabel,
+                           { maxLabels = 6, maxMinors = 240, referenceMs = null,
+                             formatReference = formatLabel, referenceGap = 0.16 } = {}) {
     if (ticks.length < 2) return [];
     const t0 = ticks[0], span = ticks[ticks.length - 1] - t0;
     const marks = [];
     const labelEvery = Math.max(1, Math.ceil(ticks.length / maxLabels));
-    ticks.forEach((t, i) => marks.push({
-        fraction: (t - t0) / span, major: true,
-        label: i % labelEvery === 0 ? formatLabel(t) : null,
-    }));
+    const refFraction = referenceMs != null && referenceMs >= t0 && referenceMs <= t0 + span
+        ? (referenceMs - t0) / span : null;
+    ticks.forEach((t, i) => {
+        const fraction = (t - t0) / span;
+        const crowded = refFraction != null && Math.abs(fraction - refFraction) < referenceGap;
+        marks.push({
+            fraction, major: true,
+            label: i % labelEvery === 0 && !crowded ? formatLabel(t) : null,
+        });
+    });
+    if (refFraction != null) {
+        marks.push({ fraction: refFraction, major: true, reference: true,
+                     label: formatReference(referenceMs) });
+    }
     if (gridMs && gridMs < span) {
         const total = Math.floor(span / gridMs);
         const thin = Math.max(1, Math.ceil(total / maxMinors));
@@ -302,6 +319,18 @@ export function buildRuler(ticks, gridMs, formatLabel, { maxLabels = 6, maxMinor
         }
     }
     return marks;
+}
+
+// The reference label names its moment fully: a daily slider labels ticks "01-05", but
+// a reference at 18:00 that read "01-05" would hide the very time it calls out. The
+// time of day is kept unless the moment sits exactly on midnight of a day-or-longer bar.
+export function formatReferenceLabel(ms, periodMs) {
+    const iso = new Date(ms).toISOString();
+    if (periodMs != null && periodMs < 60 * 1000) return iso.slice(11, 19);
+    const day = 24 * 3600 * 1000;
+    const midnight = ((ms % day) + day) % day === 0;
+    if (midnight && (periodMs == null || periodMs >= day)) return iso.slice(5, 10);
+    return `${iso.slice(5, 10)} ${iso.slice(11, 16)}`;
 }
 
 export function formatTickLabel(ms, periodMs) {
@@ -353,7 +382,9 @@ export function renderTimeControl(container, state, handlers) {
             <span class="swiftmap-time-label"></span>
             <span class="swiftmap-time-track">
                 <span class="swiftmap-time-base"></span>
+                <span class="swiftmap-time-past"></span>
                 <span class="swiftmap-time-span"></span>
+                <span class="swiftmap-time-ref"></span>
                 <span class="swiftmap-time-ruler"></span>
                 <input class="swiftmap-time-slider" type="range" min="0" step="1">
                 <span class="swiftmap-time-trail" role="slider" tabindex="0"
@@ -440,18 +471,47 @@ function renderTrack(el, state) {
     // No fixed-ms grid (calendar periods) means nothing sensible to snap to.
     trail.style.display = state.gridMs ? "" : "none";
 
+    // The reference time: a slider visual only, nothing on the map. The rail left of it
+    // is the past (grey), right of it unchanged; out of range there is no line and the
+    // whole rail is one or the other.
+    const refMs = Number.isFinite(state.referenceTime) ? state.referenceTime : null;
+    const past = el.querySelector(".swiftmap-time-past");
+    const refLine = el.querySelector(".swiftmap-time-ref");
+    const t0 = ticks[0], tEnd = ticks[ticks.length - 1];
+    if (refMs == null || refMs <= t0) {
+        past.style.display = "none";
+    } else {
+        past.style.display = "";
+        const pastFraction = refMs >= tEnd ? 1 : trackFraction(ticks, refMs);
+        past.style.width = `${(pastFraction * 100).toFixed(2)}%`;
+        past.classList.toggle("whole", pastFraction >= 1);
+    }
+    if (refMs != null && refMs >= t0 && refMs <= tEnd) {
+        refLine.style.display = "";
+        refLine.style.left = `${(trackFraction(ticks, refMs) * 100).toFixed(2)}%`;
+        refLine.title = `Reference: ${formatUTC(refMs)}`;
+    } else {
+        refLine.style.display = "none";
+    }
+
     const ruler = el.querySelector(".swiftmap-time-ruler");
-    const key = `${ticks[0]}|${ticks.length}|${state.gridMs}|${periodMs}`;
+    const key = `${ticks[0]}|${ticks.length}|${state.gridMs}|${periodMs}|${refMs}`;
     if (ruler._key !== key) {
         ruler._key = key;
         ruler.innerHTML = "";
-        for (const mark of buildRuler(ticks, state.gridMs, t => formatTickLabel(t, periodMs))) {
+        const marks = buildRuler(ticks, state.gridMs, t => formatTickLabel(t, periodMs), {
+            referenceMs: refMs,
+            formatReference: t => formatReferenceLabel(t, periodMs),
+        });
+        for (const mark of marks) {
             const m = document.createElement("span");
-            m.className = mark.major ? "swiftmap-time-mark major" : "swiftmap-time-mark";
+            m.className = mark.reference ? "swiftmap-time-mark major ref"
+                : mark.major ? "swiftmap-time-mark major" : "swiftmap-time-mark";
             m.style.left = `${(mark.fraction * 100).toFixed(2)}%`;
             if (mark.label) {
                 const lab = document.createElement("span");
-                lab.className = "swiftmap-time-mark-label";
+                lab.className = mark.reference
+                    ? "swiftmap-time-mark-label ref" : "swiftmap-time-mark-label";
                 lab.textContent = mark.label;
                 m.appendChild(lab);
             }

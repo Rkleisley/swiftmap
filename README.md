@@ -492,6 +492,11 @@ trailing edge. Playback options are shared:
 `m.configure_time(period="PT1H", auto_play=True, loop=True, speed=2,
 position="bottom-center")`.
 
+`reference_time=` (on `configure_time` or `make_time_layer`) calls out one moment on the
+slider — "now", an incident, a report cutoff: a blue line with its own always-shown
+label, the rail grey to its left as the past. It is a slider visual only; nothing on
+the map changes. `configure_time(reference_time=None)` clears it.
+
 The slider's position syncs both ways: `m.time_current` holds the current tick (epoch
 ms) for Shiny to react to, and setting it from Python jumps the slider to that moment.
 `m.clear_time_layer()` stops animating and removes the control.

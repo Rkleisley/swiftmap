@@ -2,12 +2,13 @@
 Time layers and the shared slider: animating layers along the times their
 features already carry, and configuring the one control that serves them all.
 """
+import math
 from typing import Any, Optional
 
 import numpy as np
 
 from .._warnings import warn
-from ..layers._time import normalize_layer_times, is_valid_period
+from ..layers._time import normalize_layer_times, is_valid_period, parse_timestamp
 from .effects import _describe_target
 
 # Mirrors POSITIONS in src/timecontrol.js; the two sets must not drift.
@@ -21,6 +22,7 @@ def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = Non
                     time_end_field: Optional[str] = None, period: Optional[str] = None,
                     duration: Optional[str] = "period", fade: bool = False,
                     keep_field: bool = False,
+                    reference_time: Any = None,
                     **criteria) -> "Map":
     """
     Animates the matching layers along the time their features already carry.
@@ -53,6 +55,10 @@ def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = Non
     period : str, optional
         Slider step as an ISO8601 duration ('P1D', 'PT1H', 'PT15M'). Shared by the one
         slider, so setting it here reconfigures the map's time axis. Default 'P1D'.
+    reference_time : str, datetime or number, optional
+        A moment to call out on the slider: a blue line with an always-shown label,
+        the rail grey to its left (past). A slider visual only -- see configure_time,
+        which also clears it (reference_time=None there).
     duration : str or None, default "period"
         How long a feature stays visible after its time. "period" shows each tick's
         own period -- absence reads as absence. None accumulates history instead, and
@@ -161,8 +167,14 @@ def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = Non
         # anyway would leave time_config as the one difference between a
         # successful call and a fully declined one; each decline already said
         # why nothing will move.
-        if period is not None and animated:
-            self.configure_time(period=period)
+        if animated:
+            slider = {}
+            if period is not None:
+                slider["period"] = period
+            if reference_time is not None:
+                slider["reference_time"] = reference_time
+            if slider:
+                self.configure_time(**slider)
     return self
 
 
@@ -239,6 +251,14 @@ def configure_time(self, **options) -> "Map":
         'left-center', 'right-center', 'bottom-left', 'bottom-center' or
         'bottom-right'. Default 'top-center'. The sidebar lives at top-right, so
         that corner works but crowds it.
+    reference_time : str, datetime or number, or None
+        A moment to call out on the slider -- "now", an incident, a report
+        cutoff: a blue line on the bar with its own always-shown label, the
+        rail grey to its left (past) and unchanged to its right (future).
+        Purely a slider visual: nothing on the map changes. Accepts anything
+        a time layer does (ISO string, datetime, epoch seconds or ms). A
+        moment outside the slider's range draws no line, leaving the whole
+        rail past or future. Pass None to clear it.
 
     Returns
     -------
@@ -267,6 +287,22 @@ def configure_time(self, **options) -> "Map":
         warn(f"configure_time: period {options['period']!r} is not an ISO8601 "
              f"duration (like 'P1D' or 'PT1H'). Keeping the previous period.")
         options.pop("period")
+    if "reference_time" in options:
+        reference = options.pop("reference_time")
+        if reference is None:
+            # Cleared by removing the key, like window: a present key draws a line.
+            if "reference_time" in self.time_config:
+                self.time_config = {k: v for k, v in self.time_config.items()
+                                    if k != "reference_time"}
+        else:
+            ms = parse_timestamp(reference)
+            if math.isnan(ms):
+                warn(f"configure_time: reference_time {reference!r} is not a readable "
+                     f"time (an ISO string, datetime, or epoch seconds/ms). Keeping the "
+                     f"previous reference time.")
+            else:
+                # Stored as epoch ms -- the unit the slider's ticks already use.
+                options["reference_time"] = ms
     if options:
         self.time_config = {**self.time_config, **options}
     return self
