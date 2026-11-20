@@ -12,7 +12,7 @@ import { lineDecoVertexShader, lineDecoFragmentShader, arrowVertexShader,
          ARROW_FRAGMENT, buildLineDistances, buildArrowPoints, arrowTimeAttrs,
          wireLineDeco, wireArrowDeco, combineTimeHandles } from "./linedeco.js";
 import { createClusterLayer, clusterMetaKey } from "./cluster.js";
-import { drawUnits, clickTarget } from "./packed.js";
+import { drawUnits, clickTarget, featureMask } from "./packed.js";
 
 // How ONE point of a point layer looks: colour and size, per the precedence the
 // whole renderer agrees on -- selection overrides, then whole-layer highlight,
@@ -860,7 +860,9 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
 
         const coordBuffer = coordinateBuffers[layer.id];
         if (!coordBuffer) {
-            if (layer.location && layerInWindow(layer, coordinateBuffers, timeState)) {
+            const only = featureMask(layer, 1);
+            if (layer.location && (!only || only[0])
+                    && layerInWindow(layer, coordinateBuffers, timeState)) {
                 pointsList.push([layer.location[0], layer.location[1]]);
                 indexMapping.push({
                     layer: layer,
@@ -886,8 +888,12 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
             ? windowFor(timeState.tick, effectiveDuration(layer, timeState), timeState.period)
             : null;
         const times = win ? timesFor(layer, coordinateBuffers) : null;
+        // A where= selection's filter: the points it drops are not pushed, exactly
+        // as buildTimeAttributes skips them, so the GPU attributes stay aligned.
+        const mask = featureMask(layer, count);
 
         for (let i = 0; i < count; i++) {
+            if (mask && !mask[i]) continue;
             if (times && !featureInWindow(times[i * 2], times[i * 2 + 1], win)) continue;
             const style = styleOf(i);
             pointsList.push([coords[i * 2], coords[i * 2 + 1]]);

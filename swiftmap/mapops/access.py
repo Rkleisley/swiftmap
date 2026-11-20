@@ -4,9 +4,12 @@ group configuration.
 """
 from typing import Any, Dict, List, Optional, Union
 
+import numpy as np
+
 from .._infra import LayerConfig
 from .._warnings import warn
 from ..layers._targeting import find_layers as _find_layers
+from ..layers._packed import row_of
 
 
 def get_layer(self, identifier: Union[str, Any], name: Optional[str] = None) -> Optional[LayerConfig]:
@@ -329,3 +332,49 @@ def update_layer(self, identifier: Union[str, Any], name: Optional[str] = None, 
         with self.batch():
             self._layers_update_many(updated_layers, changed)
     return self
+
+
+def clicked_feature(self) -> Optional[Dict[str, Any]]:
+    """
+    The feature the user last clicked, with its own row of properties.
+
+    A click reports a layer and a feature index (`clicked_layer_id`,
+    `selected_index`); a point, polygon or line layer keeps its properties as
+    columns, so this reads the clicked feature's row out of them. A time column
+    the layer moved into its binary buffer comes back too, as epoch milliseconds.
+
+    Returns
+    -------
+    dict or None
+        `{"layer": id, "name": ..., "index": i, "properties": {...}}`, or None for
+        a click on open map, before any click, or when the layer is gone.
+
+    Examples
+    --------
+    >>> @reactive.effect
+    ... def _():
+    ...     reactive_read(w, "click_seq")
+    ...     feature = w.clicked_feature()
+    ...     if feature:
+    ...         print(feature["properties"]["h3_cell"])
+    """
+    layer_id = self.clicked_layer_id
+    index = self.selected_index
+    if not layer_id or index is None or index < 0:
+        return None
+    matched = self.find_layers(ids=layer_id)
+    if not matched:
+        return None
+    layer = matched[0]
+    row = row_of(layer, int(index))
+    stripped = ((layer.get("time") or {}).get("stripped")) or []
+    raw = self.coordinate_buffers.get(f"{layer_id}::times")
+    if stripped and raw:
+        times = np.frombuffer(raw, dtype=np.float64)
+        if 2 * index + 1 < len(times):
+            values = [times[2 * index], times[2 * index + 1]]
+            for name, value in zip(stripped, values if len(stripped) > 1 else values[:1]):
+                row[name] = None if np.isnan(value) else (
+                    int(value) if float(value).is_integer() else float(value))
+    return {"layer": layer_id, "name": layer.get("name"), "index": int(index),
+            "properties": row}

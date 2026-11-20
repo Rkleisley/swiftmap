@@ -95,6 +95,7 @@ export function expandPacked(layer, buffers) {
     const styles = Array.isArray(layer.feature_styles) ? layer.feature_styles : null;
     const overrides = layer.style_overrides || null;
 
+    const mask = featureMask(layer, n);
     const views = new Array(n);
     for (let i = 0; i < n; i++) {
         const view = { ...base };
@@ -129,25 +130,32 @@ export function expandPacked(layer, buffers) {
         // Which [start, end] pair answers "is this feature in the window": its own
         // when times are per feature; per-vertex tracks answer for the whole line.
         view.__timeIndex = perFeatureTimes ? i : undefined;
+        // Filtered out by a where= selection: never drawn, never labelled, never
+        // clickable -- the bucket simply leaves it out.
+        view.__hidden = Boolean(mask && !mask[i]);
         views[i] = view;
     }
     viewCache.set(layer, { serial, views });
     return views;
 }
 
-// What a bucket draws, in draw order: every feature of every layer, each with the
-// bucket SLOT of the layer it came from -- the GPU visibility and time attributes
-// are per slot, so a packed layer's features all answer to one.
+// What a bucket draws, in draw order: every feature of every layer that its
+// feature filter keeps, each with the bucket SLOT of the layer it came from -- the
+// GPU visibility and time attributes are per slot, so a packed layer's features
+// all answer to one.
 export function drawUnits(layersList, buffers) {
     const units = [];
     const slots = [];
     layersList.forEach((layer, slot) => {
         if (isPacked(layer)) {
             for (const view of expandPacked(layer, buffers)) {
+                if (view.__hidden) continue;
                 units.push(view);
                 slots.push(slot);
             }
         } else {
+            const mask = featureMask(layer, 1);
+            if (mask && !mask[0]) return;
             units.push(layer);
             slots.push(slot);
         }
@@ -160,4 +168,35 @@ export function clickTarget(unit) {
     return unit.__packed
         ? { layer: unit.__packed, index: unit.__index, timeIndex: unit.__timeIndex }
         : { layer: unit, index: 0, timeIndex: undefined };
+}
+
+// The features a layer's feature_filter draws: a Uint8Array of n (1 = drawn), or
+// null when the layer has no filter and draws everything. The filter is a
+// PREDICATE written by select / hide / show `where=` --
+//     { where: { column: [values] }, keep: true | false }
+// -- keep draws the features matching every column, !keep draws the rest. Being a
+// predicate, not a stored mask, it re-applies to whatever rows the layer holds
+// after a data update. A column the layer lacks matches nothing; Python's
+// feature_match applies the same rule, so what it zooms to is what is drawn.
+export function featureMask(layer, n) {
+    const filter = layer && layer.feature_filter;
+    if (!filter || !filter.where) return null;
+    const props = layer.properties || {};
+    const tests = Object.entries(filter.where).map(([column, values]) =>
+        [props[column], new Set(Array.isArray(values) ? values : [values]),
+         column in props]);
+    const keep = filter.keep !== false;
+    const mask = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+        let match = true;
+        for (const [data, wanted, present] of tests) {
+            const value = !present ? undefined : Array.isArray(data) ? data[i] : data;
+            if (!present || !wanted.has(value === undefined ? null : value)) {
+                match = false;
+                break;
+            }
+        }
+        mask[i] = match === keep ? 1 : 0;
+    }
+    return mask;
 }

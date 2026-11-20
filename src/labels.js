@@ -8,7 +8,7 @@
 import { isLayerEffectiveVisible } from "./patch.js";
 import { vectorCoords, lineParts } from "./layers.js";
 import { windowFor, featureInWindow, effectiveDuration, timesFor } from "./timecontrol.js";
-import { isPacked, expandPacked } from "./packed.js";
+import { isPacked, expandPacked, featureMask } from "./packed.js";
 
 // Whether a whole labelled feature is inside the current time window. NaN times
 // keep the label, matching the map: an unreadable time never hides data, so it
@@ -57,7 +57,8 @@ export function collectLabels(layers, buffers, groupConfigs, timeState = null) {
             // and no layer-wide bounds to pull every label to the middle. Checked
             // BEFORE `labels`, which on a point layer means one per coordinate.
             if (!Array.isArray(layer.labels)) continue;
-            const labelled = expandPacked(layer, buffers || {}).filter(v => v.label != null);
+            const labelled = expandPacked(layer, buffers || {})
+                .filter(v => v.label != null && !v.__hidden);
             out.push(...collectLabels(labelled, buffers, groupConfigs, timeState));
         } else if (Array.isArray(layer.labels)) {
             const raw = buffers && buffers[layer.id];
@@ -70,8 +71,10 @@ export function collectLabels(layers, buffers, groupConfigs, timeState = null) {
                 : null;
             const times = win ? timesFor(layer, buffers) : null;
             const count = Math.min(layer.labels.length, coords.length / 2);
+            const mask = featureMask(layer, coords.length / 2);
             for (let i = 0; i < count; i++) {
                 if (!layer.labels[i]) continue;
+                if (mask && !mask[i]) continue;
                 if (times && !Number.isNaN(times[i * 2])
                         && !featureInWindow(times[i * 2], times[i * 2 + 1], win)) {
                     continue;
@@ -81,6 +84,8 @@ export function collectLabels(layers, buffers, groupConfigs, timeState = null) {
             }
         } else if (layer.label) {
             if (!timeVisible(layer, buffers, timeState)) continue;
+            const only = featureMask(layer, 1);
+            if (only && !only[0]) continue;
             if (layer.type === "polyline") {
                 // Anchor ON a part -- the middle vertex of the longest part. The
                 // middle of a multi-part line's whole vertex run can sit in the gap

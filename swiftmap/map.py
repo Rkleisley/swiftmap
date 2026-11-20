@@ -38,7 +38,7 @@ from .mapops.bounds import (
     bounds_of, fit_bounds, _request_fit, _disarm_auto_fit, _auto_fit_extend)
 from .mapops.access import (
     get_layer, find_layers, add_layer, configure_group, remove_layers,
-    remove_layer, update_layer)
+    remove_layer, update_layer, clicked_feature)
 from .mapops.effects import (
     _set_layer_fields, select, highlight, set_feature_styles, hide, show,
     set_layers_visibility, set_layer_visibility)
@@ -177,6 +177,7 @@ class Map(anywidget.AnyWidget):
     remove_layers = remove_layers
     remove_layer = remove_layer
     update_layer = update_layer
+    clicked_feature = clicked_feature
 
     # Layer effects (mapops/effects.py)
     _set_layer_fields = _set_layer_fields

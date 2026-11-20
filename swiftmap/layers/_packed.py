@@ -254,3 +254,90 @@ def map_features(m: Any, target: Any = None, **criteria) -> List[Dict[str, Any]]
         if layer.get("type") in ("polygon", "polyline"):
             out.extend(features_of(layer, m.coordinate_buffers))
     return out
+
+
+# --- feature-level selection ------------------------------------------------------------
+# `where=` on select / hide / show writes a PREDICATE onto the layer, never a mask:
+#     feature_filter = {"where": {column: [values]}, "keep": True | False}
+# keep True draws the features matching every column (select, show); keep False
+# draws the rest (hide). Evaluated against the layer's own columns by the renderer
+# (src/packed.js featureMask) and here, so it survives update_layer(data=...) --
+# the filter re-applies to whatever rows the layer holds next.
+FEATURE_TYPES = ("circle_markers", "markers", "polygon", "polyline")
+
+
+def feature_count_of(layer: Any, coordinate_buffers: Dict[str, bytes]) -> int:
+    """How many features a point, polygon or line layer holds."""
+    if is_packed(layer):
+        return int(layer.get("feature_count"))
+    if layer.get("type") in ("circle_markers", "markers"):
+        raw = coordinate_buffers.get(layer.get("id"))
+        if raw:
+            return len(raw) // 16
+        return 1 if layer.get("location") is not None else 0
+    return 1
+
+
+def feature_match(layer: Any, wanted_by_column: Dict[str, set], count: int) -> np.ndarray:
+    """
+    The features matching every column, as a bool array of `count` -- `wanted_by_column`
+    is where_set(where). A column the layer does not carry matches nothing. The
+    renderer's featureMask applies the same rule, so what Python zooms to is what the
+    map draws.
+    """
+    props = layer.get("properties") or {}
+    match = np.ones(count, dtype=bool)
+    for column, wanted in wanted_by_column.items():
+        if column not in props:
+            return np.zeros(count, dtype=bool)
+        data = props[column]
+        if isinstance(data, list):
+            for i in range(count):
+                if match[i]:
+                    v = data[i] if i < len(data) else None
+                    match[i] = _hashable(v) in wanted
+        else:
+            if _hashable(data) not in wanted:
+                return np.zeros(count, dtype=bool)
+    return match
+
+
+def _hashable(value: Any) -> Any:
+    return tuple(value) if isinstance(value, list) else value
+
+
+def where_set(where: Dict[str, List[Any]]) -> Dict[str, set]:
+    """The where dict with each value list as a set, for feature_match."""
+    return {k: {_hashable(v) for v in values} for k, values in where.items()}
+
+
+def matching_bounds(layer: Any, coordinate_buffers: Dict[str, bytes],
+                    mask: np.ndarray) -> Optional[List[List[float]]]:
+    """The box around the features `mask` keeps, or None when it keeps none."""
+    if not mask.any():
+        return None
+    if layer.get("type") in ("circle_markers", "markers"):
+        raw = coordinate_buffers.get(layer.get("id"))
+        if not raw:
+            return layer.get("bounds") if mask[0] else None
+        coords = np.frombuffer(raw, dtype=np.float64).reshape(-1, 2)[: len(mask)][mask]
+    elif is_packed(layer):
+        raw = coordinate_buffers.get(layer.get("id")) or b""
+        coords_all = np.frombuffer(raw, dtype=np.float64).reshape(-1, 2)
+        counts = vertex_counts_of(coordinate_buffers, layer.get("id"), len(mask))
+        owner = np.repeat(np.arange(len(counts)), counts)
+        coords = coords_all[mask[owner]] if len(owner) == len(coords_all) else coords_all
+    else:
+        return layer.get("bounds")
+    if not len(coords):
+        return None
+    return [[float(coords[:, 0].min()), float(coords[:, 1].min())],
+            [float(coords[:, 0].max()), float(coords[:, 1].max())]]
+
+
+def row_of(layer: Any, index: int) -> Dict[str, Any]:
+    """One feature's properties from a layer whose properties are columns."""
+    props = layer.get("properties") or {}
+    return {k: (v[index] if isinstance(v, list) and index < len(v) else
+                (None if isinstance(v, list) else v))
+            for k, v in props.items()}

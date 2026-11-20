@@ -10,6 +10,9 @@ from .._warnings import warn
 from ..layers._style import (STYLE_KEYS, POINTS, LINES, AREAS, pop_style_options,
                              warn_on_undrawn_options, normalize as normalize_style)
 from ..layers._targeting import apply_to_layers
+from ..layers._add_child import _json_safe
+from ..layers._packed import (FEATURE_TYPES, feature_count_of, feature_match,
+                              matching_bounds, where_set)
 
 
 def _describe_target(target, criteria):
@@ -43,11 +46,47 @@ def _set_layer_fields(self, layers: List[Any], fields: Dict[str, Any]) -> "Map":
     return self
 
 
+def _normalize_where(where: Any, verb: str) -> Optional[Dict[str, List[Any]]]:
+    """
+    `where=` as {column: [JSON-safe values]} -- the same normalisation stored
+    properties get, so a numpy int in the data and a Python int in the call match.
+    None after a warning when it is not a non-empty dict.
+    """
+    if not isinstance(where, dict) or not where:
+        warn(f"{verb}: where= takes a dict of column -> value or values, like "
+             f"where={{'h3_cell': chosen}} -- got {where!r}. Ignored.")
+        return None
+    out: Dict[str, List[Any]] = {}
+    for column, values in where.items():
+        if isinstance(values, (str, bytes, dict)) or not hasattr(values, "__iter__"):
+            values = [values]
+        elif isinstance(values, (set, frozenset)):
+            values = sorted(values, key=repr)       # a stable order on the wire
+        out[str(column)] = [_json_safe(v) for v in values]
+    return out
+
+
+def _feature_filter(where: Dict[str, List[Any]], keep: bool) -> Dict[str, Any]:
+    return {"where": where, "keep": keep}
+
+
+def _warn_missing_columns(layers: List[Any], where: Dict[str, List[Any]], verb: str) -> None:
+    """A matched layer without a where column draws none of its features -- say so."""
+    for layer in layers:
+        missing = [c for c in where if c not in (layer.get("properties") or {})]
+        if missing:
+            have = ", ".join(sorted(map(str, layer.get("properties") or {}))) or "none"
+            warn(f"{verb}: layer {layer.get('name')!r} has no property "
+                 f"{missing[0]!r} (properties: {have}); none of its features match.")
+
+
 def select(self, target: Any = None, *, scope: Optional[str] = None, zoom: bool = False,
            zoom_offset: int = 0, max_zoom: Optional[int] = None,
-           padding: Optional[int] = None, **criteria) -> "Map":
+           padding: Optional[int] = None, where: Optional[Dict[str, Any]] = None,
+           **criteria) -> "Map":
     """
-    Shows only the matching layers, hiding the rest of their scope.
+    Shows only the matching layers -- or, with `where`, only the matching features
+    within them -- hiding the rest of their scope.
 
     Declarative and total: each call describes the complete selection, so switching
     selections needs no undoing of the last one and `select(None)` restores everything
@@ -73,6 +112,14 @@ def select(self, target: Any = None, *, scope: Optional[str] = None, zoom: bool 
     zoom_offset, max_zoom, padding
         Forwarded to `fit_bounds`. `zoom_offset=-1` pulls back a level so the
         selection is shown in context.
+    where : dict, optional
+        Selects FEATURES: `{column: value or values}`, every column matching. Each
+        matched point, line or polygon layer draws only its matching features; with
+        no target, the matched layers are those in scope carrying every column. A
+        dict whose value lists are all empty is the table saying "no rows" -- the
+        clean slate, as an empty target list is. `zoom=True` fits the matching
+        features. The filter is a predicate on the layer, so it keeps applying
+        after `update_layer(data=...)`.
     **criteria
         Further narrowing -- `types`, `exclude_types`, `group`; see `hide`.
 
@@ -94,14 +141,31 @@ def select(self, target: Any = None, *, scope: Optional[str] = None, zoom: bool 
     >>> m.select([dwell_ids[i] for i in rows], scope="Dwells",
     ...          zoom=True, zoom_offset=-1)
     >>> m.select(None, scope="Dwells")          # clean slate
+    >>> chosen = table.data_view(selected=True)["h3_cell"]
+    >>> m.select("Density", where={"h3_cell": chosen}, zoom=True)
     """
     # Clearing is target=None with no criteria. It used to be `if target`, which
     # sent a criteria-only call -- select(types="polyline") -- down the clear
     # branch and restored everything: the exact opposite of what was asked, and
     # the one place criteria-only worked differently from hide/show/make_time_layer.
-    clearing = target is None and not criteria
-    chosen = [] if clearing else self.find_layers(target, **criteria)
-    if not clearing and not chosen and not (
+    where_n = _normalize_where(where, "select") if where is not None else None
+    # Every value list empty: no rows selected, the clean slate.
+    no_rows = where_n is not None and all(len(v) == 0 for v in where_n.values())
+    if no_rows:
+        where_n = None
+    clearing = target is None and not criteria and where_n is None
+    if where_n is not None and target is None and not criteria:
+        # where alone: the layers in scope that carry every column it names.
+        candidates = (self.find_layers(group=scope) if scope is not None
+                      else self.find_layers())
+        chosen = [l for l in candidates if l.get("type") in FEATURE_TYPES
+                  and all(c in (l.get("properties") or {}) for c in where_n)]
+    else:
+        chosen = [] if clearing else self.find_layers(target, **criteria)
+    if where_n is not None:
+        _warn_missing_columns([l for l in chosen if l.get("type") in FEATURE_TYPES],
+                              where_n, "select")
+    if not clearing and not chosen and not no_rows and not (
             isinstance(target, (list, tuple, set)) and len(target) == 0):
         # An empty list is the table saying "no rows selected" -- a deliberate
         # clean slate. Anything else matching nothing is a miss worth naming,
@@ -120,7 +184,7 @@ def select(self, target: Any = None, *, scope: Optional[str] = None, zoom: bool 
         pool = [l for l in self.find_layers() if l.get("type") != "basemap"]
 
     with self.batch():
-        if chosen_ids:
+        if chosen_ids and not no_rows:
             self._set_layer_fields([l for l in pool if l.get("id") in chosen_ids],
                                    {"visible": True})
             self._set_layer_fields([l for l in pool if l.get("id") not in chosen_ids],
@@ -128,9 +192,42 @@ def select(self, target: Any = None, *, scope: Optional[str] = None, zoom: bool 
         else:
             self._set_layer_fields(pool, {"visible": True})
 
-        if zoom and chosen:
-            self.fit_bounds(self.bounds_of(chosen), zoom_offset=zoom_offset,
-                            max_zoom=max_zoom, padding=padding)
+        # Feature filters, written apart from visibility so a call with no filter
+        # anywhere sends exactly what it always did. Declarative and total: only
+        # the chosen feature layers of a where= call keep one.
+        filtered = ([l for l in pool if l.get("id") in chosen_ids
+                     and l.get("type") in FEATURE_TYPES]
+                    if where_n is not None else [])
+        if filtered:
+            self._set_layer_fields(filtered, {"feature_filter": _feature_filter(where_n, True)})
+        filtered_ids = {l.get("id") for l in filtered}
+        self._set_layer_fields([l for l in pool if l.get("id") not in filtered_ids],
+                               {"feature_filter": None})
+
+        if zoom and chosen and not no_rows:
+            if where_n is not None:
+                wanted = where_set(where_n)
+                boxes = []
+                for l in chosen:
+                    if l.get("type") in FEATURE_TYPES:
+                        n = feature_count_of(l, self.coordinate_buffers)
+                        box = matching_bounds(l, self.coordinate_buffers,
+                                              feature_match(l, wanted, n))
+                    else:
+                        box = l.get("bounds")
+                    if box:
+                        boxes.append(box)
+                bounds = ([[min(b[0][0] for b in boxes), min(b[0][1] for b in boxes)],
+                           [max(b[1][0] for b in boxes), max(b[1][1] for b in boxes)]]
+                          if boxes else None)
+                if bounds is None:
+                    warn(f"select: where={where!r} matched no features; the view "
+                         f"stays where it is.")
+            else:
+                bounds = self.bounds_of(chosen)
+            if bounds is not None:
+                self.fit_bounds(bounds, zoom_offset=zoom_offset,
+                                max_zoom=max_zoom, padding=padding)
     return self
 
 
@@ -281,9 +378,11 @@ def set_feature_styles(self, target: Any = None, overrides: Optional[Dict[int, A
     return self
 
 
-def hide(self, target: Any = None, **criteria) -> "Map":
+def hide(self, target: Any = None, where: Optional[Dict[str, Any]] = None,
+         **criteria) -> "Map":
     """
-    Hides every layer matching the criteria, including layers inside a collection.
+    Hides every layer matching the criteria, including layers inside a collection --
+    or, with `where`, only the matching features within them.
 
     Parameters
     ----------
@@ -302,6 +401,11 @@ def hide(self, target: Any = None, **criteria) -> "Map":
     group : str, optional
         Match by folder path. Matches nested folders too, so "Feeds" includes
         "Feeds/Active".
+    where : dict, optional
+        Hides FEATURES: `{column: value or values}`, every column matching, in each
+        matched point, line or polygon layer; the rest of its features draw. Like
+        `set_feature_styles`, each call states the layer's whole feature filter --
+        it replaces the previous one -- and `show(target)` clears it.
 
     Returns
     -------
@@ -319,18 +423,34 @@ def hide(self, target: Any = None, **criteria) -> "Map":
     >>> m.hide("Survey", types="polyline")    # drop the line from a collection
     >>> m.hide(group="Feeds/Inactive")
     >>> m.hide(ids=[l.id for l in stale])
+    >>> m.hide("Sites", where={"status": ["closed", "retired"]})
     """
     matched = self.find_layers(target, **criteria)
     if not matched:
         warn(f"hide matched no layers ({_describe_target(target, criteria)}). "
              f"Nothing was hidden.")
         return self
-    return self._set_layer_fields(matched, {"visible": False})
+    if where is None:
+        return self._set_layer_fields(matched, {"visible": False})
+    where_n = _normalize_where(where, "hide")
+    if where_n is None:
+        return self
+    features = [l for l in matched if l.get("type") in FEATURE_TYPES]
+    if all(len(v) == 0 for v in where_n.values()):
+        return self._set_layer_fields(features, {"feature_filter": None})
+    _warn_missing_columns(features, where_n, "hide")
+    return self._set_layer_fields(features, {"feature_filter": _feature_filter(where_n, False)})
 
 
-def show(self, target: Any = None, **criteria) -> "Map":
+def show(self, target: Any = None, where: Optional[Dict[str, Any]] = None,
+         **criteria) -> "Map":
     """
-    Shows every layer matching the criteria. The inverse of `hide`; same arguments.
+    Shows every layer matching the criteria, every feature of it. The inverse of
+    `hide`; same arguments.
+
+    With `where`, each matched point, line or polygon layer shows only its matching
+    features -- the call states the layer's whole feature filter, as `hide`'s does.
+    Without it, any feature filter on the matched layers is cleared.
 
     Returns
     -------
@@ -346,13 +466,24 @@ def show(self, target: Any = None, **criteria) -> "Map":
     --------
     >>> m.show("Survey")            # every part of a collection, line included
     >>> m.show(group="Feeds")
+    >>> m.show("Sites", where={"status": "open"})
     """
     matched = self.find_layers(target, **criteria)
     if not matched:
         warn(f"show matched no layers ({_describe_target(target, criteria)}). "
              f"Nothing was shown.")
         return self
-    return self._set_layer_fields(matched, {"visible": True})
+    with self.batch():
+        self._set_layer_fields(matched, {"visible": True})
+        features = [l for l in matched if l.get("type") in FEATURE_TYPES]
+        where_n = _normalize_where(where, "show") if where is not None else None
+        if where_n is None or all(len(v) == 0 for v in where_n.values()):
+            self._set_layer_fields(features, {"feature_filter": None})
+        else:
+            _warn_missing_columns(features, where_n, "show")
+            self._set_layer_fields(features,
+                                   {"feature_filter": _feature_filter(where_n, True)})
+    return self
 
 
 def set_layers_visibility(self, visibility_map: Dict[Any, bool]) -> "Map":

@@ -14,10 +14,13 @@ import { mercatorX, mercatorY } from "./heat.js";
 import { getIndexedProperties, pointStyler, setupGlifyProjection } from "./layers.js";
 import { pinShader } from "./shaders.js";
 import { bindPopup } from "./utils.js";
+import { featureMask } from "./packed.js";
 
 // Points as mercator zoom-0 coordinates, built once per layer from the same
 // float64 buffer everything else reads.
-export function projectClusterPoints(latlonView) {
+// `keep` is the layer's where= filter (featureMask): the points it drops neither
+// cluster nor stand alone.
+export function projectClusterPoints(latlonView, keep = null) {
     const f64 = new Float64Array(
         latlonView.buffer, latlonView.byteOffset, latlonView.byteLength / 8);
     const n = f64.length / 2;
@@ -27,7 +30,7 @@ export function projectClusterPoints(latlonView) {
         xs[i] = mercatorX(f64[i * 2 + 1]);
         ys[i] = mercatorY(f64[i * 2]);
     }
-    return { xs, ys, count: n };
+    return { xs, ys, count: n, keep };
 }
 
 // One clustering pass: the in-view points binned on a grid whose cell is the
@@ -42,8 +45,9 @@ export function clusterPass(points, zoom, radiusPx, view) {
     const cell = radiusPx / Math.pow(2, zoom);
     const cells = new Map();
     const singles = [];
-    const { xs, ys, count } = points;
+    const { xs, ys, count, keep } = points;
     for (let i = 0; i < count; i++) {
+        if (keep && !keep[i]) continue;
         const x = xs[i], y = ys[i];
         if (view && (x < view.minX || x > view.maxX
                 || y < view.minY || y > view.maxY)) continue;
@@ -80,9 +84,10 @@ export function clusterPass(points, zoom, radiusPx, view) {
 // The in-view points' indices with no clustering at all -- the dissolved
 // state, past cluster_max_zoom or at the map's own max zoom.
 export function pointsInView(points, view) {
-    const { xs, ys, count } = points;
+    const { xs, ys, count, keep } = points;
     const out = [];
     for (let i = 0; i < count; i++) {
+        if (keep && !keep[i]) continue;
         const x = xs[i], y = ys[i];
         if (view && (x < view.minX || x > view.maxX
                 || y < view.minY || y > view.maxY)) continue;
@@ -134,7 +139,8 @@ function formatCount(count) {
 export function createClusterLayer(layer, latlonView, coordinateBuffers, onFeatureClick) {
     const radiusPx = layer.cluster_radius || 60;
     const maxZoom = layer.cluster_max_zoom ?? null;
-    const points = projectClusterPoints(latlonView);
+    const points = projectClusterPoints(latlonView,
+        featureMask(layer, latlonView.byteLength / 16));
     const f64 = new Float64Array(
         latlonView.buffer, latlonView.byteOffset, latlonView.byteLength / 8);
     // The SAME per-point styling the unclustered renderer uses -- colour,
@@ -257,5 +263,5 @@ export function clusterMetaKey(layer) {
     return JSON.stringify([layer.cluster_radius || 60, layer.cluster_max_zoom ?? null,
         layer.radius ?? null, layer.color || null,
         layer.highlight_style ?? null, layer.style_overrides ?? null,
-        layer.feature_styles ?? null]);
+        layer.feature_styles ?? null, layer.feature_filter ?? null]);
 }

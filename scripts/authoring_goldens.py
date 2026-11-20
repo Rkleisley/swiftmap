@@ -633,6 +633,26 @@ def scenario_select_zoom():
     return m
 
 
+def scenario_select_where():
+    """where= selects FEATURES: select draws only the matching features of the
+    layers in scope carrying the column and fits them; hide(where) drops the
+    matching features of one layer; show(target) clears a layer's filter."""
+    m = Map(show_logo=False)
+    m.add_polygon(
+        {"geometry": ["POLYGON ((-5.31 36.00, -5.30 36.00, -5.30 36.01, -5.31 36.00))",
+                      "POLYGON ((-5.29 36.00, -5.28 36.00, -5.28 36.01, -5.29 36.00))",
+                      "POLYGON ((-5.27 36.00, -5.26 36.00, -5.26 36.01, -5.27 36.00))"],
+         "zone": ["a", "b", "a"]},
+        name="Zones", layer_group="Field")
+    m.add_circle_markers({"lat": [36.0, 36.1, 36.2], "lon": [-5.3, -5.2, -5.1],
+                          "zone": ["a", "b", "b"]}, name="Sites", layer_group="Field")
+    m.select(where={"zone": ["a"]}, scope="Field", zoom=True)
+    m.hide("Sites", where={"zone": "b"})
+    m.show("Zones")
+    m.select(None, scope="Field")
+    return m
+
+
 def scenario_radio_merge():
     """A merged entry is one radio unit: a joining child inherits the entry's
     visibility, and a later entry radio-hides whole (round-2 gap G)."""
@@ -819,6 +839,7 @@ SCENARIOS = [
     scenario_bare_wkt,
     scenario_mut_merged_visibility,
     scenario_select_zoom,
+    scenario_select_where,
     scenario_radio_merge,
     scenario_heatmap_basic,
     scenario_heatmap_weighted_from_layer,

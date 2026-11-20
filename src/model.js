@@ -33,6 +33,7 @@
 // labels/feature styles/highlight, time layers, the basemap catalogue.
 
 import { layersBoundsUnion } from "./utils.js";
+import { featureMask } from "./packed.js";
 import { resolveColormap, dataDrivenColors, dataDrivenRadii,
          dataDrivenLegend, dataDrivenSizeLegend, rgbHex,
          COLORMAPS, DEFAULT_COLORMAP } from "./colormaps.js";
@@ -1712,8 +1713,10 @@ export function createMapModel(options = {}) {
     }
 
     // Python's `!=` compares dicts by value; a repeated set of the same time
-    // meta (or any object field) must stay a no-op here too.
-    const sameValue = (a, b) => a === b
+    // meta (or any object field) must stay a no-op here too. And a missing key
+    // reads as None there, so absent and null are the same value: clearing a
+    // feature_filter a layer never had must emit nothing.
+    const sameValue = (a, b) => a === b || (a == null && b == null)
         || (a != null && b != null && typeof a === "object" && typeof b === "object"
             && JSON.stringify(a) === JSON.stringify(b));
 
@@ -1727,22 +1730,142 @@ export function createMapModel(options = {}) {
         return model;
     }
 
+    // Python's FEATURE_TYPES: the layers `where=` selects features within.
+    const FEATURE_TYPES = new Set(["circle_markers", "markers", "polygon", "polyline"]);
+
+    // `where` as {column: [values]} -- Python's _normalize_where -- or null after a
+    // warning when it is not a non-empty object.
+    function normalizeWhere(where, verb) {
+        if (!where || typeof where !== "object" || Array.isArray(where)
+                || !Object.keys(where).length) {
+            console.warn(`swiftmap: ${verb}: where takes an object of column -> value or `
+                + `values, like { h3_cell: chosen } -- got ${JSON.stringify(where)}. Ignored.`);
+            return null;
+        }
+        const out = {};
+        for (const [column, values] of Object.entries(where)) {
+            if (values instanceof Set) {
+                out[column] = [...values].sort((a, b) =>
+                    JSON.stringify(a) < JSON.stringify(b) ? -1 : 1);
+            } else {
+                out[column] = Array.isArray(values) ? [...values] : [values];
+            }
+        }
+        return out;
+    }
+
+    const emptyWhere = (where) => Object.values(where).every(v => v.length === 0);
+
+    function warnMissingColumns(layers, where, verb) {
+        for (const layer of layers) {
+            const props = layer.properties || {};
+            const missing = Object.keys(where).filter(c => !(c in props));
+            if (missing.length) {
+                console.warn(`swiftmap: ${verb}: layer '${layer.name}' has no property `
+                    + `'${missing[0]}'; none of its features match.`);
+            }
+        }
+    }
+
+    function featureCountOf(layer) {
+        if (isPackedLayer(layer)) return layer.feature_count;
+        if (layer.type === "circle_markers" || layer.type === "markers") {
+            const raw = buffers[layer.id];
+            if (raw) return raw.byteLength / 16;
+            return layer.location != null ? 1 : 0;
+        }
+        return 1;
+    }
+
+    // The box around the features `mask` keeps, or null -- Python's matching_bounds.
+    function matchingBounds(layer, mask) {
+        if (!mask.some(v => v)) return null;
+        const raw = buffers[layer.id];
+        let ranges;
+        if (layer.type === "circle_markers" || layer.type === "markers") {
+            if (!raw) return mask[0] ? (layer.bounds || null) : null;
+            ranges = [];
+            mask.forEach((v, i) => { if (v) ranges.push([i, i + 1]); });
+        } else if (isPackedLayer(layer)) {
+            const counts = vertexCountsOf(layer);
+            ranges = [];
+            let at = 0;
+            counts.forEach((c, i) => {
+                if (mask[i]) ranges.push([at, at + c]);
+                at += c;
+            });
+        } else {
+            return layer.bounds || null;
+        }
+        let minLat = Infinity, minLon = Infinity, maxLat = -Infinity, maxLon = -Infinity;
+        for (const [a, b] of ranges) {
+            for (let v = a; v < b; v++) {
+                const lat = raw.getFloat64(v * 16, true);
+                const lon = raw.getFloat64(v * 16 + 8, true);
+                if (lat < minLat) minLat = lat;
+                if (lat > maxLat) maxLat = lat;
+                if (lon < minLon) minLon = lon;
+                if (lon > maxLon) maxLon = lon;
+            }
+        }
+        return minLat === Infinity ? null : [[minLat, minLon], [maxLat, maxLon]];
+    }
+
     function hide(target = null, criteria = {}) {
-        const matched = findLayers(target, criteria);
+        const { where = undefined, ...rest } = criteria;
+        const matched = findLayers(target, rest);
         if (!matched.length) {
             console.warn("swiftmap: hide matched no layers. Nothing was hidden.");
             return model;
         }
-        return setLayerFields(matched, { visible: false });
+        if (where === undefined || where === null) return setLayerFields(matched, { visible: false });
+        const w = normalizeWhere(where, "hide");
+        if (!w) return model;
+        const features = matched.filter(l => FEATURE_TYPES.has(l.type));
+        if (emptyWhere(w)) return setLayerFields(features, { feature_filter: null });
+        warnMissingColumns(features, w, "hide");
+        return setLayerFields(features, { feature_filter: { where: w, keep: false } });
     }
 
     function show(target = null, criteria = {}) {
-        const matched = findLayers(target, criteria);
+        const { where = undefined, ...rest } = criteria;
+        const matched = findLayers(target, rest);
         if (!matched.length) {
             console.warn("swiftmap: show matched no layers. Nothing was shown.");
             return model;
         }
-        return setLayerFields(matched, { visible: true });
+        setLayerFields(matched, { visible: true });
+        const features = matched.filter(l => FEATURE_TYPES.has(l.type));
+        const w = where === undefined || where === null ? null : normalizeWhere(where, "show");
+        if (!w || emptyWhere(w)) {
+            setLayerFields(features, { feature_filter: null });
+        } else {
+            warnMissingColumns(features, w, "show");
+            setLayerFields(features, { feature_filter: { where: w, keep: true } });
+        }
+        return model;
+    }
+
+    // The clicked feature's own row -- what a host's onFeatureClick({ layerId,
+    // index }) reports, read out of the layer's columns (Python's clicked_feature).
+    // A time column the layer moved into ::times comes back as epoch ms.
+    function featureAt(layerId, index) {
+        if (!layerId || index == null || index < 0) return null;
+        const layer = findLayers(null, { ids: layerId })[0];
+        if (!layer) return null;
+        const properties = {};
+        for (const [k, v] of Object.entries(layer.properties || {})) {
+            properties[k] = Array.isArray(v) ? (index < v.length ? v[index] : null) : v;
+        }
+        const stripped = (layer.time && layer.time.stripped) || [];
+        const times = buffers[`${layerId}::times`];
+        if (stripped.length && times && (2 * index + 1) * 8 < times.byteLength) {
+            const pair = [times.getFloat64(index * 16, true), times.getFloat64(index * 16 + 8, true)];
+            stripped.forEach((name, k) => {
+                if (k < 2) properties[name] = Number.isNaN(pair[k]) ? null : pair[k];
+            });
+        }
+        return { layer: layerId, name: layer.name, index, properties };
     }
 
     function setLayersVisibility(visibilityMap) {
@@ -1755,7 +1878,7 @@ export function createMapModel(options = {}) {
     // Declarative and total within its scope: each call states the complete
     // selection, select(null, {scope}) restores the scope whole (Python's select).
     function select(target = null, options = {}) {
-        const { scope = null, zoom = false, ...rest } = options;
+        const { scope = null, zoom = false, where = undefined, ...rest } = options;
         const zoomOffset = opt(rest, "zoomOffset", "zoom_offset", 0);
         const maxZoom = opt(rest, "maxZoom", "max_zoom") ?? null;
         const padding = rest.padding !== undefined ? rest.padding : null;
@@ -1763,13 +1886,26 @@ export function createMapModel(options = {}) {
             delete rest[key];
         }
         const criteria = rest;
-        const clearing = target == null && !Object.keys(criteria).length;
-        const chosenLeaves = clearing ? [] : findLayers(target, criteria);
-        if (!clearing && !chosenLeaves.length
+        let w = where === undefined || where === null ? null : normalizeWhere(where, "select");
+        // Every value list empty: no rows selected, the clean slate.
+        const noRows = w != null && emptyWhere(w);
+        if (noRows) w = null;
+        const noCriteria = !Object.keys(criteria).length;
+        const clearing = target == null && noCriteria && w == null;
+        let chosen;
+        if (w != null && target == null && noCriteria) {
+            // where alone: the feature layers in scope carrying every column.
+            const candidates = scope != null ? findLayers(null, { group: scope }) : findLayers();
+            chosen = candidates.filter(l => FEATURE_TYPES.has(l.type)
+                && Object.keys(w).every(c => c in (l.properties || {})));
+        } else {
+            chosen = clearing ? [] : findLayers(target, criteria);
+        }
+        if (w != null) warnMissingColumns(chosen.filter(l => FEATURE_TYPES.has(l.type)), w, "select");
+        if (!clearing && !chosen.length && !noRows
                 && !(Array.isArray(target) && target.length === 0)) {
             console.warn("swiftmap: select matched nothing; restoring the scope to visible.");
         }
-        const chosen = chosenLeaves;
         const chosenIds = new Set(chosen.map(l => l.id));
         let pool;
         if (scope != null) {
@@ -1780,16 +1916,38 @@ export function createMapModel(options = {}) {
         } else {
             pool = findLayers().filter(l => l.type !== "basemap");
         }
-        if (chosenIds.size) {
+        if (chosenIds.size && !noRows) {
             setLayerFields(pool.filter(l => chosenIds.has(l.id)), { visible: true });
             setLayerFields(pool.filter(l => !chosenIds.has(l.id)), { visible: false });
         } else {
             setLayerFields(pool, { visible: true });
         }
-        // The bounds come from the matched LEAVES: groups carry no bounds of
-        // their own, and the fit rides the same options fitBounds takes.
-        if (zoom && chosenLeaves.length) {
-            const union = layersBoundsUnion(chosenLeaves);
+        // Feature filters, apart from visibility so a call with no filter anywhere
+        // emits exactly what it always did (Python's order, op for op).
+        const filtered = w != null
+            ? pool.filter(l => chosenIds.has(l.id) && FEATURE_TYPES.has(l.type)) : [];
+        if (filtered.length) setLayerFields(filtered, { feature_filter: { where: w, keep: true } });
+        const filteredIds = new Set(filtered.map(l => l.id));
+        setLayerFields(pool.filter(l => !filteredIds.has(l.id)), { feature_filter: null });
+        // The bounds come from the matched LEAVES -- or, with where, from their
+        // matching features: groups carry no bounds of their own.
+        if (zoom && chosen.length && !noRows) {
+            let union;
+            if (w != null) {
+                const boxes = [];
+                for (const l of chosen) {
+                    const current = findLayers(null, { ids: l.id })[0] || l;
+                    const box = FEATURE_TYPES.has(l.type)
+                        ? matchingBounds(current, featureMask(current, featureCountOf(current)))
+                        : l.bounds;
+                    if (box) boxes.push(box);
+                }
+                union = boxes.length ? layersBoundsUnion(boxes.map(bounds => ({ bounds }))) : null;
+                if (!union) console.warn("swiftmap: select: where matched no features; "
+                    + "the view stays where it is.");
+            } else {
+                union = layersBoundsUnion(chosen);
+            }
             if (union) fitBounds(union, { zoomOffset, maxZoom, padding });
         }
         return model;
@@ -2219,7 +2377,7 @@ export function createMapModel(options = {}) {
         configureGroup, clearDrawings, fitBounds,
         makeTimeLayer, clearTimeLayer, configureTime,
         findLayers, getLayer,
-        hide, show, select, setLayersVisibility, setLayerFields,
+        hide, show, select, setLayersVisibility, setLayerFields, featureAt,
         setFeatureStyles, highlight,
         removeLayer, removeLayers, updateLayer,
         wireState, props, clearOpLog,

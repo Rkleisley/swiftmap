@@ -797,6 +797,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 highlight: l.highlight_style,
                 overrides: l.style_overrides,
                 featureStyles: l.feature_styles,
+                featureFilter: l.feature_filter,
                 time: l.time,
                 gpu: gpuPoints,
                 tick: l.time && timeState && !gpuPoints ? timeState.tick : 0,

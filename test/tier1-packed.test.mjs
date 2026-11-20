@@ -247,3 +247,79 @@ test("validation passes a well-formed packed layer and names each mismatch", () 
     assert.match(collectLayerProblems(shortProps, buffers).join("\n"),
         /property "zone" has 2 rows for 3 features/);
 });
+
+// --- feature selection: a where= filter on the layer -------------------------------
+import { featureMask } from "../src/index.js";
+import { buildTimeAttributes } from "../src/gputime.js";
+import { projectClusterPoints, clusterPass, pointsInView } from "../src/cluster.js";
+import { createMapModel } from "../src/model.js";
+
+test("featureMask keeps the matching features, or drops them with keep:false", () => {
+    const { layer } = packedPolygons();
+    assert.equal(featureMask(layer, 3), null, "no filter, every feature drawn");
+    const only = { ...layer, feature_filter: { where: { zone: ["a", "c"] }, keep: true } };
+    assert.deepEqual([...featureMask(only, 3)], [1, 0, 1]);
+    const drop = { ...layer, feature_filter: { where: { zone: ["a"] }, keep: false } };
+    assert.deepEqual([...featureMask(drop, 3)], [0, 1, 1]);
+    const both = { ...layer, feature_filter: { where: { zone: ["a", "b"], score: [2] }, keep: true } };
+    assert.deepEqual([...featureMask(both, 3)], [0, 1, 0], "every column must match");
+    const missing = { ...layer, feature_filter: { where: { nope: ["a"] }, keep: true } };
+    assert.deepEqual([...featureMask(missing, 3)], [0, 0, 0], "a missing column matches nothing");
+    const scalar = { id: "s", type: "polygon", properties: { zone: "a" },
+                     feature_filter: { where: { zone: ["a"] }, keep: true } };
+    assert.deepEqual([...featureMask(scalar, 1)], [1], "today's one-feature layers too");
+});
+
+test("filtered-out features are left out of the draw units and the labels", () => {
+    const { layer, buffers } = packedPolygons({
+        feature_filter: { where: { zone: ["b"] }, keep: false } });
+    const { units, slots } = drawUnits([layer], buffers);
+    assert.deepEqual(units.map(u => u.__index), [0, 2]);
+    assert.deepEqual(slots, [0, 0]);
+    assert.deepEqual(collectLabels([layer], buffers, {}).map(l => l.text), ["A", "C"]);
+    const one = { id: "x", type: "polygon", visible: true, properties: { zone: "q" },
+                  feature_filter: { where: { zone: ["z"] }, keep: true } };
+    assert.equal(drawUnits([one], buffers).units.length, 0);
+});
+
+test("vector time records skip the same filtered features the renderer skips", () => {
+    const { layer, buffers } = packedPolygons({ time: { duration: "PT1H" },
+        feature_filter: { where: { zone: ["a", "c"] }, keep: true } });
+    buffers["P::times"] = f64([1000, 2000, 3000, 4000, 5000, 6000]);
+    const meta = buildVectorTimeMeta([layer], buffers, null);
+    assert.equal(meta.perFeature.length, 2, "features 0 and 2 only");
+    assert.deepEqual(meta.perFeature.map(f => f.start), [0, 4]);
+});
+
+test("point time attributes skip filtered points, keeping alignment", () => {
+    const pts = { id: "pts", type: "circle_markers", visible: true, time: { duration: "PT1H" },
+                  properties: { kind: ["x", "y", "x", "y"] },
+                  feature_filter: { where: { kind: ["y"] }, keep: true } };
+    const buffers = { pts: f64([0, 0, 1, 1, 2, 2, 3, 3]),
+                      "pts::times": f64([10, 10, 20, 20, 30, 30, 40, 40]) };
+    const attrs = buildTimeAttributes([pts], buffers, null);
+    assert.equal(attrs.count, 2, "two of four points drawn");
+    assert.deepEqual([...attrs.spans].map(v => Math.round(v * 1000)), [10, 10, 30, 30],
+        "the drawn points' own times (rebased to the layer's earliest, as the ticks are)");
+});
+
+test("clustering counts only the points the filter keeps", () => {
+    const view = new DataView(new Float64Array([36, -5, 36, -5, 36, -5]).buffer);
+    const all = clusterPass(projectClusterPoints(view), 5, 60, null);
+    assert.equal(all.clusters[0].count, 3);
+    const kept = clusterPass(projectClusterPoints(view, Uint8Array.from([1, 0, 1])), 5, 60, null);
+    assert.equal(kept.clusters[0].count, 2);
+    assert.deepEqual(pointsInView(projectClusterPoints(view, Uint8Array.from([0, 1, 0])), null),
+                     [1]);
+});
+
+test("the model's featureAt reads a clicked feature's row", () => {
+    const m = createMapModel();
+    m.addPolygon({ geometry: ["POLYGON ((0 0, 1 0, 1 1, 0 0))", "POLYGON ((5 5, 6 5, 6 6, 5 5))"],
+                   zone: ["a", "b"] }, { name: "Z" });
+    const id = m.props().layers.find(l => l.name === "Z").id;
+    assert.deepEqual(m.featureAt(id, 1),
+        { layer: id, name: "Z", index: 1, properties: { zone: "b" } });
+    assert.equal(m.featureAt("", 0), null);
+    assert.equal(m.featureAt(id, -1), null);
+});

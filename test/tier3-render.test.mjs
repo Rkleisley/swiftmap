@@ -2525,3 +2525,83 @@ suite("a packed layer's features keep their own times on the GPU path", async ()
         assert.deepEqual(errors, []);
     }, "widget-packed.html?time", ".leaflet-polygons-pane canvas");
 });
+
+suite("a where= filter draws only the kept features, with their own indices", async () => {
+    await withPage(async (page, errors) => {
+        const { clickAt } = packedHelpers(page);
+        const setFilter = (id, filter) => page.evaluate(([i, f]) => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === i ? { ...l, feature_filter: f } : l));
+        }, [id, filter]).then(() => page.waitForTimeout(1200));
+        const shapeFeatures = () => page.evaluate(() => {
+            const si = window.L.glify.shapesInstances;
+            return si[si.length - 1].settings.data.features.length;
+        });
+        assert.equal(await shapeFeatures(), 3);
+        await setFilter("pz", { where: { zone: ["c"] }, keep: true });
+        assert.equal(await shapeFeatures(), 1, "only feature 2 is in the bucket");
+        assert.equal((await clickAt(36.09, -5.32)).id, "",
+            "a filtered-out feature is not there to click");
+        assert.deepEqual(await clickAt(35.975, -5.19), { id: "pz", index: 2 },
+            "the kept feature still reports its own index in the layer");
+        await setFilter("pz", { where: { zone: ["c"] }, keep: false });
+        assert.equal(await shapeFeatures(), 2, "keep:false draws the rest");
+        await setFilter("pz", null);
+        assert.equal(await shapeFeatures(), 3, "clearing the filter draws everything");
+        assert.deepEqual(errors, []);
+    }, "widget-packed.html", ".leaflet-polygons-pane canvas");
+});
+
+suite("a where= filter on a timed packed layer keeps the GPU path aligned", async () => {
+    await withPage(async (page, errors) => {
+        const gpuMessages = [];
+        page.on("console", (m) => { if (/GPU time/.test(m.text())) gpuMessages.push(m.text()); });
+        const { shotAt } = packedHelpers(page);
+        const seek = (v) => page.evaluate((val) => {
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = String(val); s.dispatchEvent(new Event("input"));
+        }, v).then(() => page.waitForTimeout(1200));
+        // Drop the day-one feature: the bucket rebuilds with feature 1 alone, and
+        // its time attributes must line up with it, not with the dropped one.
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l => l.id === "pt"
+                ? { ...l, feature_filter: { where: { t: ["d1"] }, keep: false } } : l));
+        });
+        await page.waitForTimeout(1200);
+        const max = await page.evaluate(() =>
+            parseInt(document.querySelector(".swiftmap-time-slider").max, 10));
+        await seek(max);
+        const d3Second = await shotAt(35.975, -5.19, 12);
+        await seek(0);
+        const d1Second = await shotAt(35.975, -5.19, 12);
+        const d1First = await shotAt(35.975, -5.37, 12);
+        await seek(max);
+        const d3First = await shotAt(35.975, -5.37, 12);
+        assert.notEqual(Buffer.compare(d3Second, d1Second), 0,
+            "the kept feature still appears on day three only");
+        assert.equal(Buffer.compare(d1First, d3First), 0,
+            "the dropped feature never draws, day one or three");
+        assert.deepEqual(gpuMessages, [], "no 'GPU time ... disabled': attributes aligned");
+        assert.deepEqual(errors, []);
+    }, "widget-packed.html?time", ".leaflet-polygons-pane canvas");
+});
+
+suite("a where= filter on a point layer draws only the kept points", async () => {
+    await withPage(async (page, errors) => {
+        const pointCount = () => page.evaluate(() => {
+            const pi = window.L.glify.pointsInstances;
+            return pi[pi.length - 1].settings.data.length;
+        });
+        assert.equal(await pointCount(), 4);
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l => l.id === "pts"
+                ? { ...l, feature_filter: { where: { site: ["Bravo"] }, keep: true } } : l));
+        });
+        await page.waitForTimeout(1200);
+        assert.equal(await pointCount(), 3, "Alpha is gone; Bravo and both bubbles stay");
+        assert.deepEqual(errors, []);
+    });
+});

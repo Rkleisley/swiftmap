@@ -447,6 +447,23 @@ const SCENARIOS = {
         return m;
     },
 
+    select_where: () => {
+        const m = createMapModel();
+        m.addPolygon(
+            { geometry: ["POLYGON ((-5.31 36.00, -5.30 36.00, -5.30 36.01, -5.31 36.00))",
+                         "POLYGON ((-5.29 36.00, -5.28 36.00, -5.28 36.01, -5.29 36.00))",
+                         "POLYGON ((-5.27 36.00, -5.26 36.00, -5.26 36.01, -5.27 36.00))"],
+              zone: ["a", "b", "a"] },
+            { name: "Zones", layerGroup: "Field" });
+        m.addCircleMarkers({ lat: [36.0, 36.1, 36.2], lon: [-5.3, -5.2, -5.1],
+                             zone: ["a", "b", "b"] }, { name: "Sites", layerGroup: "Field" });
+        m.select(null, { where: { zone: ["a"] }, scope: "Field", zoom: true });
+        m.hide("Sites", { where: { zone: "b" } });
+        m.show("Zones");
+        m.select(null, { scope: "Field" });
+        return m;
+    },
+
     radio_merge: () => {
         const m = createMapModel();
         m.addPolygon([[36.0, -5.3], [36.0, -5.2], [36.1, -5.2]],

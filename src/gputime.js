@@ -13,7 +13,7 @@
 // only the matrix uniform -- so extra attributes bound after setup persist, and uniform
 // updates take effect on the next redraw.
 import { parsePeriod, periodToMs, timesFor } from "./timecontrol.js";
-import { drawUnits } from "./packed.js";
+import { drawUnits, featureMask } from "./packed.js";
 
 // Times travel as float32 on the GPU, whose integers are exact only to 2^24. Epoch ms is
 // hopeless at that precision, so times are rebased to the bucket's earliest start and
@@ -107,8 +107,11 @@ export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
         const count = buf ? buf.byteLength / 16 : (layer.location ? 1 : 0);
         const times = layer.time ? timesFor(layer, coordinateBuffers) : null;
         if (layer.time) hasTime = true;
-        perLayer.push({ layer, count, times });
-        total += count;
+        // Points a where= filter drops are not in the bucket at all: skipped here
+        // exactly as the renderer skips them, or every attribute after them shears.
+        const mask = featureMask(layer, count);
+        perLayer.push({ layer, count, times, mask });
+        total += mask ? mask.reduce((a, b) => a + b, 0) : count;
     }
     if (!hasTime) return { hasTime: false };
 
@@ -126,7 +129,7 @@ export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
     const layerIdx = new Float32Array(total);
     const layerIds = [];
     let out = 0;
-    for (const { layer, count, times } of perLayer) {
+    for (const { layer, count, times, mask } of perLayer) {
         const idx = layerIds.length;
         layerIds.push(layer.id);
         const dur = layer.time ? durationSeconds(layer.time.duration, periodMs) : ALWAYS;
@@ -134,6 +137,7 @@ export function buildTimeAttributes(layersList, coordinateBuffers, periodMs) {
         // Timeless (NaN) points keep a positive duration: with no age, nothing to fade.
         const signedDur = layer.time && layer.time.fade ? -dur : dur;
         for (let i = 0; i < count; i++) {
+            if (mask && !mask[i]) continue;
             const start = times ? times[i * 2] : NaN;
             const end = times ? times[i * 2 + 1] : NaN;
             if (Number.isNaN(start)) {

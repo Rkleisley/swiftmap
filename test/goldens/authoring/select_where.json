@@ -1,0 +1,349 @@
+{
+ "buffers": {
+  "layer_2": "AAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAMzMzMzMzFcDhehSuRwFCQDMzMzMzMxXAAAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAKVyPwvUoFcAAAAAAAABCQB+F61G4HhXA4XoUrkcBQkAfhetRuB4VwAAAAAAAAEJAKVyPwvUoFcAAAAAAAABCQBSuR+F6FBXAAAAAAAAAQkAK16NwPQoVwOF6FK5HAUJACtejcD0KFcAAAAAAAABCQBSuR+F6FBXA",
+  "layer_2::offsets": "AAAAAAQAAAAIAAAADAAAAA==",
+  "layer_3": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTA"
+ },
+ "doc": "where= selects FEATURES: select draws only the matching features of the\n    layers in scope carrying the column and fits them; hide(where) drops the\n    matching features of one layer; show(target) clears a layer's filter.",
+ "ops": [
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+     "id": "layer_0",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 19,
+     "max_zoom": 22,
+     "name": "Open Street Map",
+     "type": "basemap",
+     "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+     "visible": true
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "attribution": "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+     "id": "layer_1",
+     "layer_group": "Basemaps",
+     "max_native_zoom": 16,
+     "max_zoom": 22,
+     "name": "World Gray Canvas",
+     "type": "basemap",
+     "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+     "visible": false
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAMzMzMzMzFcDhehSuRwFCQDMzMzMzMxXAAAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAKVyPwvUoFcAAAAAAAABCQB+F61G4HhXA4XoUrkcBQkAfhetRuB4VwAAAAAAAAEJAKVyPwvUoFcAAAAAAAABCQBSuR+F6FBXAAAAAAAAAQkAK16NwPQoVwOF6FK5HAUJACtejcD0KFcAAAAAAAABCQBSuR+F6FBXA",
+   "op": {
+    "id": "layer_2",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": "AAAAAAQAAAAIAAAADAAAAA==",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.31
+      ],
+      [
+       36.01,
+       -5.26
+      ]
+     ],
+     "color": "#3388ff",
+     "feature_count": 3,
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Field",
+     "name": "Zones",
+     "opacity": 1.0,
+     "properties": {
+      "zone": [
+       "a",
+       "b",
+       "a"
+      ]
+     },
+     "type": "polygon",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMCamZmZmRlCQGZmZmZmZhTA",
+   "op": {
+    "id": "layer_3",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "layer": {
+     "autobind_popup": true,
+     "autobind_tooltip": true,
+     "bounds": [
+      [
+       36.0,
+       -5.3
+      ],
+      [
+       36.2,
+       -5.1
+      ]
+     ],
+     "color": "#3388ff",
+     "fillColor": "#3388ff",
+     "fillOpacity": 0.2,
+     "id": "layer_3",
+     "layer_group": "Field",
+     "name": "Sites",
+     "opacity": 1.0,
+     "properties": {
+      "zone": [
+       "a",
+       "b",
+       "b"
+      ]
+     },
+     "radius": 10,
+     "type": "circle_markers",
+     "visible": true,
+     "weight": 3
+    },
+    "op": "add"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "feature_filter": {
+      "keep": true,
+      "where": {
+       "zone": [
+        "a"
+       ]
+      }
+     }
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "feature_filter": {
+      "keep": true,
+      "where": {
+       "zone": [
+        "a"
+       ]
+      }
+     }
+    },
+    "id": "layer_3",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "feature_filter": {
+      "keep": false,
+      "where": {
+       "zone": [
+        "b"
+       ]
+      }
+     }
+    },
+    "id": "layer_3",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "feature_filter": null
+    },
+    "id": "layer_2",
+    "op": "set"
+   }
+  },
+  {
+   "buffer": null,
+   "op": {
+    "fields": {
+     "feature_filter": null
+    },
+    "id": "layer_3",
+    "op": "set"
+   }
+  }
+ ],
+ "scenario": "select_where",
+ "state": {
+  "auto_sync": true,
+  "center": [
+   36.0,
+   -5.35
+  ],
+  "crs": "EPSG:3857",
+  "draw_config": {},
+  "draw_seq": 0,
+  "drawings": [],
+  "fit_bounds_request": {
+   "bounds": [
+    [
+     36.0,
+     -5.31
+    ],
+    [
+     36.01,
+     -5.26
+    ]
+   ],
+   "max_zoom": null,
+   "padding": null,
+   "seq": 3,
+   "zoom_offset": 0
+  },
+  "group_configs": {
+   "Basemaps": {
+    "multi_select": false
+   },
+   "Field": {
+    "multi_select": true
+   }
+  },
+  "height": "",
+  "layers": [
+   {
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    "id": "layer_0",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 19,
+    "max_zoom": 22,
+    "name": "Open Street Map",
+    "type": "basemap",
+    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "visible": true
+   },
+   {
+    "attribution": "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+    "id": "layer_1",
+    "layer_group": "Basemaps",
+    "max_native_zoom": 16,
+    "max_zoom": 22,
+    "name": "World Gray Canvas",
+    "type": "basemap",
+    "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    "visible": false
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.31
+     ],
+     [
+      36.01,
+      -5.26
+     ]
+    ],
+    "color": "#3388ff",
+    "feature_count": 3,
+    "feature_filter": null,
+    "fillOpacity": 0.2,
+    "id": "layer_2",
+    "layer_group": "Field",
+    "name": "Zones",
+    "opacity": 1.0,
+    "properties": {
+     "zone": [
+      "a",
+      "b",
+      "a"
+     ]
+    },
+    "type": "polygon",
+    "visible": true,
+    "weight": 3
+   },
+   {
+    "autobind_popup": true,
+    "autobind_tooltip": true,
+    "bounds": [
+     [
+      36.0,
+      -5.3
+     ],
+     [
+      36.2,
+      -5.1
+     ]
+    ],
+    "color": "#3388ff",
+    "feature_filter": null,
+    "fillColor": "#3388ff",
+    "fillOpacity": 0.2,
+    "id": "layer_3",
+    "layer_group": "Field",
+    "name": "Sites",
+    "opacity": 1.0,
+    "properties": {
+     "zone": [
+      "a",
+      "b",
+      "b"
+     ]
+    },
+    "radius": 10,
+    "type": "circle_markers",
+    "visible": true,
+    "weight": 3
+   }
+  ],
+  "legend_config": {},
+  "logo_config": {},
+  "scale_config": {},
+  "show_click_coordinates": false,
+  "show_draw": false,
+  "show_legend": false,
+  "show_logo": false,
+  "show_scale": false,
+  "sync_trigger": 0,
+  "time_config": {},
+  "time_current": 0.0,
+  "zoom": 10
+ }
+}
