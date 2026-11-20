@@ -12,7 +12,7 @@ alone for anyone arriving with a task.
 | [02_data_sources](02_data_sources.ipynb) | Every input format, one section each: Pandas, Polars, long/wide tables, WKT columns, GeoPandas, geostructures, GeoJSON, raw lists | every `add_*`, `line_id_col`/`shape_id_col`, `coord_order`, `add_collection` |
 | [03_styling](03_styling.ipynb) | Layer options → per-feature `style` column → precedence → colormaps, bins, categorical, bubbles | `fill_color`, `static_style`, `color_col`, `color_bins`, `radius_col` |
 | [04_sidebar_groups](04_sidebar_groups.ipynb) | Folder trees from strings and from columns, radio groups, custom basemaps, collection merging | `layer_group`, `configure_group`, `add_basemap`, `add_collection` |
-| [05_layer_control](05_layer_control.ipynb) | The targeting vocabulary: find, hide/show, select, highlight, per-feature overrides, batch, remove | `find_layers`, `select`, `highlight`, `set_feature_styles`, `batch` |
+| [05_layer_control](05_layer_control.ipynb) | The targeting vocabulary: find, hide/show, select, highlight — on layers, and with `where=` on the features inside them — plus per-feature overrides, batch, remove | `find_layers`, `select(where=)`, `clicked_feature`, `highlight`, `set_feature_styles` |
 | [06_time](06_time.ipynb) | Animating timestamps the data already carries: periods, durations, fade, playback, both-ways sync | `make_time_layer`, `configure_time`, `time_current`, `clear_time_layer` |
 | [07_popups_tooltips](07_popups_tooltips.ipynb) | Narrowing, relabeling, templates, container styling, constant fields, permanent labels, the escaping story | `popup_fields`/`_names`/`_template`, `tooltip_style`, `popup=dict`, `label=` |
 | [08_export](08_export.ipynb) | One self-contained file, what works client-side, sizes, the Streamlit one-liner | `save`, `to_html` |
@@ -30,7 +30,7 @@ Apps cannot be notebooks. The Shiny ones run with `shiny run <file>` from `shiny
 | App | What it shows |
 | --- | --- |
 | [shiny/01_basic_app.py](shiny/01_basic_app.py) | The build-once rule, `map_effect`, and a select-driven filter |
-| [shiny/02_linked_table.py](shiny/02_linked_table.py) | Table ↔ map both ways: row selection drives `select()`, clicks report back via `clicked_layer_id` |
+| [shiny/02_linked_table.py](shiny/02_linked_table.py) | Table ↔ map both ways: one layer holds every dwell, row selection drives `select(where=)`, and a click reads its own row back through `clicked_feature()` |
 | [shiny/03_draw_filter.py](shiny/03_draw_filter.py) | Draw an AOI, filter the data: `draw_seq` + `drawings` feeding a table, a count, and a map spotlight |
 | [shiny/04_live_feed.py](shiny/04_live_feed.py) | A timer-driven feed: `update_layer(append=True)` grows layers in place, so a sidebar choice and the time slider survive every tick |
 
