@@ -396,6 +396,35 @@ def test_remove_layer():
     assert not any(l.name == "Temp Layer" for l in m.layers)
 
 
+def test_removing_a_layer_takes_its_own_buffers_and_no_one_elses():
+    m = Map()
+    m.coordinate_buffers.update({
+        "layer_1": b"a", "layer_1::times": b"b",
+        "layer_10": b"c", "layer_10::times": b"d",
+        "odd::id": b"e", "odd::id::times": b"f", "odd": b"g",
+    })
+    m._remove_layer_buffers(["layer_1", "odd::id"])
+    # layer_1 is a string prefix of layer_10 but not its owner; "odd::id" owns its
+    # own ::times although the key's FIRST boundary names "odd", which survives.
+    assert sorted(m.coordinate_buffers) == ["layer_10", "layer_10::times", "odd"]
+
+
+def test_removing_a_large_fan_is_linear_in_its_buffers():
+    # Every buffer key was tested against every removed id: 8.9 s for a 9,919-member
+    # polygon fan. The bound sits far from both that and the ~10 ms it takes now.
+    import time
+    rings = [[[i * 0.01, 0.0], [i * 0.01, 0.005], [i * 0.01 + 0.005, 0.0]]
+             for i in range(10000)]
+    m = Map()
+    m.add_polygon(rings, name="Fan")
+    assert len(m.coordinate_buffers) >= 10000
+    t0 = time.perf_counter()
+    m.remove_layers(m.find_layers("Fan"))
+    elapsed = time.perf_counter() - t0
+    assert m.coordinate_buffers == {}
+    assert elapsed < 1.0, f"remove_layers took {elapsed:.2f} s"
+
+
 def test_group_configs_and_multi_select():
     m = Map()
     m.add_polyline([[10, 20], [30, 40]], name="Poly 1", layer_group="Tracks", group_multi_select=True)

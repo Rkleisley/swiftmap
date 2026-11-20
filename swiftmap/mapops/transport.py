@@ -187,9 +187,24 @@ def _remove_layer_buffers(self, layer_ids: Any) -> None:
     buffers = dict(self.coordinate_buffers)
     # A layer may own auxiliary buffers under "<id>::<kind>" -- per-feature times ride
     # that way -- so removing a layer removes everything keyed under its id.
-    removed = [key for key in buffers
-               for lid in layer_ids
-               if key == lid or (lid is not None and key.startswith(f"{lid}::"))]
+    #
+    # One set lookup per "::" boundary of each key. Testing every key against every
+    # id with startswith was O(keys x ids): removing a 9,919-polygon fan spent 8.9 s
+    # here. Every boundary is tried, not just the first, because a caller's own
+    # layer id may contain "::" -- and a key is listed once even when two ids own it.
+    ids = {lid for lid in layer_ids if lid is not None}
+
+    def owned(key: str) -> bool:
+        if key in ids:
+            return True
+        at = key.find("::")
+        while at != -1:
+            if key[:at] in ids:
+                return True
+            at = key.find("::", at + 2)
+        return False
+
+    removed = [key for key in buffers if owned(key)]
     if not removed:
         return
     for key in removed:
