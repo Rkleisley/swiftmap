@@ -118,6 +118,13 @@ this one to a live feed and a draw-an-AOI filter.
 | `add_heatmap` | Density field | Screen-space blobs, or real H3/geohash cells filled by their sums — see [Density](#density) |
 | `add_imagery` | Georeferenced raster overlay | Anything GDAL reads, warped into the map's CRS; single band through the house colormaps — see [Imagery](#imagery); requires `rasterio` (optional) |
 
+Every feature that shares a folder and a name lands in **one layer** — points,
+lines and polygons alike. A table of 10,000 H3 cells under `name="Density"` is one
+layer holding 10,000 features, its properties kept as columns; a name taken from a
+column (`name="zone"`) gives one layer per value. A click reports the layer and the
+feature's index within it, and `where=` [selects features](#acting-on-layers-after-they-exist)
+inside a layer.
+
 Every `add_*` method accepts the same range of inputs:
 
 - **Pandas / Polars DataFrames** — lat/lon columns found by name; long format via
@@ -398,6 +405,8 @@ by everything that operates on existing layers:
 m.hide(group="Feeds/Inactive")
 m.show("Survey")                                  # every part of a collection
 m.select(chosen_ids, scope="Dwells", zoom=True, zoom_offset=-1)
+m.select("Density", where={"h3_cell": chosen_cells}, zoom=True)   # features, not layers
+m.hide("Sites", where={"status": ["closed", "retired"]})
 m.highlight("Survey", color="#ffcc00", markers={"radius": 14})
 m.set_feature_styles("Sites", {12: {"color": "#ffcc00"}})     # one feature, by index
 m.fit_bounds(m.bounds_of(["Dwell 3", "Dwell 7"]), zoom_offset=-1)
@@ -413,9 +422,18 @@ m.update_layer("Feed", data=new_rows, append=True)    # grow it
 ```
 
 `color_col`/`radius_col`, labels, the legend and bounds re-derive from the new data; a
-refresh never moves a viewport you have chosen. One limitation for now: a layer that was
-fanned out from a column (`name=<column>`, `layer_group=[..., <column>]`) is one of several
-siblings and warns rather than guessing how to re-fan.
+refresh never moves a viewport you have chosen. A line or polygon layer takes any number
+of features on replace; `append=True` is for point layers. One limitation for now: a
+layer that was fanned out from a column (`name=<column>`, `layer_group=[..., <column>]`)
+is one of several siblings and warns rather than guessing how to re-fan.
+
+`where=` on `select`, `hide` and `show` works on **features** inside the matched layers:
+`{column: value or values}`, every column matching. `select` draws only the matching
+features (with no target, in every layer of the scope that carries the columns) and
+`zoom=True` fits them; `hide` drops them; `show` draws only them, and `show(target)`
+clears the filter. Selecting no rows — every value list empty — is the clean slate, so
+a cleared table clears the map. The filter is a rule stored on the layer, not a list of
+rows, so it keeps applying after `update_layer(data=...)`.
 
 `select` and `highlight` are declarative and total: each call states the complete
 selection, so switching needs no undoing and `select(None)` / `highlight(None)` restores
@@ -430,7 +448,8 @@ Clicks sync back to Python — on features and on open map alike. A feature clic
 lines over polygons); a click on open map clears them and reports `m.clicked_latlng`
 as `[lat, lon]`. Feature clicks record their location too — a point reports its own
 coordinates, not the mouse's. `m.click_seq` bumps on every click, so one observer
-reads "where" and "on what" from a single event.
+reads "where" and "on what" from a single event. `m.clicked_feature()` reads the clicked
+feature's own row — `{"layer", "name", "index", "properties"}`, or `None` for open map.
 
 ## Drawing & AOIs
 
@@ -639,6 +658,10 @@ The things that keep large maps fast are on by default and mostly invisible:
 - Coordinates — points, lines, and polygons alike — travel as binary float64 buffers,
   never as JSON in the layer configs. Data-driven colors and radii ride the same
   transport.
+- Lines and polygons are stored the way points are: one layer per folder and name,
+  every feature's coordinates in one buffer with an offsets table, properties as
+  columns. 9,919 H3 cells are one layer, three buffers and 242 KB of JSON — they were
+  9,919 layers and 7.6 MB.
 - Every mutation after the first render is a small patch, not a resend of the map.
   A sidebar toggle costs ~100 bytes at any scale.
 - Time filtering for points runs on the GPU (per-point times upload once as vertex

@@ -1,12 +1,12 @@
 """
 A table and a map, linked both ways — the pattern behind most swiftmap apps.
 
-Table → map: selecting rows drives m.select(), hiding everything else in scope
-and zooming to the selection. Map → table: clicking a dwell reports back through
-the clicked_layer_id trait.
+Table → map: selecting rows drives m.select(where=...), drawing only those
+dwells and zooming to them. Map → table: clicking a dwell reports back, and
+clicked_feature() reads that dwell's own row.
 
-One layer per dwell, named from the data, so table rows and map layers correspond
-by name — no index bookkeeping.
+Every dwell is one feature of ONE layer, its id a column just as in the table,
+so rows and features correspond by value -- no index bookkeeping.
 
 Run from this directory:
 
@@ -57,10 +57,9 @@ def server(input, output, session):
     @render_widget
     def mapview():
         m = Map()
-        # name matching a column: one polygon layer per dwell, named from its
-        # own value — which is exactly what makes select-by-name line up with
-        # table rows below.
-        m.add_polygon(dwells, shape_id_col="dwell", name="dwell",
+        # One layer holding every dwell; the dwell id stays a column, which is
+        # what select(where=...) matches table rows against below.
+        m.add_polygon(dwells, shape_id_col="dwell", name="Dwells",
                       layer_group="Dwells", fill_opacity=0.35,
                       popup_fields=["hours", "risk"],
                       popup_names=["Dwell hours", "Risk"])
@@ -75,9 +74,9 @@ def server(input, output, session):
     def select_from_table(m):
         sel = dwell_table.cell_selection() or {}
         rows = sel.get("rows", ())
-        # Declarative and total: an empty selection restores everything in
-        # scope, so clearing the table clears the map with the same call.
-        m.select([centers["dwell"].iloc[i] for i in rows],
+        # Declarative and total: no rows selected restores every dwell, so
+        # clearing the table clears the map with the same call.
+        m.select("Dwells", where={"dwell": [centers["dwell"].iloc[i] for i in rows]},
                  scope="Dwells", zoom=True, zoom_offset=-1)
 
     @render.text
@@ -89,8 +88,11 @@ def server(input, output, session):
         if w is None:
             return "Click a dwell on the map."
         reactive_read(w, "click_seq")
-        layer = w.get_layer(w.clicked_layer_id)
-        return f"Clicked: {layer.get('name')}" if layer else "Click a dwell on the map."
+        feature = w.clicked_feature()
+        if feature is None:
+            return "Click a dwell on the map."
+        row = feature["properties"]
+        return f"Clicked: {row['dwell']} ({row['hours']} h, {row['risk']} risk)"
 
 
 app = App(app_ui, server)

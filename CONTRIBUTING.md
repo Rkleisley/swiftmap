@@ -34,6 +34,25 @@ responsible. One choke point every layer passes through.
 feature — highlighting a selected table row — can patch that field alone rather than
 resending a layer's whole property set.
 
+**Lines and polygons are packed: one layer per (folder, name), never one per feature.** It
+is the rule points always followed (`layers/_packed.py`, read by `src/packed.js`):
+`feature_count`, every feature's coordinates under the layer id, `<id>::offsets` to split
+them, `<id>::colors`, properties as columns, per-feature `rings` / `parts` / `labels`. A
+layer per feature sent 9,919 configs and buffers for one H3 table, and a name from a
+column re-sent the growing merged group per feature (~1.5 GB for 6,000 cells). Every
+`add_line` / `add_polygon` result is packed, one feature included — one format. The
+renderer keeps a packed layer as ONE bucket entry (one visibility slot) and expands it
+into per-feature views only at draw time; expanding it into the buckets would push a big
+layer past the GPU path's 64 slots.
+
+**`where=` stores a predicate on the layer, not a mask of rows.** `feature_filter =
+{"where": {column: [values]}, "keep": bool}`, evaluated by the renderer against the
+layer's own columns and by Python for `zoom=True` — the same rule both sides, so what
+Python fits is what is drawn. A predicate survives `update_layer(data=...)`; a mask would
+point at rows that no longer exist. Filtered-out features are left out of the bucket, and
+every walker (vector units, the point loop, both time-attribute builders, labels,
+clusters) skips them identically, or the GPU attributes shear.
+
 **`swiftmap/static/` is a committed build artifact**, so `pip install` never needs Node. See
 the rebuild warning below.
 
