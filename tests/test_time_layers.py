@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 import swiftmap
+from swiftmap.layers._packed import map_features
 from swiftmap._warnings import SwiftMapWarning
 from swiftmap.layers._time import (
     parse_timestamp, detect_time_fields, normalize_layer_times, is_valid_period,
@@ -462,10 +463,10 @@ def track_frame():
 def test_grouped_lines_keep_the_order_column_per_vertex():
     m = swiftmap.Map()
     m.add_polyline(track_frame(), line_id_col="track_id", order_col="ts", name="track_id")
-    lines = [l for l in m.layers if l.get("type") == "polyline"]
+    lines = map_features(m, types="polyline")
     assert len(lines) == 2
-    assert lines[0].properties["ts"] == [T0, T0 + HOUR, T0 + 2 * HOUR]
-    assert lines[1].properties["ts"] == [T0, T0 + HOUR]
+    assert lines[0]["properties"]["ts"] == [T0, T0 + HOUR, T0 + 2 * HOUR]
+    assert lines[1]["properties"]["ts"] == [T0, T0 + HOUR]
 
 
 def test_datetime_order_columns_arrive_as_epoch_ms():
@@ -474,8 +475,8 @@ def test_datetime_order_columns_arrive_as_epoch_ms():
     df["ts"] = pd.to_datetime(df["ts"], unit="ms")
     m = swiftmap.Map()
     m.add_polyline(df, line_id_col="track_id", order_col="ts", name="track_id")
-    lines = [l for l in m.layers if l.get("type") == "polyline"]
-    assert lines[0].properties["ts"] == [int(T0), int(T0 + HOUR), int(T0 + 2 * HOUR)], \
+    lines = map_features(m, types="polyline")
+    assert lines[0]["properties"]["ts"] == [int(T0), int(T0 + HOUR), int(T0 + 2 * HOUR)], \
         "epoch ms ints, so the vectorised numeric time path applies"
 
 
@@ -489,6 +490,33 @@ def test_make_time_layer_writes_one_pair_per_vertex():
     assert times[0] == T0 and times[5] == T0 + 2 * HOUR
 
 
+def test_a_packed_polygon_layer_animates_per_feature():
+    # Many polygons in one layer: ::times holds one pair per FEATURE, in feature
+    # order -- the renderer slices them by index (src/packed.js).
+    import pandas as pd
+    df = pd.DataFrame({"wkt": ["POLYGON ((0 0, 1 0, 1 1, 0 0))", "POLYGON ((5 5, 6 5, 6 6, 5 5))",
+                               "POLYGON ((9 9, 10 9, 10 10, 9 9))"],
+                       "ts": [T0 + 2 * HOUR, T0, T0 + HOUR]})
+    m = swiftmap.Map()
+    m.add_polygon(df, name="Zones")
+    m.make_time_layer("Zones", time_field="ts")
+    layer = m.find_layers("Zones")[0]
+    times = np.frombuffer(m.coordinate_buffers[f"{layer.id}::times"], dtype=np.float64)
+    assert times.tolist() == [T0 + 2 * HOUR, T0 + 2 * HOUR, T0, T0, T0 + HOUR, T0 + HOUR]
+
+
+def test_tracks_in_one_packed_layer_get_a_pair_per_vertex():
+    # Two tracks under one literal name: one packed layer, and the per-vertex runs
+    # concatenate in feature order, aligned to ::offsets.
+    m = swiftmap.Map()
+    m.add_polyline(track_frame(), line_id_col="track_id", order_col="ts", name="Fleet")
+    m.make_time_layer("Fleet", time_field="ts")
+    layer = m.find_layers("Fleet")[0]
+    assert layer.feature_count == 2
+    times = np.frombuffer(m.coordinate_buffers[f"{layer.id}::times"], dtype=np.float64)
+    assert times[0::2].tolist() == [T0, T0 + HOUR, T0 + 2 * HOUR, T0, T0 + HOUR]
+
+
 def test_dict_rows_keep_the_order_column_too():
     rows = [
         {"lat": 36.0, "lon": -5.3, "track_id": "A", "seq": 3},
@@ -497,8 +525,8 @@ def test_dict_rows_keep_the_order_column_too():
     ]
     m = swiftmap.Map()
     m.add_polyline(rows, line_id_col="track_id", order_col="seq", name="Track")
-    line = [l for l in m.layers if l.get("type") == "polyline"][0]
-    assert line.properties["seq"] == [1, 2, 3], "sorted by the order column, then kept"
+    line = map_features(m, types="polyline")[0]
+    assert line["properties"]["seq"] == [1, 2, 3], "sorted by the order column, then kept"
 
 
 def test_polygon_rings_do_not_grow_a_vertex_series():
@@ -509,8 +537,8 @@ def test_polygon_rings_do_not_grow_a_vertex_series():
     })
     m = swiftmap.Map()
     m.add_polygon(df, shape_id_col="zone", order_col="vertex", name="Zones")
-    poly = [l for l in m.layers if l.get("type") == "polygon"][0]
-    assert not isinstance(poly.properties.get("vertex"), list), \
+    poly = map_features(m, types="polygon")[0]
+    assert not isinstance(poly["properties"].get("vertex"), list), \
         "vertex order around a ring is not a time series"
 
 
@@ -525,8 +553,8 @@ def test_tz_aware_order_columns_survive_and_land_as_utc_epochs():
         .dt.tz_convert("Europe/Madrid")
     m = swiftmap.Map()
     m.add_polyline(df, line_id_col="track_id", order_col="ts", name="track_id")
-    lines = [l for l in m.layers if l.get("type") == "polyline"]
-    assert lines[0].properties["ts"] == [int(T0), int(T0 + HOUR), int(T0 + 2 * HOUR)]
+    lines = map_features(m, types="polyline")
+    assert lines[0]["properties"]["ts"] == [int(T0), int(T0 + HOUR), int(T0 + 2 * HOUR)]
 
 
 def test_polars_tz_aware_order_columns_were_never_broken_and_stay_that_way():
@@ -542,8 +570,8 @@ def test_polars_tz_aware_order_columns_were_never_broken_and_stay_that_way():
     })
     m = swiftmap.Map()
     m.add_polyline(df, line_id_col="track_id", order_col="ts", name="T")
-    line = [l for l in m.layers if l.get("type") == "polyline"][0]
-    assert line.properties["ts"] == [int(T0), int(T0 + HOUR)]
+    line = map_features(m, types="polyline")[0]
+    assert line["properties"]["ts"] == [int(T0), int(T0 + HOUR)]
 
 
 import pandas as pd  # noqa: E402  (the file's earlier tests use dicts)

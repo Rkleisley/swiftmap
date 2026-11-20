@@ -9,7 +9,8 @@
 //   <id>            float64 [lat, lon] of every feature, one after another
 //   <id>::offsets   uint32 n + 1: feature i is vertices offsets[i] .. offsets[i+1]-1
 //   <id>::colors    u8 RGBA per feature (color_col), the points' encoding; it drives
-//                   the fill, and the stroke too when color_col_stroke is set
+//                   a polygon's fill, its stroke too when color_col_stroke is set,
+//                   and a line's colour
 //   <id>::times     float64 [start, end] per feature -- or per vertex, as tracks do
 //   properties      columns; feature_styles and labels per-feature lists
 //   rings / parts   per-feature ring tables / part lengths, null for simple features
@@ -102,7 +103,10 @@ export function expandPacked(layer, buffers) {
             const c = `#${hex2(useColors[i * 4])}${hex2(useColors[i * 4 + 1])}`
                 + hex2(useColors[i * 4 + 2]);
             view.fillColor = c;
-            if (layer.color_col_stroke) view.color = c;
+            // A line has no fill: its colour IS the stroke. A polygon's stroke
+            // follows only when color_col_stroke says so (an explicit color= keeps
+            // a uniform border over ramped fills).
+            if (layer.type === "polyline" || layer.color_col_stroke) view.color = c;
         }
         const row = {};
         for (const k of propKeys) {

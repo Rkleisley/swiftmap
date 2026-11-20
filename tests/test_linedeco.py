@@ -11,6 +11,7 @@ happens renderer-side, so here the contract is what the config records.
 import pytest
 
 from swiftmap import Map
+from swiftmap.layers._packed import map_features
 from swiftmap._warnings import warn  # noqa: F401  (import parity with siblings)
 
 LINE = [[36.00, -5.30], [36.05, -5.25], [36.10, -5.20]]
@@ -128,7 +129,8 @@ def test_merged_members_keep_their_decoration():
     m = Map()
     m.add_line(fc, name="Routes", arrows=True, arrow_spacing="1km", dash=[6, 3])
     entry = m.layers[-1]
-    assert entry.type == "group"
-    assert all(sub.get("arrows") == "spacing" for sub in entry.layers)
-    assert all(sub.get("arrow_spacing_m") == 1000.0 for sub in entry.layers)
-    assert all(sub.get("dash") == [6.0, 3.0] for sub in entry.layers)
+    assert entry.type == "polyline" and entry.feature_count == 2,         "one packed layer; the call's decoration is the layer's, so every line has it"
+    features = map_features(m, "Routes")
+    assert all(f.get("arrows") == "spacing" for f in features)
+    assert all(f.get("arrow_spacing_m") == 1000.0 for f in features)
+    assert all(f.get("dash") == [6.0, 3.0] for f in features)

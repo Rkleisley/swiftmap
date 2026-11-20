@@ -13,6 +13,7 @@ from geometry import A, B, C, LINE, RING, gj_feature, gj_collection, lonlat
 from ipywidgets.widgets.widget import Widget
 Widget.on_widget_constructed(None)
 from swiftmap import Map  # noqa: E402
+from swiftmap.layers._packed import map_features  # noqa: E402
 from swiftmap._warnings import SwiftMapWarning  # noqa: E402
 
 pd = pytest.importorskip("pandas")
@@ -109,7 +110,8 @@ def test_lines_take_their_own_style_per_feature():
     m = Map()
     start = len(m.layers)
     m.add_polyline(fc, name="Route")
-    added = m.find_layers(types="polyline")
+    # One packed layer; each feature resolves its style the way the renderer does.
+    added = map_features(m, types="polyline")
     colors = sorted(l.get("color") for l in added)
     assert colors == ["blue", "red"], "each line keeps its own colour"
     blue = next(l for l in added if l.get("color") == "blue")
@@ -124,7 +126,7 @@ def test_polygons_take_their_own_style_per_feature():
     m = Map()
     start = len(m.layers)
     m.add_polygon(fc, name="Zone")
-    added = m.find_layers(types="polygon")
+    added = map_features(m, types="polygon")
     assert sorted(l.get("color") for l in added) == ["blue", "red"]
     red = next(l for l in added if l.get("color") == "red")
     assert red.get("fillOpacity") == 0.5

@@ -15,6 +15,7 @@ import pytest
 
 import swiftmap
 from swiftmap import Map
+from swiftmap.layers._packed import map_features
 from swiftmap._colormaps import (COLORMAPS, CATEGORICAL_PALETTES, map_colors, map_radii,
                                  resolve_colormap, register_colormap, data_driven_legend)
 from swiftmap._warnings import SwiftMapWarning
@@ -122,7 +123,8 @@ def test_categorical_color_col_on_lines_overrides_stroke():
     })
     m = Map()
     m.add_polyline(df, line_id_col="track_id", name="Tracks", color_col="track_id")
-    lines = m.find_layers(types="polyline")
+    # One packed layer; each line's colour is resolved as the renderer does it.
+    lines = map_features(m, types="polyline")
     assert len(lines) == 2
     assert lines[0].get("color") != lines[1].get("color")
     assert all(l.get("color").startswith("#") for l in lines)
@@ -139,9 +141,9 @@ def test_color_col_on_polygons_ramps_stroke_and_fill_together():
     })
     m = Map()
     m.add_polygon(df, name="zone", color_col="value")
-    polys = [l for l in m.layers if l.get("type") == "polygon"]
-    assert polys[0].fillColor != polys[1].fillColor
-    assert [p.color for p in polys] == [p.fillColor for p in polys], \
+    polys = map_features(m, types="polygon")
+    assert polys[0]["fillColor"] != polys[1]["fillColor"]
+    assert [p["color"] for p in polys] == [p["fillColor"] for p in polys], \
         "the stroke takes each feature's ramp colour, not the base"
 
 
@@ -155,9 +157,9 @@ def test_explicit_color_keeps_the_uniform_choropleth_border():
     })
     m = Map()
     m.add_polygon(df, name="zone", color_col="value", color="#000000")
-    polys = [l for l in m.layers if l.get("type") == "polygon"]
-    assert polys[0].fillColor != polys[1].fillColor
-    assert polys[0].color == polys[1].color == "#000000"
+    polys = map_features(m, types="polygon")
+    assert polys[0]["fillColor"] != polys[1]["fillColor"]
+    assert polys[0]["color"] == polys[1]["color"] == "#000000"
 
 
 # --- the honest warnings --------------------------------------------------------------

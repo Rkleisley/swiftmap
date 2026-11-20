@@ -2,16 +2,13 @@ from typing import Optional, List, Dict, Any
 from ..parsers import parse_lines
 from ._display import extract_display_config
 from ._style import pop_style_options, pop_data_options, resolve_styles
-from .._colormaps import data_driven_colors, data_driven_legend, rgb_hex
+from .._colormaps import data_driven_colors, data_driven_legend
 from ._batching import batched
 from ._update import record_added_with
-from ._add_child import add_children_merged
 from ._grouping import is_column
-from ._grouping import (build_group_specs, resolve_group_path, resolve_layer_name,
-                        resolve_feature_label)
+from ._grouping import build_group_specs, resolve_feature_label
+from ._packed import group_features, pack_geometry, subset_columns
 from .._warnings import warn, EmptyLayerWarning
-from ._targeting import bounds_of_coords
-from ..parsers.sources._utils import LineGeom
 import numpy as np
 
 @batched
@@ -176,13 +173,13 @@ def add_line(
         )
         return self
 
-    is_multi = len(lines_coords) > 1
+    n = len(lines_coords)
     group_specs = build_group_specs(layer_group, props)
     layer_style, feature_styles = resolve_styles(
-        explicit_style, static_style, props, len(lines_coords), {"color": "#3388ff", "weight": 3, "opacity": 1.0})
+        explicit_style, static_style, props, n, {"color": "#3388ff", "weight": 3, "opacity": 1.0})
 
-    # color_col: each line is its own config entry, so a data-driven colour is just a
-    # per-feature `color` override -- no new transport, feature counts are small here.
+    # color_col: per-feature colours ride ::colors (u8 RGBA, the points' encoding);
+    # on a line the colour IS the stroke, so no flag is needed.
     colors_u8 = data_driven_colors(props, data_opts,
                                    layer_style.get("color", "#3388ff"), "add_line")
     legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#3388ff"))
@@ -248,82 +245,59 @@ def add_line(
             warn(f"add_line: dash must give an on,off pixel pair -- dash='8 4' or "
                  f"dash=[8, 4] -- got {dash!r}. Drawing solid.")
 
-    # A uniform fan assembles into one merged entry placed once -- see add_polygon.
-    pending = []
-    for i, coords in enumerate(lines_coords):
-        line_props = {k: v[i] for k, v in props.items()} if props else {}
-        # An explicit constant merges over parsed columns and is RECORDED, so
-        # update_layer(data=...) keeps it. It used to ride **kwargs, reach the
-        # config only because the dict literal let it override "properties", and
-        # vanish on the first data update -- caught by the authoring goldens when
-        # the JS model kept it and Python did not. add_polygon had it right.
-        if properties:
-            line_props.update(properties)
-        line_name = resolve_layer_name(name, props, i, is_multi, "Line")
-
-        # Coordinates travel as a binary float64 buffer under the layer's id, exactly
-        # like point layers -- never as JSON inside the layer config. Carried as
-        # `locations`, 25 tracks of 200k vertices made every sidebar toggle serialise
-        # ~187 MB of layers JSON per click, which is what actually crashed large maps
-        # after the per-click rebuilds were already gone.
-        #
-        # A multi-part line (MULTILINESTRING, MultiLineString) arrives as a LineGeom.
-        # The buffer stays one flat [lat, lon] run; the part lengths ride the config
-        # as a small `parts` table for the renderer to slice the runs back apart, so
-        # no segment is ever drawn between parts -- the `rings` pattern, line-side.
-        if isinstance(coords, LineGeom):
-            flat, parts = coords.flat(), coords.part_lengths()
-        else:
-            flat, parts = coords, None
-
+    # One PACKED layer per (folder, name) -- see add_polygon and _packed.py. A
+    # multi-part line (MULTILINESTRING, MultiLineString) keeps its part lengths
+    # per feature, so no segment is ever drawn between its parts.
+    fanned = is_column(name, props) or any(is_col for _, is_col in group_specs)
+    for (folder, layer_name), indices in group_features(
+            n, name, props, group_specs, "Line", "Line Group").items():
         layer_id = f"layer_{self._layer_counter}"
         self._layer_counter += 1
-        self._set_layer_buffer(
-            layer_id, np.asarray(flat, dtype=np.float64).flatten().tobytes())
+        coords_b, offsets_b, parts, bounds = pack_geometry("polyline", lines_coords, indices)
+        self._set_layer_buffer(layer_id, coords_b)
+        self._set_layer_buffer(f"{layer_id}::offsets", offsets_b)
+        if colors_u8 is not None:
+            self._set_layer_buffer(f"{layer_id}::colors",
+                                   np.ascontiguousarray(colors_u8[indices]).tobytes())
 
-        pending.append({
+        self.add_child({
             "id": layer_id,
             "type": "polyline",
-            "name": line_name,
-            "layer_group": resolve_group_path(group_specs, props, i, "Line Group"),
+            "name": layer_name,
+            "layer_group": folder,
             "group_multi_select": group_multi_select,
             "visible": True,
+            "feature_count": len(indices),
             **({"arrows": arrow_mode} if arrow_mode else {}),
             **({"arrow_spacing_px": spacing_px} if spacing_px else {}),
             **({"arrow_spacing_m": spacing_m} if spacing_m else {}),
             **({"dash": dash_list} if dash_list else {}),
             **({"parts": parts} if parts else {}),
-            "bounds": bounds_of_coords(flat),
-            # Recorded for update_layer(data=...). One of several features, or a
-            # column-driven name or folder, makes this one of several siblings.
+            "bounds": bounds,
+            # Recorded for update_layer(data=...). A column-driven name or folder
+            # makes this one of several sibling layers.
             "added_with": record_added_with(
                 "add_line",
                 parser={"lat_col": lat_col, "lon_col": lon_col, "line_id_col": line_id_col,
                         "order_col": order_col, "coord_order": coord_order},
                 data_opts=data_opts, explicit_style=explicit_style,
-                static_style=static_style, label=label,
-                fanned=is_multi or is_column(name, props)
-                       or any(is_col for _, is_col in group_specs),
+                static_style=static_style, label=label, fanned=fanned,
                 popup=popup, tooltip=tooltip, properties=properties),
-            **(feature_styles[i] if feature_styles else layer_style),
-            "properties": line_props,
+            **layer_style,
+            **({"feature_styles": [feature_styles[i] for i in indices]}
+               if feature_styles else {}),
+            # An explicit constant merges over parsed columns and is RECORDED, so
+            # update_layer(data=...) keeps it (the authoring goldens caught it
+            # vanishing once, when it rode **kwargs instead).
+            "properties": subset_columns(props, indices, n, properties),
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
             **display_config,
             **kwargs,
-            **({"color": rgb_hex(colors_u8[i])} if colors_u8 is not None else {}),
             **({"legend": legend_block} if legend_block else {}),
-            **({"label": resolve_feature_label(label, props, i)} if label is not None else {})
+            **({"labels": [resolve_feature_label(label, props, i) for i in indices]}
+               if label is not None else {}),
         })
-
-    uniform = (len(pending) > 1
-               and len({c["name"] for c in pending}) == 1
-               and len({c["layer_group"] for c in pending}) == 1)
-    if uniform:
-        add_children_merged(self, pending)
-    else:
-        for config in pending:
-            self.add_child(config)
 
     return self
 

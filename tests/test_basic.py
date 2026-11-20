@@ -1,5 +1,6 @@
 import pytest
 from swiftmap import Map
+from swiftmap.layers._packed import map_features, features_of
 from swiftmap._warnings import EmptyLayerWarning, SwiftMapWarning
 import pandas as pd
 import numpy as np
@@ -150,8 +151,9 @@ def test_parse_lines_geojson_and_df():
     m2 = Map()
     m2.add_polyline(df_track, name="Track")
     entry = m2.layers[-1]
-    assert entry.type == "group" and entry.name == "Track"
-    assert len(m2.find_layers(types="polyline")) == 2
+    assert entry.type == "polyline" and entry.name == "Track"
+    assert entry.feature_count == 2, "one packed layer holding both tracks"
+    assert len(map_features(m2, types="polyline")) == 2
 
 def test_geopandas_points_and_lines():
     try:
@@ -227,7 +229,7 @@ def test_wkt_in_an_arbitrarily_named_column_via_the_id_col():
     layer = m.layers[-1]
     assert layer.type == "polygon"
     assert len(vector_coords(m, layer)) >= 4
-    assert layer.properties["zone"] == "A"
+    assert layer.properties["zone"] == ["A"], "properties are columns, as for points"
 
     df_line = pd.DataFrame({
         "route": ["R1"],
@@ -248,8 +250,9 @@ def test_an_ordinary_id_column_still_groups():
     m = Map()
     m.add_polygon(df, shape_id_col="zone", name="Zones")
     entry = m.layers[-1]
-    assert entry.type == "group" and entry.name == "Zones"
-    assert len(m.find_layers(types="polygon")) == 2
+    assert entry.type == "polygon" and entry.name == "Zones"
+    assert entry.feature_count == 2
+    assert len(map_features(m, types="polygon")) == 2
 
 def test_wkt_of_the_wrong_kind_via_the_id_col_adds_nothing():
     df = pd.DataFrame({"g": ["LINESTRING (-118.24 34.05, -122.41 37.77)"]})
@@ -266,7 +269,7 @@ def test_polygon_holes_and_multipolygons_survive():
     m = Map()
     m.add_polygon(df, name="Donut")
     layer = m.layers[-1]
-    assert layer.rings == [[5, 5]]
+    assert layer.rings == [[[5, 5]]], "one ring table per feature"
     assert len(vector_coords(m, layer)) == 10
 
     # A MULTIPOLYGON is ONE feature and stays one layer with two parts -- it used to
@@ -276,8 +279,8 @@ def test_polygon_holes_and_multipolygons_survive():
     m2 = Map()
     m2.add_polygon(df2, name="Archipelago")
     polys = [l for l in m2.layers if l.type == "polygon"]
-    assert len(polys) == 1
-    assert polys[0].rings == [[4], [4]]
+    assert len(polys) == 1 and polys[0].feature_count == 1
+    assert polys[0].rings == [[[4], [4]]]
     assert len(vector_coords(m2, polys[0])) == 8
 
     # The common hole-free ring is untouched: no rings table at all.
@@ -294,9 +297,9 @@ def test_geojson_polygon_holes_survive():
     m = Map()
     m.add_polygon(gj, name="Donut")
     layer = m.layers[-1]
-    assert layer.rings == [[5, 5]]
+    assert layer.rings == [[[5, 5]]]
     assert len(vector_coords(m, layer)) == 10
-    assert layer.properties["zone"] == "A"
+    assert layer.properties["zone"] == ["A"]
 
 def test_polygon_and_shapes_patterns():
     # 1. WKT Polygon test
@@ -345,8 +348,8 @@ def test_polars_and_dict_lines_polygons():
     m = Map()
     m.add_line(df_line, line_id_col="track_id", order_col="step", name="Polars Tracks")
     assert len(m.layers) == 3
-    assert m.layers[-1].type == "group"
-    assert len(m.find_layers(types="polyline")) == 2
+    assert m.layers[-1].type == "polyline" and m.layers[-1].feature_count == 2
+    assert len(map_features(m, types="polyline")) == 2
 
     df_poly = pl.DataFrame({
         "zone": ["Zone A"],
@@ -413,16 +416,18 @@ def test_removing_a_large_fan_is_linear_in_its_buffers():
     # Every buffer key was tested against every removed id: 8.9 s for a 9,919-member
     # polygon fan. The bound sits far from both that and the ~10 ms it takes now.
     import time
-    rings = [[[i * 0.01, 0.0], [i * 0.01, 0.005], [i * 0.01 + 0.005, 0.0]]
-             for i in range(10000)]
+    # Since 0.7.0 a literal-name fan is one packed layer, so the many-ids case is
+    # driven directly: 10,000 layers, each with a coordinate and an offsets buffer.
     m = Map()
-    m.add_polygon(rings, name="Fan")
-    assert len(m.coordinate_buffers) >= 10000
+    ids = [f"layer_{i}" for i in range(10000)]
+    for lid in ids:
+        m.coordinate_buffers[lid] = b"c"
+        m.coordinate_buffers[f"{lid}::offsets"] = b"o"
     t0 = time.perf_counter()
-    m.remove_layers(m.find_layers("Fan"))
+    m._remove_layer_buffers(ids)
     elapsed = time.perf_counter() - t0
     assert m.coordinate_buffers == {}
-    assert elapsed < 1.0, f"remove_layers took {elapsed:.2f} s"
+    assert elapsed < 1.0, f"removing 10,000 layers' buffers took {elapsed:.2f} s"
 
 
 def test_group_configs_and_multi_select():
@@ -520,15 +525,14 @@ def test_vector_labels_resolve_per_feature():
     })
     m = Map()
     m.add_polygon(df, name="zone", label="zone")
-    polys = [l for l in m.layers if l.get("type") == "polygon"]
-    assert [p.label for p in polys] == ["North", "South"]
+    assert [f["label"] for f in map_features(m, types="polygon")] == ["North", "South"]
 
 
 def test_a_literal_label_is_taken_as_text():
     m = Map()
     m.add_polygon([[36.0, -5.3], [36.0, -5.2], [36.1, -5.2]],
                   name="Zone", label="Restricted")
-    assert m.layers[-1].label == "Restricted"
+    assert m.layers[-1].labels == ["Restricted"], "one label per feature"
     m.add_circle([36.0, -5.3], radius=500, name="Ring", label="Search Area")
     assert m.layers[-1].label == "Search Area"
 
@@ -551,7 +555,8 @@ def test_merged_collection_parts_keep_their_bounds():
     group = [l for l in m.layers if l.get("type") == "group"][0]
     parts = {s["type"]: s for s in group.get("layers")}
     assert parts["polygon"].get("bounds") == [[36.0, -5.3], [36.1, -5.2]]
-    assert parts["polygon"].get("label") == "Dwell N"
+    assert parts["polygon"].get("feature_count") == 1, "the packed tables survive the merge"
+    assert features_of(parts["polygon"], m.coordinate_buffers)[0]["label"] == "Dwell N"
     assert parts["circle_markers"].get("bounds") is not None
     assert m.bounds_of("Dwell N") == [[36.0, -5.3], [36.1, -5.2]]
 
@@ -612,7 +617,7 @@ def test_a_lines_properties_constant_survives_a_data_update():
     m.add_line([[36.0, -5.3], [36.1, -5.2]], name="Track",
                properties={"vessel": "Swift One"})
     m.update_layer("Track", data=[[36.0, -5.3], [36.2, -5.1]])
-    assert m.find_layers("Track")[0].get("properties") == {"vessel": "Swift One"}
+    assert m.find_layers("Track")[0].get("properties") == {"vessel": ["Swift One"]}
 
 
 def test_clear_time_layer_keeps_the_layers_other_buffers():

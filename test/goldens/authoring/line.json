@@ -1,6 +1,7 @@
 {
  "buffers": {
-  "layer_2": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA"
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
+  "layer_2::offsets": "AAAAAAMAAAA="
  },
  "doc": "A single polyline from nested pairs.",
  "ops": [
@@ -46,6 +47,13 @@
    }
   },
   {
+   "buffer": "AAAAAAMAAAA=",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -62,12 +70,15 @@
       ]
      ],
      "color": "#0055ff",
+     "feature_count": 1,
      "id": "layer_2",
      "layer_group": "Line Group",
      "name": "Track",
      "opacity": 1.0,
      "properties": {
-      "vessel": "Swift One"
+      "vessel": [
+       "Swift One"
+      ]
      },
      "type": "polyline",
      "visible": true,
@@ -150,12 +161,15 @@
      ]
     ],
     "color": "#0055ff",
+    "feature_count": 1,
     "id": "layer_2",
     "layer_group": "Line Group",
     "name": "Track",
     "opacity": 1.0,
     "properties": {
-     "vessel": "Swift One"
+     "vessel": [
+      "Swift One"
+     ]
     },
     "type": "polyline",
     "visible": true,

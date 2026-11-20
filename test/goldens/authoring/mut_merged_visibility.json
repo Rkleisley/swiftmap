@@ -1,10 +1,13 @@
 {
  "buffers": {
   "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMBmZmZmZgZCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA==",
+  "layer_2::offsets": "AAAAAAQAAAA=",
   "layer_3": "w/UoXI8CQkAAAAAAAAAVwA==",
   "layer_5": "zczMzMwMQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMAzMzMzMxNCQM3MzMzMzBTAzczMzMwMQkAzMzMzMzMVwA==",
+  "layer_5::offsets": "AAAAAAQAAAA=",
   "layer_6": "kML1KFwPQkAAAAAAAAAVwA==",
   "layer_8": "mpmZmZkZQkAzMzMzMzMVwJqZmZmZGUJAzczMzMzMFMAAAAAAACBCQM3MzMzMzBTAmpmZmZkZQkAzMzMzMzMVwA==",
+  "layer_8::offsets": "AAAAAAQAAAA=",
   "layer_9": "XY/C9SgcQkAAAAAAAAAVwA=="
  },
  "doc": "Visibility on a merged entry lands on the GROUP -- the only flag the\n    renderer draws; matched children promote to their parent (round-2 gap B).",
@@ -51,6 +54,13 @@
    }
   },
   {
+   "buffer": "AAAAAAQAAAA=",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -67,6 +77,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "fillOpacity": 0.2,
      "id": "layer_2",
      "layer_group": "Dwells",
@@ -111,6 +122,7 @@
         ]
        ],
        "color": "#3388ff",
+       "feature_count": 1,
        "fillOpacity": 0.2,
        "id": "layer_2",
        "name": "Dwell 1",
@@ -161,6 +173,13 @@
    }
   },
   {
+   "buffer": "AAAAAAQAAAA=",
+   "op": {
+    "id": "layer_5::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -177,6 +196,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "fillOpacity": 0.2,
      "id": "layer_5",
      "layer_group": "Dwells",
@@ -221,6 +241,7 @@
         ]
        ],
        "color": "#3388ff",
+       "feature_count": 1,
        "fillOpacity": 0.2,
        "id": "layer_5",
        "name": "Dwell 2",
@@ -271,6 +292,13 @@
    }
   },
   {
+   "buffer": "AAAAAAQAAAA=",
+   "op": {
+    "id": "layer_8::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -287,6 +315,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "fillOpacity": 0.2,
      "id": "layer_8",
      "layer_group": "Dwells",
@@ -331,6 +360,7 @@
         ]
        ],
        "color": "#3388ff",
+       "feature_count": 1,
        "fillOpacity": 0.2,
        "id": "layer_8",
        "name": "Dwell 3",
@@ -533,6 +563,7 @@
        ]
       ],
       "color": "#3388ff",
+      "feature_count": 1,
       "fillOpacity": 0.2,
       "id": "layer_2",
       "name": "Dwell 1",
@@ -592,6 +623,7 @@
        ]
       ],
       "color": "#3388ff",
+      "feature_count": 1,
       "fillOpacity": 0.2,
       "id": "layer_5",
       "name": "Dwell 2",
@@ -651,6 +683,7 @@
        ]
       ],
       "color": "#3388ff",
+      "feature_count": 1,
       "fillOpacity": 0.2,
       "id": "layer_8",
       "name": "Dwell 3",

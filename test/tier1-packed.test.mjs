@@ -99,6 +99,11 @@ test("::colors fill each feature, and its stroke only with color_col_stroke", ()
     const both = packedPolygons({ color_col_stroke: true });
     assert.deepEqual(expandPacked(both.layer, both.buffers).map(x => x.color),
         ["#ff0000", "#00ff00", "#0000ff"]);
+    // A line has no fill: its colour IS the stroke, flag or not.
+    const line = { id: "L", type: "polyline", visible: true, feature_count: 2, color: "#333333" };
+    const lineBuffers = { L: f64([0, 0, 0, 1, 5, 5, 5, 6]), "L::offsets": u32([0, 2, 4]),
+                          "L::colors": u8([255, 0, 0, 255, 0, 0, 255, 255]) };
+    assert.deepEqual(expandPacked(line, lineBuffers).map(x => x.color), ["#ff0000", "#0000ff"]);
 });
 
 test("feature_styles merge per feature; style_overrides re-key to the view", () => {

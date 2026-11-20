@@ -13,6 +13,7 @@ pd = pytest.importorskip("pandas")
 
 import swiftmap.parsers.sources._utils as _utils
 from swiftmap import Map, hexbin
+from swiftmap.layers._packed import map_features
 
 A = (36.01, -5.36)
 B = (46.5, 7.0)          # far away: a different cell at every resolution
@@ -80,7 +81,7 @@ def test_composes_with_add_polygon_and_color_col():
     df = frame([A, A, A, B])
     m = Map()
     m.add_polygon(hexbin(df, resolution=8), name="Density", color_col="count")
-    layers = m.find_layers(types="polygon")
+    layers = map_features(m, types="polygon")     # one packed layer, two cells
     assert len(layers) == 2
     assert sorted(l.get("properties")["count"] for l in layers) == [1, 3]
     assert all((l.get("fillColor") or "").startswith("#") for l in layers)
@@ -111,7 +112,7 @@ def test_geohash_bin_counts_and_composes():
     assert got == {nm.encode(*A, 6, 32): 2, nm.encode(*B, 6, 32): 1}
     m = Map()
     m.add_polygon(out, geohash_base=32, name="Cells", color_col="count")
-    assert len(m.find_layers(types="polygon")) == 2
+    assert len(map_features(m, types="polygon")) == 2
 
 
 def test_geohash_bin_requires_a_real_base_and_length():

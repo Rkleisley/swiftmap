@@ -708,6 +708,32 @@ def scenario_polygon_table_wkt_color_col():
     return m
 
 
+def scenario_polygon_name_column_packs():
+    """A name taken from a column, several features per name: one PACKED layer per
+    name (the points rule) -- never one layer per feature merged member by member,
+    which re-sent the growing group per feature (MAST: 1.8 GB for 6,000 hexes)."""
+    m = Map(show_logo=False)
+    m.add_polygon(
+        {"geometry": ["POLYGON ((-5.31 36.00, -5.30 36.00, -5.30 36.01, -5.31 36.00))",
+                      "POLYGON ((-5.29 36.00, -5.28 36.00, -5.28 36.01, -5.29 36.00))",
+                      "POLYGON ((-5.27 36.00, -5.26 36.00, -5.26 36.01, -5.27 36.00))"],
+         "hub": ["port", "anchorage", "port"], "score": [1, 2, 3]},
+        name="hub", layer_group="Hubs")
+    return m
+
+
+def scenario_polygon_packed_with_hole():
+    """A packed layer where one feature has a hole: per-feature ring tables, null
+    for the simple feature."""
+    m = Map(show_logo=False)
+    m.add_polygon(
+        {"geometry": [WKT_HOLE,
+                      "POLYGON ((-5.0 36.0, -4.9 36.0, -4.9 36.1, -5.0 36.0))"],
+         "zone": ["holed", "plain"]},
+        name="Zones", label="zone")
+    return m
+
+
 def scenario_clustered_points():
     """Clustering flags on the config; the clustering itself is client-side."""
     m = Map(show_logo=False)
@@ -799,6 +825,8 @@ SCENARIOS = [
     scenario_heatmap_time,
     scenario_polygon_fan_color_col,
     scenario_polygon_table_wkt_color_col,
+    scenario_polygon_name_column_packs,
+    scenario_polygon_packed_with_hole,
     scenario_line_arrows_dash,
     scenario_line_arrow_modes,
     scenario_clustered_points,

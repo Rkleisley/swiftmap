@@ -1,6 +1,7 @@
 {
  "buffers": {
-  "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMAAAAAAAABCQGZmZmZmZhTAzczMzMwMQkAAAAAAAAAUwA=="
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMAAAAAAAABCQGZmZmZmZhTAzczMzMwMQkAAAAAAAAAUwA==",
+  "layer_2::offsets": "AAAAAAQAAAA="
  },
  "doc": "A WKT multi-line: one feature with parts.",
  "ops": [
@@ -46,6 +47,13 @@
    }
   },
   {
+   "buffer": "AAAAAAQAAAA=",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -62,16 +70,21 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "id": "layer_2",
      "layer_group": "Line Group",
      "name": "Route",
      "opacity": 1.0,
      "parts": [
-      2,
-      2
+      [
+       2,
+       2
+      ]
      ],
      "properties": {
-      "route": "R1"
+      "route": [
+       "R1"
+      ]
      },
      "type": "polyline",
      "visible": true,
@@ -154,16 +167,21 @@
      ]
     ],
     "color": "#3388ff",
+    "feature_count": 1,
     "id": "layer_2",
     "layer_group": "Line Group",
     "name": "Route",
     "opacity": 1.0,
     "parts": [
-     2,
-     2
+     [
+      2,
+      2
+     ]
     ],
     "properties": {
-     "route": "R1"
+     "route": [
+      "R1"
+     ]
     },
     "type": "polyline",
     "visible": true,

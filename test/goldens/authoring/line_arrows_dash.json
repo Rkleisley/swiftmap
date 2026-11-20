@@ -1,6 +1,7 @@
 {
  "buffers": {
-  "layer_2": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA"
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
+  "layer_2::offsets": "AAAAAAMAAAA="
  },
  "doc": "Direction and pattern decoration on a track.",
  "ops": [
@@ -46,6 +47,13 @@
    }
   },
   {
+   "buffer": "AAAAAAMAAAA=",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -67,6 +75,7 @@
       8.0,
       4.0
      ],
+     "feature_count": 1,
      "id": "layer_2",
      "layer_group": "Line Group",
      "name": "Flow",
@@ -158,6 +167,7 @@
      8.0,
      4.0
     ],
+    "feature_count": 1,
     "id": "layer_2",
     "layer_group": "Line Group",
     "name": "Flow",

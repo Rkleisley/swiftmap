@@ -36,7 +36,7 @@ import { layersBoundsUnion } from "./utils.js";
 import { resolveColormap, dataDrivenColors, dataDrivenRadii,
          dataDrivenLegend, dataDrivenSizeLegend, rgbHex,
          COLORMAPS, DEFAULT_COLORMAP } from "./colormaps.js";
-import { isValidPeriod, normalizeLayerTimes, parseTimestamp } from "./times.js";
+import { isValidPeriod, normalizeLayerTimes, parseTimestamp, detectTimeFields } from "./times.js";
 import { XYZ, ALIASES as BASEMAP_ALIASES, PRESETS, WMS,
          DEFAULT_BASEMAPS, queryKey } from "./basemap-catalog.js";
 import { featuresOf, pointPairsOf, linePartsOf, polygonPartsOf, parseWKT,
@@ -105,36 +105,10 @@ function findColumn(keys, wanted, explicit) {
     return null;
 }
 
-// Points from the three JS-native shapes: [[lat, lon], ...], a column dict
-// ({lat: [...], lon: [...], other: [...]}), or rows of objects. Returns
-// { pairs, properties } with the coordinate columns removed from properties.
-// Python's _SUB_LAYER_ATTRS, verbatim: the keys a merged entry's members carry
-// (everything else describes the entry itself). Held identical by the goldens.
-const SUB_LAYER_ATTRS = new Set([
-    "radius", "color", "fill_color", "fillColor", "fill_opacity", "fillOpacity",
-    "weight", "opacity", "popup_str", "tooltip_str", "properties", "locations",
-    "location", "geojson", "rings", "legend", "legend_size", "label", "labels",
-    "parts", "arrows", "arrow_spacing_px", "arrow_spacing_m", "dash",
-    "cluster", "cluster_radius", "cluster_max_zoom",
-    "added_with", "bounds", "subdomains", "wms", "url", "image_format",
-    "popup_fields", "popup_names", "popup_template", "popup_style",
-    "popup_max_width", "tooltip_fields", "tooltip_names", "tooltip_template",
-    "tooltip_style",
-]);
-const COPY_ATTRS = [...SUB_LAYER_ATTRS, "autobind_popup", "autobind_tooltip"];
-
-function asSubLayer(config) {
-    const sub = {
-        id: config.id,
-        type: config.type,
-        name: config.name || "Sub-layer",
-        visible: config.visible !== undefined ? config.visible : true,
-    };
-    for (const attr of COPY_ATTRS) {
-        const val = config[attr];
-        if (val !== null && val !== undefined) sub[attr] = val;
-    }
-    return sub;
+// A polygon or line layer in the packed format (src/packed.js).
+function isPackedLayer(layer) {
+    return (layer.type === "polygon" || layer.type === "polyline")
+        && Number.isInteger(layer.feature_count);
 }
 
 function isGeometryInput(data) {
@@ -197,6 +171,9 @@ function tabularVectorInput(data, family, label) {
     return { type: "FeatureCollection", features };
 }
 
+// Points from the three JS-native shapes: [[lat, lon], ...], a column dict
+// ({lat: [...], lon: [...], other: [...]}), or rows of objects. Returns
+// { pairs, properties } with the coordinate columns removed from properties.
 function normalizePoints(data, options = {}) {
     const latCol = opt(options, "latCol", "lat_col");
     const lonCol = opt(options, "lonCol", "lon_col");
@@ -415,20 +392,6 @@ export function createMapModel(options = {}) {
         emit({ op: "replace", id: twin.id, layer: group });
     }
 
-    // One fan, one op: a uniform fan's members assemble into a single group
-    // placed once, instead of n incremental merges each re-emitting the whole
-    // group -- Python's add_children_merged, held identical by the goldens.
-    function placeMergedFan(members) {
-        const group = {};
-        for (const [k, v] of Object.entries(members[0])) {
-            if (!SUB_LAYER_ATTRS.has(k) && k !== "id") group[k] = v;
-        }
-        group.type = "group";
-        group.id = nextId();
-        group.layers = members.map(asSubLayer);
-        place(group);
-    }
-
     // Swaps one top-level config, emitting a whole-layer replace -- or the given
     // smaller ops when the change can be said in less (Python's _layers_replace).
     function replaceInState(existing, config, emitOps = null) {
@@ -472,29 +435,6 @@ export function createMapModel(options = {}) {
             const value = opt(options, camel, snake);
             if (value !== undefined) layer[snake] = value;
         }
-    }
-
-    function addLayer(layer, pairs, options, defaultGroup, deferPlace = false) {
-        layer.layer_group = opt(options, "layerGroup", "layer_group", defaultGroup);
-        const multiSelect = opt(options, "multiSelect", "multi_select",
-            opt(options, "groupMultiSelect", "group_multi_select"));
-        ensureGroupConfig(layer.layer_group, multiSelect);
-        radioAdjust(layer);
-        applyDisplayOptions(layer, options);
-        const bounds = boundsOfPairs(pairs);
-        if (bounds) layer.bounds = bounds;
-        buffersSet(layer.id, packPairs(pairs));
-        const { explicit, staticStyle } = popStyleOptions({ ...options, radius: undefined },
-                                                          "addLayer", null);
-        recordAddedWith(layer, options, null, false, {
-            style: explicit, static_style: staticStyle,
-            label: opt(options, "label", "label") ?? null,
-        });
-        // A deferred layer joins a merged fan placed by the caller in one op;
-        // the auto-fit still grows per member, as Python's path grows it.
-        if (!deferPlace) place(layer);
-        autoFitExtend(bounds);
-        return layer;
     }
 
     // What each add was called with, so updateLayer(data=...) re-applies it to
@@ -707,94 +647,189 @@ export function createMapModel(options = {}) {
         return model;
     }
 
-    // WKT strings and GeoJSON route through the feature path: one feature is
-    // one layer (multi-part geometry keeps its parts/rings structure); several
-    // features sharing one literal name merge into ONE sidebar entry, exactly
-    // as Python's adders do -- and a name matching a property key names each
-    // from its own value instead. Fanned layers refuse updateLayer(data=...),
-    // as in Python: siblings share no persistent link.
-    function addVectorFeatures(type, data, options) {
+    // Vector input in both shapes the adders take, as features: raw coordinates are
+    // ONE feature (a polygon ring closed), WKT / GeoJSON / a geometry table one per
+    // feature with its multi-part structure. { feats: [{pairs, table}], columns }, or
+    // null after a warning. `table` is the per-feature ring or part table, null for
+    // a feature that is one ring or one run -- Python's pack_geometry rule.
+    function vectorInput(type, data, label) {
         const family = type === "polyline" ? LINE_GEOMETRY : POLYGON_GEOMETRY;
+        if (!isGeometryInput(data)) {
+            const table = tabularVectorInput(data, family, label);
+            if (table === "warned") return null;
+            if (table) return vectorInput(type, table, label);
+            if (!Array.isArray(data)) {
+                console.warn(`swiftmap: ${label} could not read the supplied data -- `
+                    + "expected coordinates, WKT/GeoJSON, or a table with a WKT "
+                    + "geometry column. No layer was added.");
+                return null;
+            }
+            const pairs = data.map(p => [Number(p[0]), Number(p[1])]);
+            if (type === "polygon" && pairs.length) {
+                const [f, l] = [pairs[0], pairs[pairs.length - 1]];
+                if (f[0] !== l[0] || f[1] !== l[1]) pairs.push([f[0], f[1]]);
+            }
+            return { feats: [{ pairs, table: null }], columns: {} };
+        }
         const partsOf = type === "polyline" ? linePartsOf : polygonPartsOf;
-        const label = type === "polyline" ? "addLine" : "addPolygon";
-        const defaultName = type === "polyline" ? "Line" : "Polygon";
         const features = featuresOf(data)
             .filter(f => f.geometry && family.has(f.geometry.type));
-        if (!features.length) {
-            console.warn(`swiftmap: ${label} found no ${type} geometry in the supplied `
-                + `data. No layer was added.`);
-            return model;
-        }
-        const isMulti = features.length > 1;
-        const baseName = options.name;
-        const nameIsColumn = baseName != null
-            && features.some(f => baseName in f.properties);
         const keys = [...new Set(features.flatMap(f => Object.keys(f.properties)))];
         const columns = Object.fromEntries(
             keys.map(k => [k, features.map(f => f.properties[k] ?? null)]));
-        const { explicit, staticStyle } = popStyleOptions(options, label, type);
+        const feats = features.map(feature => {
+            const parts = partsOf(feature.geometry);
+            if (type === "polyline") {
+                return { pairs: parts.flat(),
+                         table: parts.length > 1 ? parts.map(p => p.length) : null };
+            }
+            const plain = parts.length === 1 && parts[0].length === 1;
+            return { pairs: parts.flat(2),
+                     table: plain ? null : parts.map(part => part.map(r => r.length)) };
+        });
+        return { feats, columns };
+    }
+
+    // feats[indices] packed: every feature's coordinates one after another, the
+    // n + 1 vertex offsets that split them, the per-feature tables (null when no
+    // feature needs one) and the bounds -- Python's pack_geometry, byte for byte.
+    function packFeatures(feats, indices) {
+        let total = 0;
+        for (const i of indices) total += feats[i].pairs.length;
+        const flat = new Float64Array(total * 2);
+        const offsets = new Uint32Array(indices.length + 1);
+        let at = 0;
+        indices.forEach((i, k) => {
+            for (const [lat, lon] of feats[i].pairs) {
+                flat[at * 2] = lat;
+                flat[at * 2 + 1] = lon;
+                at++;
+            }
+            offsets[k + 1] = at;
+        });
+        const tables = indices.map(i => feats[i].table);
+        let bounds = null;
+        if (total) {
+            let minLat = Infinity, minLon = Infinity, maxLat = -Infinity, maxLon = -Infinity;
+            for (let v = 0; v < total; v++) {
+                const lat = flat[v * 2], lon = flat[v * 2 + 1];
+                if (lat < minLat) minLat = lat;
+                if (lat > maxLat) maxLat = lat;
+                if (lon < minLon) minLon = lon;
+                if (lon > maxLon) maxLon = lon;
+            }
+            bounds = [[minLat, minLon], [maxLat, maxLon]];
+        }
+        return { coords: new DataView(flat.buffer), offsets,
+                 tables: tables.some(t => t != null) ? tables : null, bounds };
+    }
+
+    // Columnar properties for feats[indices], `properties` constants as columns.
+    function subsetColumns(columns, indices, constants) {
+        const out = {};
+        for (const [k, v] of Object.entries(columns)) out[k] = indices.map(i => v[i]);
+        for (const [k, v] of Object.entries(constants || {})) out[k] = indices.map(() => v);
+        return out;
+    }
+
+    function rowsOf(colors, indices) {
+        const out = new Uint8Array(indices.length * 4);
+        indices.forEach((src, dst) => out.set(colors.subarray(src * 4, src * 4 + 4), dst * 4));
+        return out;
+    }
+
+    // One PACKED layer per (folder, name) -- Python's layers/_packed.py and the rule
+    // points follow, held identical by the goldens. A literal name is every feature
+    // in one layer: one add, three buffers. A name or folder from a column splits
+    // by its values; with no name, a feature's own "name" property names it.
+    function addPackedVectors(type, data, options) {
+        const method = type === "polyline" ? "addLine" : "addPolygon";
+        const defaultName = type === "polyline" ? "Line" : "Polygon";
+        const parsed = vectorInput(type, data, method);
+        if (!parsed) return model;
+        const { feats, columns } = parsed;
+        const n = feats.length;
+        if (!n) {
+            console.warn(`swiftmap: ${method} found no ${type} geometry in the supplied `
+                + `data. No layer was added.`);
+            return model;
+        }
+        const { explicit, staticStyle } = popStyleOptions(options, method, type);
         const { layerStyle, featureStyles } = resolveStyles(
-            explicit, staticStyle, columns, features.length, STYLE_DEFAULTS[type]);
-        // color_col ramps the fan exactly as Python's builders do: polygons
-        // take BOTH the fill and the stroke (zoomed out a polygon is mostly
-        // border, and a uniform stroke over ramped fills hid the classes);
-        // an EXPLICIT color= keeps the uniform-border choropleth look. Lines
-        // take the stroke, and every fanned layer carries the one shared
-        // legend block. Dropped silently before (React round-8 Q): the map
-        // rendered, every feature just came out default blue.
+            explicit, staticStyle, columns, n, STYLE_DEFAULTS[type]);
+        // color_col: a polygon's fill AND stroke (zoomed out a polygon is mostly
+        // border) unless an EXPLICIT color= keeps the uniform-border look; a
+        // line's colour. Colours ride ::colors, the legend once on the layer.
         const dataOpts = dataOptsOf(options);
         const fallbackColor = layerStyle.color || STYLE_DEFAULTS[type].color;
-        const dataColors = dataDrivenColors(columns, dataOpts, fallbackColor, label);
-        const dataLegend = dataDrivenLegend(columns, dataOpts, fallbackColor);
+        const colors = dataDrivenColors(columns, dataOpts, fallbackColor, method);
+        const legend = dataDrivenLegend(columns, dataOpts, fallbackColor);
         const labelOpt = opt(options, "label", "label") ?? null;
         const deco = type === "polyline" ? lineDecoOptions(options) : {};
-        // A uniform fan (one literal name for every feature) assembles into a
-        // single merged entry placed once -- Python's add_children_merged.
-        const uniform = !nameIsColumn && features.length > 1;
-        const fanned = [];
-        features.forEach((feature, i) => {
-            // A literal name is shared by the whole fan, so the merge machinery
-            // collapses it into ONE sidebar entry -- Python's rule exactly; a
-            // name column is how per-feature names are asked for.
-            const name = nameIsColumn ? String(feature.properties[baseName])
-                : (baseName ?? defaultName);
-            const props = Object.fromEntries(keys.map(k => [k, feature.properties[k] ?? null]));
-            Object.assign(props, options.properties || {});
+
+        const specs = buildGroupSpecs(opt(options, "layerGroup", "layer_group"), columns);
+        const baseName = options.name;
+        const hasColumns = Object.keys(columns).length > 0;
+        const nameIsColumn = baseName != null && hasColumns && baseName in columns;
+        const perFeatureName = nameIsColumn || (!baseName && "name" in columns);
+        const defaultGroup = `${defaultName} Group`;
+        const staticPath = staticGroupPath(specs, defaultGroup);
+        const fanned = nameIsColumn || specs.some(([, isColumn]) => isColumn);
+        const groups = new Map();
+        if (staticPath !== null && !perFeatureName) {
+            groups.set("", { path: staticPath, name: baseName || defaultName,
+                             indices: feats.map((_, i) => i) });
+        } else {
+            for (let i = 0; i < n; i++) {
+                const path = staticPath !== null ? staticPath
+                    : resolveGroupPath(specs, columns, i, defaultGroup);
+                const name = nameIsColumn ? String(columns[baseName][i])
+                    : baseName ? baseName
+                    : ("name" in columns ? String(columns.name[i]) : defaultName);
+                const key = `${path}\u0000${name}`;
+                if (!groups.has(key)) groups.set(key, { path, name, indices: [] });
+                groups.get(key).indices.push(i);
+            }
+        }
+
+        const multiSelect = opt(options, "multiSelect", "multi_select",
+            opt(options, "groupMultiSelect", "group_multi_select"));
+        for (const { path, name, indices } of groups.values()) {
+            const { coords, offsets, tables, bounds } = packFeatures(feats, indices);
             const layer = {
-                id: nextId(), type, name,
+                id: nextId(), type, name, layer_group: path,
                 visible: options.visible !== undefined ? options.visible : true,
+                feature_count: indices.length,
                 ...deco,
                 autobind_popup: true, autobind_tooltip: true,
-                ...(featureStyles ? featureStyles[i] : layerStyle),
-                properties: props,
+                ...layerStyle,
+                properties: subsetColumns(columns, indices, options.properties),
             };
-            if (dataColors) {
-                const hex = rgbHex(dataColors.subarray(i * 4, i * 4 + 4));
-                if (type === "polygon") {
-                    layer.fillColor = hex;
-                    if (!("color" in explicit)) layer.color = hex;
-                } else {
-                    layer.color = hex;
-                }
+            if (tables) layer[type === "polyline" ? "parts" : "rings"] = tables;
+            if (featureStyles) layer.feature_styles = indices.map(i => featureStyles[i]);
+            if (colors && type === "polygon" && !("color" in explicit)) {
+                layer.color_col_stroke = true;
             }
-            if (dataLegend) layer.legend = dataLegend;
-            const featureLabel = resolveFeatureLabel(labelOpt, columns, i);
-            if (featureLabel != null) layer.label = featureLabel;
-            const parts = partsOf(feature.geometry);
-            let flat;
-            if (type === "polyline") {
-                flat = parts.flat();
-                if (parts.length > 1) layer.parts = parts.map(p => p.length);
-            } else {
-                flat = parts.flat(2);
-                const plain = parts.length === 1 && parts[0].length === 1;
-                if (!plain) layer.rings = parts.map(part => part.map(r => r.length));
+            if (legend) layer.legend = legend;
+            if (labelOpt != null) {
+                layer.labels = indices.map(i => resolveFeatureLabel(labelOpt, columns, i));
             }
-            addLayer(layer, flat, options, `${defaultName} Group`, uniform);
-            recordAddedWith(layer, options, null, isMulti || nameIsColumn);
-            if (uniform) fanned.push(layer);
-        });
-        if (uniform) placeMergedFan(fanned);
+            ensureGroupConfig(path, multiSelect);
+            radioAdjust(layer);
+            applyDisplayOptions(layer, options);
+            if (bounds) layer.bounds = bounds;
+            buffersSet(layer.id, coords);
+            buffersSet(`${layer.id}::offsets`, new DataView(offsets.buffer));
+            if (colors) {
+                const sub = rowsOf(colors, indices);
+                buffersSet(`${layer.id}::colors`, new DataView(sub.buffer));
+            }
+            recordAddedWith(layer, options, method, fanned, {
+                style: explicit, static_style: staticStyle, label: labelOpt,
+            });
+            place(layer);
+            autoFitExtend(bounds);
+        }
         return model;
     }
 
@@ -880,65 +915,11 @@ export function createMapModel(options = {}) {
     }
 
     function addLine(coords, options = {}) {
-        if (isGeometryInput(coords)) return addVectorFeatures("polyline", coords, options);
-        const table = tabularVectorInput(coords, LINE_GEOMETRY, "addLine");
-        if (table === "warned") return model;
-        if (table) return addVectorFeatures("polyline", table, options);
-        if (!Array.isArray(coords)) {
-            console.warn("swiftmap: addLine could not read the supplied data -- "
-                + "expected coordinates, WKT/GeoJSON, or a table with a WKT "
-                + "geometry column. No layer was added.");
-            return model;
-        }
-        const pairs = coords.map(p => [Number(p[0]), Number(p[1])]);
-        const deco = lineDecoOptions(options);
-        const { explicit, staticStyle } = popStyleOptions(options, "addLine", "polyline");
-        const { layerStyle } = resolveStyles(explicit, staticStyle, {}, 1,
-                                             STYLE_DEFAULTS.polyline);
-        const layer = {
-            id: nextId(), type: "polyline",
-            name: options.name || "Line",
-            visible: options.visible !== undefined ? options.visible : true,
-            ...deco,
-            autobind_popup: true, autobind_tooltip: true,
-            ...layerStyle,
-            properties: options.properties || {},
-        };
-        const label = resolveFeatureLabel(opt(options, "label", "label") ?? null, {}, 0);
-        if (label != null) layer.label = label;
-        addLayer(layer, pairs, options, "Line Group");
-        return model;
+        return addPackedVectors("polyline", coords, options);
     }
 
     function addPolygon(coords, options = {}) {
-        if (isGeometryInput(coords)) return addVectorFeatures("polygon", coords, options);
-        const table = tabularVectorInput(coords, POLYGON_GEOMETRY, "addPolygon");
-        if (table === "warned") return model;
-        if (table) return addVectorFeatures("polygon", table, options);
-        if (!Array.isArray(coords)) {
-            console.warn("swiftmap: addPolygon could not read the supplied data -- "
-                + "expected coordinates, WKT/GeoJSON, or a table with a WKT "
-                + "geometry column. No layer was added.");
-            return model;
-        }
-        const ring = coords.map(p => [Number(p[0]), Number(p[1])]);
-        const [f, l] = [ring[0], ring[ring.length - 1]];
-        if (f && (f[0] !== l[0] || f[1] !== l[1])) ring.push([f[0], f[1]]);
-        const { explicit, staticStyle } = popStyleOptions(options, "addPolygon", "polygon");
-        const { layerStyle } = resolveStyles(explicit, staticStyle, {}, 1,
-                                             STYLE_DEFAULTS.polygon);
-        const layer = {
-            id: nextId(), type: "polygon",
-            name: options.name || "Polygon",
-            visible: options.visible !== undefined ? options.visible : true,
-            autobind_popup: true, autobind_tooltip: true,
-            ...layerStyle,
-            properties: options.properties || {},
-        };
-        const label = resolveFeatureLabel(opt(options, "label", "label") ?? null, {}, 0);
-        if (label != null) layer.label = label;
-        addLayer(layer, ring, options, "Polygon Group");
-        return model;
+        return addPackedVectors("polygon", coords, options);
     }
 
     // A mixed collection: one layer per geometry kind present, all sharing the
@@ -1431,8 +1412,9 @@ export function createMapModel(options = {}) {
                 console.warn(`swiftmap: makeTimeLayer: end field '${timeEndField}' is not a `
                     + `property of layer '${layer.name}'; using start times only.`);
             }
-            const { interleaved, field, timeless } =
-                normalizeLayerTimes(props, timeField, timeEndField);
+            const { interleaved, field, timeless } = isPackedLayer(layer)
+                ? packedTimes(props, timeField, timeEndField, vertexCountsOf(layer))
+                : normalizeLayerTimes(props, timeField, timeEndField);
             if (interleaved == null) {
                 console.warn(`swiftmap: makeTimeLayer: layer '${layer.name}' has no time `
                     + `property. Pass timeField naming one; its features stay visible at `
@@ -1561,6 +1543,62 @@ export function createMapModel(options = {}) {
         }
         if (Object.keys(opts).length) state.time_config = { ...state.time_config, ...opts };
         return model;
+    }
+
+    // Each feature's vertex count, from the layer's ::offsets buffer.
+    function vertexCountsOf(layer) {
+        const raw = buffers[`${layer.id}::offsets`];
+        const n = layer.feature_count;
+        if (raw && raw.byteLength === 4 * (n + 1)) {
+            const out = [];
+            for (let i = 0; i < n; i++) {
+                out.push(raw.getUint32((i + 1) * 4, true) - raw.getUint32(i * 4, true));
+            }
+            return out;
+        }
+        const coords = buffers[layer.id];
+        return [coords ? coords.byteLength / 16 : 0];
+    }
+
+    // A packed layer's times, Python's packed_times exactly: one [start, end] per
+    // feature, or -- when any feature carries a per-vertex run (a track ordered by
+    // time) -- one per VERTEX across the layer, a single-time feature repeating
+    // its pair over its own vertices.
+    function packedTimes(props, timeField, timeEndField, counts) {
+        let startField = timeField, endField = timeEndField;
+        if (!startField) {
+            const [detected, detectedEnd] = detectTimeFields(props);
+            startField = detected;
+            endField = timeEndField || detectedEnd;
+        }
+        const column = startField ? props[startField] : undefined;
+        const isRun = (v) => Array.isArray(v)
+            && !(startField === "times" && v.length === 2 && !Array.isArray(v[0]));
+        if (!(Array.isArray(column) && column.some(isRun))) {
+            return normalizeLayerTimes(props, timeField, timeEndField);
+        }
+        const total = counts.reduce((a, b) => a + b, 0);
+        const out = new Float64Array(total * 2);
+        let at = 0, timeless = 0, described = null;
+        counts.forEach((need, i) => {
+            const sub = { [startField]: i < column.length ? column[i] : null };
+            if (endField && Array.isArray(props[endField])) sub[endField] = props[endField][i];
+            const r = normalizeLayerTimes(sub, startField, endField in sub ? endField : null);
+            described = described || r.field;
+            const arr = r.interleaved;
+            if (arr && arr.length === 2 * need) {
+                out.set(arr, at);
+                timeless += r.timeless;
+            } else if (arr && arr.length === 2) {
+                for (let v = 0; v < need; v++) out.set(arr, at + v * 2);
+                if (Number.isNaN(arr[0])) timeless += need;
+            } else {
+                out.fill(NaN, at, at + 2 * need);
+                timeless += need;
+            }
+            at += 2 * need;
+        });
+        return { interleaved: out, field: described || startField, timeless };
     }
 
     // Re-normalises a time layer's ::times from new properties with the same
@@ -1906,12 +1944,14 @@ export function createMapModel(options = {}) {
                 return updatePoints(target, data, append, parser, rest);
             }
             if (append) {
-                console.warn(`swiftmap: updateLayer: append=true on '${target.name}', a single `
-                    + `${target.type}. Pass data without append to replace it. Nothing changed.`);
+                console.warn(`swiftmap: updateLayer: append=true on '${target.name}', a `
+                    + `${target.type} layer: appending features to a polygon or line layer `
+                    + `is not supported yet. Pass data without append to replace them. `
+                    + `Nothing changed.`);
                 return model;
             }
             if (target.type === "polyline" || target.type === "polygon") {
-                return updateSingle(target, data, rest);
+                return updatePacked(target, data, rest);
             }
             console.warn(`swiftmap: updateLayer: data applies to point, line and polygon layers; `
                 + `'${target.name}' is a ${target.type} layer. Nothing changed.`);
@@ -2064,32 +2104,81 @@ export function createMapModel(options = {}) {
         return model;
     }
 
-    function updateSingle(layer, data, fieldKwargs) {
+    // A packed polygon or line layer's features replaced in place -- Python's
+    // _update_packed: same id, name, folder, visibility, time and highlight; new
+    // buffers, columns and per-feature tables, any number of features.
+    function updatePacked(layer, data, fieldKwargs) {
         const rec = addedWith.get(layer.id) || {};
         if (rec.fanned) {
-            console.warn(`swiftmap: updateLayer: '${layer.name}' was fanned out from `
-                + `several features -- one of several sibling layers with no persistent `
-                + `link. Update a flat layer, or remove and re-add the set. Nothing changed.`);
+            console.warn(`swiftmap: updateLayer: '${layer.name}' was fanned out from a `
+                + `column -- one of several sibling layers with no persistent link. `
+                + `Update a flat layer, or remove and re-add the set. Nothing changed.`);
             return model;
         }
-        const pairs = data.map(p => [Number(p[0]), Number(p[1])]);
-        if (layer.type === "polygon" && pairs.length) {
-            const [f, l] = [pairs[0], pairs[pairs.length - 1]];
-            if (f[0] !== l[0] || f[1] !== l[1]) pairs.push([f[0], f[1]]);
+        const type = layer.type;
+        const parsed = vectorInput(type, data, "updateLayer");
+        if (!parsed) return model;
+        const { feats, columns } = parsed;
+        const n = feats.length;
+        if (!n) {
+            console.warn(`swiftmap: updateLayer found no ${type === "polyline" ? "line" : "polygon"} `
+                + `geometry in the supplied data for '${layer.name}'. Nothing changed.`);
+            return model;
         }
-        const bounds = boundsOfPairs(pairs);
-        const config = { ...layer, properties: { ...(rec.properties || {}) }, bounds };
-        delete config.parts;
-        delete config.rings;
-        const label = rec.label != null ? resolveFeatureLabel(rec.label, {}, 0) : null;
-        if (label != null) config.label = label;
-        else delete config.label;
+        const indices = feats.map((_, i) => i);
+        const explicit = rec.style || {};
+        const { featureStyles } = resolveStyles(explicit, rec.static_style || {}, columns, n,
+                                                STYLE_DEFAULTS[type]);
+        const dataOpts = rec.data_opts || dataOptsOf({});
+        const fallback = layer.color || STYLE_DEFAULTS[type].color;
+        const colors = dataDrivenColors(columns, dataOpts, fallback, "updateLayer");
+        const legend = dataDrivenLegend(columns, dataOpts, fallback);
+        const { coords, offsets, tables, bounds } = packFeatures(feats, indices);
+        const props = subsetColumns(columns, indices, rec.properties);
+        const labels = rec.label != null
+            ? indices.map(i => resolveFeatureLabel(rec.label, columns, i)) : null;
+        const hadOverrides = layer.style_overrides
+            && Object.keys(layer.style_overrides).length;
+        if (hadOverrides) {
+            console.warn(`swiftmap: updateLayer: '${layer.name}' had per-feature style `
+                + `overrides (setFeatureStyles). Feature indices do not survive a data `
+                + `replace, so they were cleared.`);
+        }
         let timesPayload = null, dropTime = false;
-        if (layer.time) ({ payload: timesPayload, dropTime, props: config.properties } = retime(layer, config.properties));
-        if (dropTime) config.time = null;
-        Object.assign(config, fieldKwargs);
-        buffersSet(layer.id, packPairs(pairs));
+        if (layer.time) {
+            const desc = String(layer.time.field || "");
+            const [startField, endField] = desc ? desc.split("/", 2) : [null, null];
+            const counts = [];
+            for (let i = 0; i < n; i++) counts.push(offsets[i + 1] - offsets[i]);
+            const { interleaved } = packedTimes(props, startField || null, endField || null,
+                                                counts);
+            if (interleaved == null) {
+                console.warn(`swiftmap: updateLayer: the new data for '${layer.name}' has no `
+                    + `'${desc}' time property; the layer stops animating.`);
+                dropTime = true;
+            } else {
+                timesPayload = new Uint8Array(interleaved.buffer);
+            }
+        }
+
+        buffersSet(layer.id, coords);
+        setOrRemoveBuffer(`${layer.id}::offsets`, offsets);
+        setOrRemoveBuffer(`${layer.id}::colors`, colors);
         if (layer.time) setOrRemoveBuffer(`${layer.id}::times`, timesPayload);
+
+        const config = { ...layer, feature_count: n, properties: props, bounds };
+        const put = (key, value) => {
+            if (value) config[key] = value;
+            else delete config[key];
+        };
+        put(type === "polyline" ? "parts" : "rings", tables);
+        put("legend", legend);
+        put("labels", labels);
+        put("feature_styles", featureStyles);
+        if (type === "polygon") put("color_col_stroke", Boolean(colors) && !("color" in explicit));
+        if (dropTime) config.time = null;
+        if (hadOverrides) config.style_overrides = {};
+        Object.assign(config, fieldKwargs);
         replaceInState(layer, config);
         autoFitExtend(bounds);
         return model;

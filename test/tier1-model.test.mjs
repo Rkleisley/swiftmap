@@ -55,6 +55,20 @@ const SCENARIOS = {
           count: [3, 9] },
         { name: "Cells", colorCol: "count" }),
 
+    polygon_name_column_packs: () => createMapModel().addPolygon(
+        { geometry: ["POLYGON ((-5.31 36.00, -5.30 36.00, -5.30 36.01, -5.31 36.00))",
+                     "POLYGON ((-5.29 36.00, -5.28 36.00, -5.28 36.01, -5.29 36.00))",
+                     "POLYGON ((-5.27 36.00, -5.26 36.00, -5.26 36.01, -5.27 36.00))"],
+          hub: ["port", "anchorage", "port"], score: [1, 2, 3] },
+        { name: "hub", layerGroup: "Hubs" }),
+
+    polygon_packed_with_hole: () => createMapModel().addPolygon(
+        { geometry: ["POLYGON ((-5.3 36.0, -5.1 36.0, -5.1 36.2, -5.3 36.2, -5.3 36.0), "
+                     + "(-5.25 36.05, -5.15 36.05, -5.15 36.15, -5.25 36.05))",
+                     "POLYGON ((-5.0 36.0, -4.9 36.0, -4.9 36.1, -5.0 36.0))"],
+          zone: ["holed", "plain"] },
+        { name: "Zones", label: "zone" }),
+
     clustered_points: () => createMapModel().addCircleMarkers(
         { lat: [36.01, 36.011, 36.4], lon: [-5.31, -5.311, -5.0] },
         { name: "Sites", cluster: true, clusterRadius: 50, clusterMaxZoom: 15 }),
@@ -680,17 +694,19 @@ test("a table through the vector builders never throws (round-8 R)", () => {
         // Not a table, not coordinates: warn and add nothing.
         m.addLine(42);
         assert.equal(m.props().layers.length, before);
-        // A row-array table with a WKT column works, ramp and all -- the fan
-        // merging into ONE sidebar entry holding both cells.
+        // A row-array table with a WKT column works, ramp and all -- both cells
+        // in ONE packed layer, coloured per feature, one legend.
         m.addPolygon([
             { wkt: "POLYGON ((-5.31 36.00, -5.30 36.00, -5.30 36.01, -5.31 36.00))", v: 1 },
             { wkt: "POLYGON ((-5.29 36.00, -5.28 36.00, -5.28 36.01, -5.29 36.00))", v: 9 },
         ], { name: "Cells", colorCol: "v" });
-        const entry = m.props().layers.find(l => l.name === "Cells");
-        assert.equal(entry.type, "group", "a uniform fan is one merged entry");
-        assert.equal(entry.layers.length, 2);
-        assert.ok(entry.layers.every(l => l.fillColor && l.legend),
-            "row tables reach the same fan, fill and legend as columnar ones");
+        const props = m.props();
+        const entry = props.layers.find(l => l.name === "Cells");
+        assert.equal(entry.type, "polygon", "one packed layer");
+        assert.equal(entry.feature_count, 2);
+        assert.ok(entry.legend, "the legend rides the layer once");
+        assert.equal(props.buffers[`${entry.id}::colors`].byteLength, 8,
+            "row tables reach the same per-feature colours as columnar ones");
     } finally {
         console.warn = original;
     }

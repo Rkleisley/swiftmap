@@ -1,7 +1,8 @@
 {
  "buffers": {
   "layer_2": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
-  "layer_3": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA="
+  "layer_3": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
+  "layer_3::offsets": "AAAAAAIAAAA="
  },
  "doc": "hide by name, then by target, then show: targeted set ops, never the trait.",
  "ops": [
@@ -86,6 +87,13 @@
    }
   },
   {
+   "buffer": "AAAAAAIAAAA=",
+   "op": {
+    "id": "layer_3::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -102,6 +110,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "id": "layer_3",
      "layer_group": "Line Group",
      "name": "Track",
@@ -247,6 +256,7 @@
      ]
     ],
     "color": "#3388ff",
+    "feature_count": 1,
     "id": "layer_3",
     "layer_group": "Line Group",
     "name": "Track",

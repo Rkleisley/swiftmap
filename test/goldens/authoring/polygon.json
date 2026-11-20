@@ -1,6 +1,7 @@
 {
  "buffers": {
-  "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMDNzMzMzAxCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA=="
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMDNzMzMzAxCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA==",
+  "layer_2::offsets": "AAAAAAQAAAA="
  },
  "doc": "A plain ring.",
  "ops": [
@@ -46,6 +47,13 @@
    }
   },
   {
+   "buffer": "AAAAAAQAAAA=",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -62,6 +70,7 @@
       ]
      ],
      "color": "#ff0000",
+     "feature_count": 1,
      "fillColor": "#00ff00",
      "fillOpacity": 0.5,
      "id": "layer_2",
@@ -150,6 +159,7 @@
      ]
     ],
     "color": "#ff0000",
+    "feature_count": 1,
     "fillColor": "#00ff00",
     "fillOpacity": 0.5,
     "id": "layer_2",

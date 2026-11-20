@@ -72,6 +72,11 @@ _SUB_LAYER_ATTRS = (
     "subdomains", "wms",
     # Read by the frontend's image-overlay renderer.
     "url", "image_format",
+    # A packed polygon or line layer's own tables (src/packed.js): dropped at merge,
+    # a member would read its many features as one, and its per-feature styles and
+    # stroke rule would vanish. feature_styles was missing for points too -- a
+    # style-column point layer merged under a shared name lost its styling.
+    "feature_count", "feature_styles", "color_col_stroke",
 ) + DISPLAY_KEYS
 
 # Same set, plus the flags that are carried down but not stripped from the group.
@@ -92,39 +97,6 @@ def _as_sub_layer(config: Any) -> dict:
             sub_layer[attr] = val
     return sub_layer
 
-
-def add_children_merged(self, children: list) -> "Map":
-    """
-    One fan, one op: several same-(name, group) configs land as a single merged
-    entry, assembled here and placed through the ordinary add_child.
-
-    The incremental path re-emits the whole group per member joining, so a
-    20k-feature fan cost O(n^2) on the wire and in CPU -- exactly the
-    message-scales-with-accumulated-data failure the transport exists to avoid.
-    Assembling first makes it one add (or one replace, when an earlier call
-    already holds the name), with add_child still owning every normalisation:
-    group configs, radio units, the merge index, auto-fit.
-    """
-    if len(children) == 1:
-        return self.add_child(children[0])
-    for child in children:
-        if isinstance(child.get("properties"), dict):
-            child["properties"] = {
-                str(k): _json_safe(v) for k, v in child["properties"].items()
-            }
-    first = children[0]
-    group = {k: v for k, v in first.items()
-             if k not in _SUB_LAYER_ATTRS and k != "id"}
-    group["type"] = "group"
-    group["id"] = f"layer_{self._layer_counter}"
-    self._layer_counter += 1
-    group["layers"] = [_as_sub_layer(LayerConfig(**c)) for c in children]
-    self.add_child(group)
-    # The group itself carries no bounds (bounds is a member attribute), so the
-    # auto-fit union grows per member, exactly as the incremental path grew it.
-    for child in children:
-        self._auto_fit_extend(child)
-    return self
 
 def add_child(self, child: Any, name: Optional[str] = None, layer_group: Optional[str] = None, group_multi_select: Optional[bool] = None) -> "Map":
     """Adds a layer or configuration metadata config directly to the map's layers list."""

@@ -256,8 +256,10 @@ def test_a_lost_time_property_stops_the_animation_honestly():
     assert f"{lid}::times" not in m.coordinate_buffers
 
 
-# --- single lines and polygons ----------------------------------------------------------
-def test_a_single_line_replaces_in_place():
+# --- packed lines and polygons ----------------------------------------------------------
+# Every add_line / add_polygon result is one packed layer (layers/_packed.py), so a data
+# update replaces ALL its features in place: same id, new buffers and columns.
+def test_a_line_layer_replaces_in_place():
     m = quiet_map()
     m.add_line(pd.DataFrame({"geometry": ["LINESTRING (-5.3 36.0, -5.2 36.1)"]}), name="Route")
     lid = m.find_layers("Route")[0]["id"]
@@ -265,27 +267,77 @@ def test_a_single_line_replaces_in_place():
         {"geometry": ["MULTILINESTRING ((-5.4 36.0, -5.3 36.0), (-5.2 36.1, -5.1 36.1))"]}))
     layer = m.find_layers("Route")[0]
     assert layer["id"] == lid
-    assert layer["parts"] == [2, 2]
+    assert layer["feature_count"] == 1
+    assert layer["parts"] == [[2, 2]]
     assert coords_of(m, layer).shape == (4, 2)
 
 
-def test_append_on_a_single_line_warns():
+def test_append_on_a_line_layer_warns():
     m = quiet_map()
     m.add_line(pd.DataFrame({"geometry": ["LINESTRING (-5.3 36.0, -5.2 36.1)"]}), name="Route")
     before = _snapshot(m)
-    with pytest.warns(SwiftMapWarning, match="nothing to append"):
+    with pytest.warns(SwiftMapWarning, match="not supported yet"):
         m.update_layer("Route", data=pd.DataFrame(
             {"geometry": ["LINESTRING (-5.1 36.2, -5.0 36.3)"]}), append=True)
     assert _snapshot(m) == before
 
 
-def test_many_features_for_a_single_layer_warns():
+def test_a_line_layer_takes_any_number_of_features_on_update():
+    # A layer used to BE one feature, so two lines for it were refused. Packed, the
+    # layer holds whatever the new data holds.
     m = quiet_map()
     m.add_line(pd.DataFrame({"geometry": ["LINESTRING (-5.3 36.0, -5.2 36.1)"]}), name="Route")
-    with pytest.warns(SwiftMapWarning, match="holds 2 lines"):
-        m.update_layer("Route", data=pd.DataFrame(
-            {"geometry": ["LINESTRING (-5.3 36.0, -5.2 36.1)",
-                          "LINESTRING (-5.1 36.2, -5.0 36.3)"]}))
+    lid = m.find_layers("Route")[0]["id"]
+    m.update_layer("Route", data=pd.DataFrame(
+        {"geometry": ["LINESTRING (-5.3 36.0, -5.2 36.1)",
+                      "LINESTRING (-5.1 36.2, -5.0 36.3, -4.9 36.4)"]}))
+    layer = m.find_layers("Route")[0]
+    assert layer["id"] == lid and layer["feature_count"] == 2
+    offsets = np.frombuffer(m.coordinate_buffers[f"{lid}::offsets"], dtype=np.uint32)
+    assert offsets.tolist() == [0, 2, 5]
+
+
+def test_a_literal_name_polygon_set_updates_in_place():
+    # The case 0.7.0 opens: a literal-name set was "fanned" across one layer per
+    # feature and update_layer declined it. Now it is one layer, re-applied whole.
+    h3 = pytest.importorskip("h3")
+    cells = sorted(h3.grid_disk(h3.latlng_to_cell(36.13, -5.44, 8), 1))
+    m = quiet_map()
+    m.add_polygon(pd.DataFrame({"cell": cells[:3], "count": [1, 2, 3]}),
+                  geohash_col="cell", name="Density", color_col="count")
+    layer = m.find_layers("Density")[0]
+    lid = layer["id"]
+    assert layer["added_with"]["fanned"] is False
+    m.update_layer("Density", data=pd.DataFrame({"cell": cells, "count": range(7)}))
+    layer = m.find_layers("Density")[0]
+    assert layer["id"] == lid and layer["feature_count"] == 7
+    assert layer["properties"]["count"] == list(range(7))
+    assert len(m.coordinate_buffers[f"{lid}::colors"]) == 7 * 4, "colours redone per feature"
+    assert layer["color_col_stroke"] is True
+
+
+def test_a_column_named_set_still_declines():
+    m = quiet_map()
+    df = pd.DataFrame({"zone": ["A", "B"],
+                       "wkt": ["POLYGON ((0 0, 1 0, 1 1, 0 0))", "POLYGON ((5 5, 6 5, 6 6, 5 5))"]})
+    m.add_polygon(df, name="zone")
+    before = _snapshot(m)
+    with pytest.warns(SwiftMapWarning, match="fanned out from a column"):
+        m.update_layer("A", data=df)
+    assert _snapshot(m) == before
+
+
+def test_a_timed_polygon_set_keeps_animating_across_an_update():
+    m = quiet_map()
+    df = pd.DataFrame({"wkt": ["POLYGON ((0 0, 1 0, 1 1, 0 0))", "POLYGON ((5 5, 6 5, 6 6, 5 5))"],
+                       "t": ["2026-01-01", "2026-01-03"]})
+    m.add_polygon(df, name="Zones")
+    m.make_time_layer("Zones", time_field="t")
+    lid = m.find_layers("Zones")[0]["id"]
+    m.update_layer("Zones", data=df.assign(t=["2026-01-02", "2026-01-05"]))
+    times = np.frombuffer(m.coordinate_buffers[f"{lid}::times"], dtype=np.float64)
+    assert len(times) == 4, "one [start, end] pair per feature"
+    assert times[0] == pd.Timestamp("2026-01-02").value // 10**6
 
 
 # --- transport --------------------------------------------------------------------------

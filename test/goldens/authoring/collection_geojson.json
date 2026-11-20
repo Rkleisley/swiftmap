@@ -2,7 +2,9 @@
  "buffers": {
   "layer_2": "AAAAAAAAQkAzMzMzMzMVwA==",
   "layer_3": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMA=",
-  "layer_5": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMDNzMzMzAxCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA=="
+  "layer_3::offsets": "AAAAAAIAAAA=",
+  "layer_5": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMDNzMzMzAxCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA==",
+  "layer_5::offsets": "AAAAAAQAAAA="
  },
  "doc": "A mixed FeatureCollection: one layer per kind, merged into one entry.",
  "ops": [
@@ -91,6 +93,13 @@
    }
   },
   {
+   "buffer": "AAAAAAIAAAA=",
+   "op": {
+    "id": "layer_3::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "id": "layer_2",
@@ -143,11 +152,14 @@
         ]
        ],
        "color": "#3388ff",
+       "feature_count": 1,
        "id": "layer_3",
        "name": "Survey",
        "opacity": 1.0,
        "properties": {
-        "site": "B"
+        "site": [
+         "B"
+        ]
        },
        "type": "polyline",
        "visible": true,
@@ -165,6 +177,13 @@
    "buffer": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMDNzMzMzAxCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA==",
    "op": {
     "id": "layer_5",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": "AAAAAAQAAAA=",
+   "op": {
+    "id": "layer_5::offsets",
     "op": "buffer"
    }
   },
@@ -221,11 +240,14 @@
         ]
        ],
        "color": "#3388ff",
+       "feature_count": 1,
        "id": "layer_3",
        "name": "Survey",
        "opacity": 1.0,
        "properties": {
-        "site": "B"
+        "site": [
+         "B"
+        ]
        },
        "type": "polyline",
        "visible": true,
@@ -245,12 +267,15 @@
         ]
        ],
        "color": "#3388ff",
+       "feature_count": 1,
        "fillOpacity": 0.2,
        "id": "layer_5",
        "name": "Survey",
        "opacity": 1.0,
        "properties": {
-        "site": "C"
+        "site": [
+         "C"
+        ]
        },
        "type": "polygon",
        "visible": true,
@@ -373,11 +398,14 @@
        ]
       ],
       "color": "#3388ff",
+      "feature_count": 1,
       "id": "layer_3",
       "name": "Survey",
       "opacity": 1.0,
       "properties": {
-       "site": "B"
+       "site": [
+        "B"
+       ]
       },
       "type": "polyline",
       "visible": true,
@@ -397,12 +425,15 @@
        ]
       ],
       "color": "#3388ff",
+      "feature_count": 1,
       "fillOpacity": 0.2,
       "id": "layer_5",
       "name": "Survey",
       "opacity": 1.0,
       "properties": {
-       "site": "C"
+       "site": [
+        "C"
+       ]
       },
       "type": "polygon",
       "visible": true,

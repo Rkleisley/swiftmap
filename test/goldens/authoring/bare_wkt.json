@@ -1,7 +1,9 @@
 {
  "buffers": {
   "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAZmZmZmZmFMCamZmZmRlCQGZmZmZmZhTAmpmZmZkZQkAzMzMzMzMVwAAAAAAAAEJAMzMzMzMzFcBmZmZmZgZCQAAAAAAAABXAZmZmZmYGQkCamZmZmZkUwDMzMzMzE0JAmpmZmZmZFMBmZmZmZgZCQAAAAAAAABXA",
-  "layer_3": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMAAAAAAAABCQGZmZmZmZhTAzczMzMwMQkAAAAAAAAAUwA=="
+  "layer_2::offsets": "AAAAAAkAAAA=",
+  "layer_3": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMAAAAAAAABCQGZmZmZmZhTAzczMzMwMQkAAAAAAAAAUwA==",
+  "layer_3::offsets": "AAAAAAQAAAA="
  },
  "doc": "Bare WKT strings straight into the adders -- the same input both sides.",
  "ops": [
@@ -47,6 +49,13 @@
    }
   },
   {
+   "buffer": "AAAAAAkAAAA=",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -63,6 +72,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "fillOpacity": 0.2,
      "id": "layer_2",
      "layer_group": "Polygon Group",
@@ -71,8 +81,10 @@
      "properties": {},
      "rings": [
       [
-       5,
-       4
+       [
+        5,
+        4
+       ]
       ]
      ],
      "type": "polygon",
@@ -86,6 +98,13 @@
    "buffer": "AAAAAAAAQkAzMzMzMzMVwM3MzMzMDEJAzczMzMzMFMAAAAAAAABCQGZmZmZmZhTAzczMzMwMQkAAAAAAAAAUwA==",
    "op": {
     "id": "layer_3",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": "AAAAAAQAAAA=",
+   "op": {
+    "id": "layer_3::offsets",
     "op": "buffer"
    }
   },
@@ -106,13 +125,16 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "id": "layer_3",
      "layer_group": "Line Group",
      "name": "Route",
      "opacity": 1.0,
      "parts": [
-      2,
-      2
+      [
+       2,
+       2
+      ]
      ],
      "properties": {},
      "type": "polyline",
@@ -199,6 +221,7 @@
      ]
     ],
     "color": "#3388ff",
+    "feature_count": 1,
     "fillOpacity": 0.2,
     "id": "layer_2",
     "layer_group": "Polygon Group",
@@ -207,8 +230,10 @@
     "properties": {},
     "rings": [
      [
-      5,
-      4
+      [
+       5,
+       4
+      ]
      ]
     ],
     "type": "polygon",
@@ -229,13 +254,16 @@
      ]
     ],
     "color": "#3388ff",
+    "feature_count": 1,
     "id": "layer_3",
     "layer_group": "Line Group",
     "name": "Route",
     "opacity": 1.0,
     "parts": [
-     2,
-     2
+     [
+      2,
+      2
+     ]
     ],
     "properties": {},
     "type": "polyline",

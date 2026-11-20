@@ -2,16 +2,13 @@ from typing import Optional, List, Dict, Any
 from ..parsers import parse_polygons
 from ._display import extract_display_config
 from ._style import pop_style_options, pop_data_options, resolve_styles
-from .._colormaps import data_driven_colors, data_driven_legend, rgb_hex
+from .._colormaps import data_driven_colors, data_driven_legend
 from ._batching import batched
 from ._update import record_added_with
-from ._add_child import add_children_merged
 from ._grouping import is_column
-from ._grouping import (build_group_specs, resolve_group_path, resolve_layer_name,
-                        resolve_feature_label)
+from ._grouping import build_group_specs, resolve_feature_label
+from ._packed import group_features, pack_geometry, subset_columns
 from .._warnings import warn, EmptyLayerWarning
-from ._targeting import bounds_of_coords
-from ..parsers.sources._utils import PolygonGeom
 import numpy as np
 
 @batched
@@ -166,93 +163,76 @@ def add_polygon(
         )
         return self
 
-    is_multi = len(polygons_coords) > 1
+    n = len(polygons_coords)
     group_specs = build_group_specs(layer_group, props)
     layer_style, feature_styles = resolve_styles(
-        explicit_style, static_style, props, len(polygons_coords), {"color": "#3388ff", "fill_opacity": 0.2, "weight": 3, "opacity": 1.0})
+        explicit_style, static_style, props, n, {"color": "#3388ff", "fill_opacity": 0.2, "weight": 3, "opacity": 1.0})
 
     # color_col drives BOTH the fill and the stroke: zoomed out, a polygon is
     # mostly border, and a uniform stroke over ramped fills made the classes
     # indistinguishable exactly when the map was small enough to need them.
     # An EXPLICIT color= alongside color_col is the stated exception -- ramped
     # fills under a uniform border, the old choropleth look, one kwarg away.
-    # Each polygon is its own config entry, so both are per-feature overrides.
+    # The colours ride ::colors (u8 RGBA, the points' encoding) and
+    # color_col_stroke tells the renderer whether the stroke follows.
     colors_u8 = data_driven_colors(props, data_opts,
                                    layer_style.get("color", "#3388ff"), "add_polygon")
     ramp_stroke = colors_u8 is not None and "color" not in explicit_style
     legend_block = data_driven_legend(props, data_opts, layer_style.get("color", "#3388ff"))
 
-    # A uniform fan -- every feature sharing one literal name and one static
-    # folder -- assembles into a single merged entry placed once, instead of n
-    # incremental merges each re-emitting the whole group (quadratic wire and
-    # CPU: the 20k-WKT ingest that surfaced it).
-    pending = []
-    for i, coords in enumerate(polygons_coords):
-        poly_props = {k: v[i] for k, v in props.items()} if props else {}
-        if properties:
-            poly_props.update(properties)
-
-        poly_name = resolve_layer_name(name, props, i, is_multi, "Polygon")
-
-        # Coordinates travel as a binary float64 buffer under the layer's id, exactly
-        # like point layers -- never as JSON inside the layer config. Carried as
-        # `locations`, 25 tracks of 200k vertices made every sidebar toggle serialise
-        # ~187 MB of layers JSON per click, which is what actually crashed large maps
-        # after the per-click rebuilds were already gone.
-        #
-        # Holes and multipolygon parts arrive as a PolygonGeom. The buffer stays one
-        # flat [lat, lon] run; the ring lengths ride the config as a small `rings`
-        # table ([[outer, hole, ...], ...]) for the renderer to slice parts back out.
-        if isinstance(coords, PolygonGeom):
-            flat, rings = coords.flat(), coords.ring_lengths()
-        else:
-            flat, rings = coords, None
-
+    # One PACKED layer per (folder, name) -- the rule points follow (_packed.py).
+    # A literal name is every feature in one layer, sent as one add with three
+    # buffers; a name or folder from a column splits by its values. Each layer
+    # used to be one feature: 9,919 H3 cells were 9,919 configs and buffers.
+    fanned = is_column(name, props) or any(is_col for _, is_col in group_specs)
+    for (folder, layer_name), indices in group_features(
+            n, name, props, group_specs, "Polygon", "Polygon Group").items():
         layer_id = f"layer_{self._layer_counter}"
         self._layer_counter += 1
-        self._set_layer_buffer(
-            layer_id, np.asarray(flat, dtype=np.float64).flatten().tobytes())
+        # Coordinates travel as binary buffers under the layer's id -- never as
+        # JSON in the config (25 tracks of 200k vertices once made every sidebar
+        # toggle serialise ~187 MB). Holes and multipolygon parts keep their ring
+        # tables per feature, so the renderer slices them back out.
+        coords_b, offsets_b, rings, bounds = pack_geometry("polygon", polygons_coords, indices)
+        self._set_layer_buffer(layer_id, coords_b)
+        self._set_layer_buffer(f"{layer_id}::offsets", offsets_b)
+        if colors_u8 is not None:
+            self._set_layer_buffer(f"{layer_id}::colors",
+                                   np.ascontiguousarray(colors_u8[indices]).tobytes())
 
-        pending.append({
+        self.add_child({
             "id": layer_id,
             "type": "polygon",
-            "name": poly_name,
-            "layer_group": resolve_group_path(group_specs, props, i, "Polygon Group"),
+            "name": layer_name,
+            "layer_group": folder,
             "group_multi_select": group_multi_select,
             "visible": True,
+            "feature_count": len(indices),
             **({"rings": rings} if rings else {}),
-            "bounds": bounds_of_coords(flat),
-            # Recorded for update_layer(data=...); see add_line.
+            "bounds": bounds,
+            # Recorded for update_layer(data=...); see add_line. A literal name is
+            # ONE layer now, so only a column-driven name or folder fans out.
             "added_with": record_added_with(
                 "add_polygon",
                 parser={"lat_col": lat_col, "lon_col": lon_col, "shape_id_col": shape_id_col,
                         "order_col": order_col, "coord_order": coord_order,
                         "geohash_col": geohash_col, "geohash_base": geohash_base},
                 data_opts=data_opts, explicit_style=explicit_style,
-                static_style=static_style, label=label,
-                fanned=is_multi or is_column(name, props)
-                       or any(is_col for _, is_col in group_specs),
+                static_style=static_style, label=label, fanned=fanned,
                 popup=popup, tooltip=tooltip, properties=properties),
-            **(feature_styles[i] if feature_styles else layer_style),
-            "properties": poly_props,
+            **layer_style,
+            **({"feature_styles": [feature_styles[i] for i in indices]}
+               if feature_styles else {}),
+            "properties": subset_columns(props, indices, n, properties),
             "autobind_popup": bool(popup),
             "autobind_tooltip": bool(tooltip),
             **display_config,
             **kwargs,
-            **({"fillColor": rgb_hex(colors_u8[i])} if colors_u8 is not None else {}),
-            **({"color": rgb_hex(colors_u8[i])} if ramp_stroke else {}),
+            **({"color_col_stroke": True} if ramp_stroke else {}),
             **({"legend": legend_block} if legend_block else {}),
-            **({"label": resolve_feature_label(label, props, i)} if label is not None else {})
+            **({"labels": [resolve_feature_label(label, props, i) for i in indices]}
+               if label is not None else {}),
         })
-
-    uniform = (len(pending) > 1
-               and len({c["name"] for c in pending}) == 1
-               and len({c["layer_group"] for c in pending}) == 1)
-    if uniform:
-        add_children_merged(self, pending)
-    else:
-        for config in pending:
-            self.add_child(config)
 
     return self
 

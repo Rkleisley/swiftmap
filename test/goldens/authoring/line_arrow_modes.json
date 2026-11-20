@@ -1,9 +1,13 @@
 {
  "buffers": {
   "layer_2": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
+  "layer_2::offsets": "AAAAAAMAAAA=",
   "layer_3": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
+  "layer_3::offsets": "AAAAAAMAAAA=",
   "layer_4": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
-  "layer_5": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA"
+  "layer_4::offsets": "AAAAAAMAAAA=",
+  "layer_5": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
+  "layer_5::offsets": "AAAAAAMAAAA="
  },
  "doc": "The arrow placement vocabulary: end caps, per-segment, tuned spacing.",
  "ops": [
@@ -49,6 +53,13 @@
    }
   },
   {
+   "buffer": "AAAAAAMAAAA=",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -66,6 +77,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "id": "layer_2",
      "layer_group": "Line Group",
      "name": "Caps",
@@ -82,6 +94,13 @@
    "buffer": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
    "op": {
     "id": "layer_3",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": "AAAAAAMAAAA=",
+   "op": {
+    "id": "layer_3::offsets",
     "op": "buffer"
    }
   },
@@ -103,6 +122,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "id": "layer_3",
      "layer_group": "Line Group",
      "name": "Legs",
@@ -119,6 +139,13 @@
    "buffer": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
    "op": {
     "id": "layer_4",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": "AAAAAAMAAAA=",
+   "op": {
+    "id": "layer_4::offsets",
     "op": "buffer"
    }
   },
@@ -141,6 +168,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "id": "layer_4",
      "layer_group": "Line Group",
      "name": "Sparse",
@@ -157,6 +185,13 @@
    "buffer": "AAAAAAAAQkAzMzMzMzMVwGZmZmZmBkJAAAAAAAAAFcDNzMzMzAxCQM3MzMzMzBTA",
    "op": {
     "id": "layer_5",
+    "op": "buffer"
+   }
+  },
+  {
+   "buffer": "AAAAAAMAAAA=",
+   "op": {
+    "id": "layer_5::offsets",
     "op": "buffer"
    }
   },
@@ -179,6 +214,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "id": "layer_5",
      "layer_group": "Line Group",
      "name": "Metric",
@@ -266,6 +302,7 @@
      ]
     ],
     "color": "#3388ff",
+    "feature_count": 1,
     "id": "layer_2",
     "layer_group": "Line Group",
     "name": "Caps",
@@ -290,6 +327,7 @@
      ]
     ],
     "color": "#3388ff",
+    "feature_count": 1,
     "id": "layer_3",
     "layer_group": "Line Group",
     "name": "Legs",
@@ -315,6 +353,7 @@
      ]
     ],
     "color": "#3388ff",
+    "feature_count": 1,
     "id": "layer_4",
     "layer_group": "Line Group",
     "name": "Sparse",
@@ -340,6 +379,7 @@
      ]
     ],
     "color": "#3388ff",
+    "feature_count": 1,
     "id": "layer_5",
     "layer_group": "Line Group",
     "name": "Metric",

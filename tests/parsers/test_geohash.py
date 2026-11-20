@@ -12,6 +12,7 @@ import pytest
 pd = pytest.importorskip("pandas")
 
 from swiftmap import Map
+from swiftmap.layers._packed import map_features
 from swiftmap import _niemeyer as nm
 from swiftmap._warnings import EmptyLayerWarning
 
@@ -19,13 +20,13 @@ HASHES_32 = [nm.encode(36.0 + i * 0.2, -5.3 + i * 0.2, 6, 32) for i in range(3)]
 
 
 def polygon_layers(m):
-    # Fans merge into one sidebar entry now; the leaves live inside it.
-    return m.find_layers(types="polygon")
+    # One PACKED layer per (folder, name) since 0.7.0 -- what these tests count
+    # and read are its features, each resolved the way the renderer resolves it.
+    return map_features(m, types="polygon")
 
 
-def vector_coords(m, layer):
-    raw = m.coordinate_buffers[layer.get("id")]
-    return np.frombuffer(raw, dtype=np.float64).reshape(-1, 2).tolist()
+def vector_coords(m, feature):
+    return feature["coords"]
 
 
 def test_column_with_stated_base_becomes_rectangles():
@@ -115,7 +116,8 @@ def test_polars_and_dict_front_doors():
                   geohash_base=32, name="Polars")
     m.add_polygon({"geohash": HASHES_32[:2], "v": [5, 6]}, geohash_base=32,
                   name="Dict")
-    assert len(m.find_layers(types="polygon")) == 5
+    assert len(m.find_layers(types="polygon")) == 2, "one packed layer per name"
+    assert len(polygon_layers(m)) == 5
 
 
 def test_color_col_ramps_the_cells():

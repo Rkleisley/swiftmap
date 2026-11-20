@@ -1,6 +1,7 @@
 {
  "buffers": {
   "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAzczMzMzMFMDNzMzMzAxCQM3MzMzMzBTAAAAAAAAAQkAzMzMzMzMVwA==",
+  "layer_2::offsets": "AAAAAAQAAAA=",
   "layer_3": "ZmZmZmYGQkAAAAAAAAAVwA=="
  },
  "doc": "Same name + same group: the polygon and the marker become one collection.",
@@ -47,6 +48,13 @@
    }
   },
   {
+   "buffer": "AAAAAAQAAAA=",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -63,6 +71,7 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "fillOpacity": 0.2,
      "id": "layer_2",
      "layer_group": "Dwells",
@@ -107,6 +116,7 @@
         ]
        ],
        "color": "#3388ff",
+       "feature_count": 1,
        "fillOpacity": 0.2,
        "id": "layer_2",
        "name": "Dwell 1",
@@ -229,6 +239,7 @@
        ]
       ],
       "color": "#3388ff",
+      "feature_count": 1,
       "fillOpacity": 0.2,
       "id": "layer_2",
       "name": "Dwell 1",

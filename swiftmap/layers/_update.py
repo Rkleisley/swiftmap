@@ -25,6 +25,7 @@ from ..parsers import parse_lines, parse_points, parse_polygons
 from ..parsers.sources._utils import LineGeom, PolygonGeom
 from ._add_child import _json_safe
 from ._grouping import resolve_feature_label, resolve_feature_labels
+from ._packed import is_packed, pack_geometry, packed_times, subset_columns
 from ._style import resolve_styles
 from ._targeting import bounds_of_coords
 from ._time import normalize_layer_times
@@ -108,6 +109,13 @@ def update_layer_data(self, layer: Any, data: Any, append: bool,
     parser = {**(rec.get("parser") or {}), **parser_kwargs}
     if ltype in POINT_TYPES:
         return _update_points(self, layer, data, append, parser, field_kwargs, rec)
+    if is_packed(layer):
+        if append:
+            warn(f"update_layer: append=True on {name!r}, a {ltype} layer: appending "
+                 f"features to a polygon or line layer is not supported yet. Pass "
+                 f"data= without append to replace them. Nothing changed.")
+            return self
+        return _update_packed(self, layer, data, parser, field_kwargs, rec)
     if append:
         warn(f"update_layer: append=True on {name!r}, a single {ltype}: there is one "
              f"feature to replace and nothing to append a vertex run to without "
@@ -428,6 +436,98 @@ def _update_single(self, layer, data, parser, field_kwargs, rec) -> "Map":
         _put(new, "label", label)
         if colors_u8 is not None:
             new["color" if ltype == "polyline" else "fillColor"] = rgb_hex(colors_u8[0])
+        if drop_time:
+            new["time"] = None
+        if cleared:
+            new["style_overrides"] = {}
+        new.update(field_kwargs)
+        config = LayerConfig(**new)
+        self._layers_replace(layer, config)
+        self._auto_fit_extend(config)
+    return self
+
+
+# --- packed polygons and lines ---------------------------------------------------------
+def _update_packed(self, layer, data, parser, field_kwargs, rec) -> "Map":
+    """
+    A packed polygon or line layer's features replaced in place (_packed.py): same id,
+    name, folder, visibility, time animation and highlight; new buffers, columns and
+    per-feature tables. Any number of features -- the single-feature path refused
+    more than one, because a layer used to BE one feature.
+    """
+    name = layer.get("name")
+    ltype = layer.get("type")
+    layer_id = layer.get("id")
+    kind = "line" if ltype == "polyline" else "polygon"
+    parse = parse_lines if ltype == "polyline" else parse_polygons
+    id_key = "line_id_col" if ltype == "polyline" else "shape_id_col"
+    # The cell-hash options re-apply too: a Niemeyer column does not parse at all
+    # without its base, and an H3 column under an unguessable name needs its pointer.
+    keys = ["lat_col", "lon_col", "order_col", id_key]
+    if ltype == "polygon":
+        keys += ["geohash_col", "geohash_base"]
+    parse_kwargs = {k: parser[k] for k in keys if parser.get(k) is not None}
+    parse_kwargs["coord_order"] = parser.get("coord_order", "auto")
+    try:
+        feats, props = parse(data, **parse_kwargs)
+    except TypeError as exc:
+        warn(f"update_layer could not read the supplied data for {name!r}. {exc} "
+             f"Nothing changed.")
+        return self
+    if not feats:
+        warn(f"update_layer found no {kind} geometry in the supplied "
+             f"{type(data).__name__} for {name!r}. Nothing changed.")
+        return self
+
+    props = props or {}
+    n = len(feats)
+    indices = list(range(n))
+    explicit = rec.get("style") or {}
+    _, feature_styles = resolve_styles(explicit, rec.get("static_style") or {}, props, n,
+                                       _STYLE_DEFAULTS[ltype])
+    data_opts = rec.get("data_opts") or {}
+    fallback = layer.get("color", _STYLE_DEFAULTS[ltype]["color"])
+    colors_u8 = data_driven_colors(props, data_opts, fallback, "update_layer")
+    legend_block = data_driven_legend(props, data_opts, fallback)
+    coords_b, offsets_b, tables, bounds = pack_geometry(ltype, feats, indices)
+    columns = subset_columns(props, indices, n, rec.get("properties"))
+    labels = ([resolve_feature_label(rec["label"], props, i) for i in indices]
+              if rec.get("label") is not None else None)
+    cleared = _clear_overrides(layer, append=False)
+
+    times_payload, drop_time = None, False
+    meta = layer.get("time")
+    if meta:
+        field = str(meta.get("field") or "")
+        start_field, end_field = (field.split("/", 1) + [None])[:2] if field else (None, None)
+        counts = np.diff(np.frombuffer(offsets_b, dtype=np.uint32)).astype(np.int64)
+        interleaved, _, _ = packed_times(columns, start_field, end_field, counts)
+        if interleaved is None:
+            warn(f"update_layer: the new data for {name!r} has no {field!r} time "
+                 f"property; the layer stops animating.")
+            drop_time = True
+        else:
+            times_payload = np.asarray(interleaved, dtype=np.float64).tobytes()
+
+    with self.batch():
+        self._set_layer_buffer(layer_id, coords_b)
+        _set_or_remove_buffer(self, f"{layer_id}::offsets", offsets_b)
+        _set_or_remove_buffer(self, f"{layer_id}::colors",
+                              np.ascontiguousarray(colors_u8).tobytes()
+                              if colors_u8 is not None else None)
+        if meta:
+            _set_or_remove_buffer(self, f"{layer_id}::times", times_payload)
+
+        new = dict(layer.to_dict())
+        new["feature_count"] = n
+        new["properties"] = {str(k): _json_safe(v) for k, v in columns.items()}
+        new["bounds"] = bounds
+        _put(new, "parts" if ltype == "polyline" else "rings", tables)
+        _put(new, "legend", legend_block)
+        _put(new, "labels", labels)
+        _put(new, "feature_styles", feature_styles)
+        if ltype == "polygon":
+            _put(new, "color_col_stroke", colors_u8 is not None and "color" not in explicit)
         if drop_time:
             new["time"] = None
         if cleared:

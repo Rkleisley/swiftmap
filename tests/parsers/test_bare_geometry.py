@@ -8,6 +8,7 @@ was the gap. One coercion at the parser front door closes it.
 import pytest
 
 from swiftmap import Map
+from swiftmap.layers._packed import map_features
 
 shapely = pytest.importorskip("shapely")
 import shapely.wkt  # noqa: E402
@@ -20,18 +21,18 @@ WKT_ML = "MULTILINESTRING ((-5.3 36.0, -5.2 36.1), (-5.1 36.0, -5.0 36.1))"
 def test_a_bare_wkt_string_is_its_own_geometry():
     m = Map()
     m.add_polygon(WKT_HOLE, name="Zone")
-    layer = m.find_layers("Zone")[0]
-    assert layer.get("rings") == [[5, 4]], "the hole survives"
+    (zone,) = map_features(m, "Zone")
+    assert zone.get("rings") == [[5, 4]], "the hole survives"
     m.add_line(WKT_ML, name="Route")
-    assert m.find_layers("Route")[0].get("parts") == [2, 2]
+    assert map_features(m, "Route")[0].get("parts") == [2, 2]
 
 
 def test_a_bare_shapely_geometry_reads_directly():
     m = Map()
     m.add_polygon(shapely.wkt.loads(WKT_HOLE), name="Zone")
-    assert m.find_layers("Zone")[0].get("rings") == [[5, 4]]
+    assert map_features(m, "Zone")[0].get("rings") == [[5, 4]]
     m.add_line(shapely.wkt.loads(WKT_ML), name="Route")
-    assert m.find_layers("Route")[0].get("parts") == [2, 2]
+    assert map_features(m, "Route")[0].get("parts") == [2, 2]
 
 
 def test_a_list_of_shapely_geometries_fans_like_features():
@@ -40,5 +41,5 @@ def test_a_list_of_shapely_geometries_fans_like_features():
                    shapely.wkt.loads("POLYGON ((-5.1 36.0, -5.0 36.0, -5.0 36.1, -5.1 36.0))")],
                   name="Cells")
     entry = next(l for l in m.layers if l.get("name") == "Cells")
-    assert entry.get("type") == "group"
-    assert len(m.find_layers(types="polygon")) == 2
+    assert entry.get("type") == "polygon" and entry.get("feature_count") == 2,         "one packed layer holding both features"
+    assert len(map_features(m, types="polygon")) == 2

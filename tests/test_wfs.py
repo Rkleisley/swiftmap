@@ -15,6 +15,7 @@ import pytest
 pd = pytest.importorskip("pandas")
 
 from swiftmap import Map, read_wfs
+from swiftmap.layers._packed import map_features
 from swiftmap.mvt import read_mvt
 from swiftmap.wfs import _geometry_wkt
 
@@ -101,7 +102,7 @@ def test_pages_past_the_server_cap_to_the_complete_layer(wfs_url):
 
     m = Map()
     m.add_polygon(df, name="Zones", color_col="pop")
-    assert len(m.find_layers(types="polygon")) == 25, \
+    assert len(map_features(m, types="polygon")) == 25, \
         "every fetched feature paints through the ordinary front door"
 
 

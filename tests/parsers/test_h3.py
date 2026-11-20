@@ -16,6 +16,7 @@ pd = pytest.importorskip("pandas")
 
 import swiftmap.parsers.sources._utils as _utils
 from swiftmap import Map
+from swiftmap.layers._packed import map_features
 from swiftmap._warnings import EmptyLayerWarning
 from swiftmap.parsers.sources._utils import h3_cell_str, is_h3_cell, h3_cell_ring
 
@@ -25,13 +26,13 @@ HEX_JUNK = "fffffffffffffff"                  # 15 hex chars, not a valid cell
 
 
 def polygon_layers(m):
-    # Fans merge into one sidebar entry now; the leaves live inside it.
-    return m.find_layers(types="polygon")
+    # One PACKED layer per (folder, name) since 0.7.0 -- what these tests count
+    # and read are its features, each resolved the way the renderer resolves it.
+    return map_features(m, types="polygon")
 
 
-def vector_coords(m, layer):
-    raw = m.coordinate_buffers[layer.get("id")]
-    return np.frombuffer(raw, dtype=np.float64).reshape(-1, 2).tolist()
+def vector_coords(m, feature):
+    return feature["coords"]
 
 
 def expected_ring(cell):

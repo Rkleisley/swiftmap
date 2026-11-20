@@ -133,9 +133,9 @@ def test_literal_name_fans_merge_into_one_entry():
     m = Map()
     start = len(m.layers)
     m.add_polyline(fc, name="Route")
-    assert [(t, n) for t, n, _g in entries(m, start)] == [
-        ("polyline", "Route"), ("polyline", "Route")]
-    assert [l.get("type") for l in m.layers[start:]] == ["group"]
+    assert [(t, n) for t, n, _g in entries(m, start)] == [("polyline", "Route")]
+    (route,) = m.layers[start:]
+    assert route.get("type") == "polyline" and route.get("feature_count") == 2,         "one packed layer holding both lines"
 
 
 def test_mixed_literal_and_column_parts_in_one_path(mixed):

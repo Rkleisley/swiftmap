@@ -9,6 +9,7 @@ import numpy as np
 
 from .._warnings import warn
 from ..layers._time import normalize_layer_times, is_valid_period, parse_timestamp
+from ..layers._packed import is_packed, packed_times, vertex_counts_of
 from .effects import _describe_target
 
 # Mirrors POSITIONS in src/timecontrol.js; the two sets must not drift.
@@ -125,8 +126,18 @@ def make_time_layer(self, target: Any = None, *, time_field: Optional[str] = Non
                 warn(f"make_time_layer: end field {time_end_field!r} is not a "
                      f"property of layer {layer.get('name')!r}; using start times "
                      f"only.")
-            interleaved, field, timeless = normalize_layer_times(
-                props, time_field, time_end_field)
+            if is_packed(layer):
+                # Columns over many features: a pair per feature, or a pair per
+                # vertex across the layer when features carry per-vertex runs
+                # (a track ordered by time) -- each run aligned to its own
+                # feature's vertices through ::offsets.
+                counts = vertex_counts_of(self.coordinate_buffers, layer.get("id"),
+                                          layer.get("feature_count"))
+                interleaved, field, timeless = packed_times(
+                    props, time_field, time_end_field, counts)
+            else:
+                interleaved, field, timeless = normalize_layer_times(
+                    props, time_field, time_end_field)
             if interleaved is None:
                 warn(f"make_time_layer: layer {layer.get('name')!r} has no time "
                      f"property. Pass time_field= naming one; its features stay "

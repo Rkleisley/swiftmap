@@ -1,6 +1,7 @@
 {
  "buffers": {
-  "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAZmZmZmZmFMCamZmZmRlCQGZmZmZmZhTAmpmZmZkZQkAzMzMzMzMVwAAAAAAAAEJAMzMzMzMzFcBmZmZmZgZCQAAAAAAAABXAZmZmZmYGQkCamZmZmZkUwDMzMzMzE0JAmpmZmZmZFMBmZmZmZgZCQAAAAAAAABXA"
+  "layer_2": "AAAAAAAAQkAzMzMzMzMVwAAAAAAAAEJAZmZmZmZmFMCamZmZmRlCQGZmZmZmZhTAmpmZmZkZQkAzMzMzMzMVwAAAAAAAAEJAMzMzMzMzFcBmZmZmZgZCQAAAAAAAABXAZmZmZmYGQkCamZmZmZkUwDMzMzMzE0JAmpmZmZmZFMBmZmZmZgZCQAAAAAAAABXA",
+  "layer_2::offsets": "AAAAAAkAAAA="
  },
  "doc": "A WKT polygon with a hole: the rings table over one flat buffer.\n    Python reads it from a WKT column; JS parses the same WKT string.",
  "ops": [
@@ -46,6 +47,13 @@
    }
   },
   {
+   "buffer": "AAAAAAkAAAA=",
+   "op": {
+    "id": "layer_2::offsets",
+    "op": "buffer"
+   }
+  },
+  {
    "buffer": null,
    "op": {
     "layer": {
@@ -62,18 +70,23 @@
       ]
      ],
      "color": "#3388ff",
+     "feature_count": 1,
      "fillOpacity": 0.2,
      "id": "layer_2",
      "layer_group": "Polygon Group",
      "name": "Zone",
      "opacity": 1.0,
      "properties": {
-      "zone": "N"
+      "zone": [
+       "N"
+      ]
      },
      "rings": [
       [
-       5,
-       4
+       [
+        5,
+        4
+       ]
       ]
      ],
      "type": "polygon",
@@ -157,18 +170,23 @@
      ]
     ],
     "color": "#3388ff",
+    "feature_count": 1,
     "fillOpacity": 0.2,
     "id": "layer_2",
     "layer_group": "Polygon Group",
     "name": "Zone",
     "opacity": 1.0,
     "properties": {
-     "zone": "N"
+     "zone": [
+      "N"
+     ]
     },
     "rings": [
      [
-      5,
-      4
+      [
+       5,
+       4
+      ]
      ]
     ],
     "type": "polygon",

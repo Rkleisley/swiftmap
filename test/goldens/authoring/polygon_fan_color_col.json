@@ -1,8 +1,8 @@
 {
  "buffers": {
-  "layer_2": "AAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAMzMzMzMzFcDhehSuRwFCQDMzMzMzMxXAAAAAAAAAQkA9CtejcD0VwA==",
-  "layer_3": "AAAAAAAAQkApXI/C9SgVwAAAAAAAAEJAH4XrUbgeFcDhehSuRwFCQB+F61G4HhXAAAAAAAAAQkApXI/C9SgVwA==",
-  "layer_4": "AAAAAAAAQkAUrkfhehQVwAAAAAAAAEJACtejcD0KFcDhehSuRwFCQArXo3A9ChXAAAAAAAAAQkAUrkfhehQVwA=="
+  "layer_2": "AAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAMzMzMzMzFcDhehSuRwFCQDMzMzMzMxXAAAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAKVyPwvUoFcAAAAAAAABCQB+F61G4HhXA4XoUrkcBQkAfhetRuB4VwAAAAAAAAEJAKVyPwvUoFcAAAAAAAABCQBSuR+F6FBXAAAAAAAAAQkAK16NwPQoVwOF6FK5HAUJACtejcD0KFcAAAAAAAABCQBSuR+F6FBXA",
+  "layer_2::colors": "RAFU/ySJjf/95yX/",
+  "layer_2::offsets": "AAAAAAQAAAAIAAAADAAAAA=="
  },
  "doc": "GeoJSON polygons fanned with a data-driven fill and one shared legend.",
  "ops": [
@@ -41,23 +41,23 @@
    }
   },
   {
-   "buffer": "AAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAMzMzMzMzFcDhehSuRwFCQDMzMzMzMxXAAAAAAAAAQkA9CtejcD0VwA==",
+   "buffer": "AAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAMzMzMzMzFcDhehSuRwFCQDMzMzMzMxXAAAAAAAAAQkA9CtejcD0VwAAAAAAAAEJAKVyPwvUoFcAAAAAAAABCQB+F61G4HhXA4XoUrkcBQkAfhetRuB4VwAAAAAAAAEJAKVyPwvUoFcAAAAAAAABCQBSuR+F6FBXAAAAAAAAAQkAK16NwPQoVwOF6FK5HAUJACtejcD0KFcAAAAAAAABCQBSuR+F6FBXA",
    "op": {
     "id": "layer_2",
     "op": "buffer"
    }
   },
   {
-   "buffer": "AAAAAAAAQkApXI/C9SgVwAAAAAAAAEJAH4XrUbgeFcDhehSuRwFCQB+F61G4HhXAAAAAAAAAQkApXI/C9SgVwA==",
+   "buffer": "AAAAAAQAAAAIAAAADAAAAA==",
    "op": {
-    "id": "layer_3",
+    "id": "layer_2::offsets",
     "op": "buffer"
    }
   },
   {
-   "buffer": "AAAAAAAAQkAUrkfhehQVwAAAAAAAAEJACtejcD0KFcDhehSuRwFCQArXo3A9ChXAAAAAAAAAQkAUrkfhehQVwA==",
+   "buffer": "RAFU/ySJjf/95yX/",
    "op": {
-    "id": "layer_4",
+    "id": "layer_2::colors",
     "op": "buffer"
    }
   },
@@ -67,145 +67,52 @@
     "layer": {
      "autobind_popup": true,
      "autobind_tooltip": true,
-     "id": "layer_5",
-     "layer_group": "Polygon Group",
-     "layers": [
-      {
-       "autobind_popup": true,
-       "autobind_tooltip": true,
-       "bounds": [
-        [
-         36.0,
-         -5.31
-        ],
-        [
-         36.01,
-         -5.3
-        ]
-       ],
-       "color": "#440154",
-       "fillColor": "#440154",
-       "fillOpacity": 0.2,
-       "id": "layer_2",
-       "legend": {
-        "anchors": [
-         "#440154",
-         "#482878",
-         "#3e4989",
-         "#31688e",
-         "#26828e",
-         "#1f9e89",
-         "#35b779",
-         "#6ece58",
-         "#b5de2b",
-         "#fde725"
-        ],
-        "field": "count",
-        "kind": "ramp",
-        "vmax": 40,
-        "vmin": 4
-       },
-       "name": "Cells",
-       "opacity": 1.0,
-       "properties": {
-        "count": 4
-       },
-       "type": "polygon",
-       "visible": true,
-       "weight": 3
-      },
-      {
-       "autobind_popup": true,
-       "autobind_tooltip": true,
-       "bounds": [
-        [
-         36.0,
-         -5.29
-        ],
-        [
-         36.01,
-         -5.28
-        ]
-       ],
-       "color": "#24898d",
-       "fillColor": "#24898d",
-       "fillOpacity": 0.2,
-       "id": "layer_3",
-       "legend": {
-        "anchors": [
-         "#440154",
-         "#482878",
-         "#3e4989",
-         "#31688e",
-         "#26828e",
-         "#1f9e89",
-         "#35b779",
-         "#6ece58",
-         "#b5de2b",
-         "#fde725"
-        ],
-        "field": "count",
-        "kind": "ramp",
-        "vmax": 40,
-        "vmin": 4
-       },
-       "name": "Cells",
-       "opacity": 1.0,
-       "properties": {
-        "count": 21
-       },
-       "type": "polygon",
-       "visible": true,
-       "weight": 3
-      },
-      {
-       "autobind_popup": true,
-       "autobind_tooltip": true,
-       "bounds": [
-        [
-         36.0,
-         -5.27
-        ],
-        [
-         36.01,
-         -5.26
-        ]
-       ],
-       "color": "#fde725",
-       "fillColor": "#fde725",
-       "fillOpacity": 0.2,
-       "id": "layer_4",
-       "legend": {
-        "anchors": [
-         "#440154",
-         "#482878",
-         "#3e4989",
-         "#31688e",
-         "#26828e",
-         "#1f9e89",
-         "#35b779",
-         "#6ece58",
-         "#b5de2b",
-         "#fde725"
-        ],
-        "field": "count",
-        "kind": "ramp",
-        "vmax": 40,
-        "vmin": 4
-       },
-       "name": "Cells",
-       "opacity": 1.0,
-       "properties": {
-        "count": 40
-       },
-       "type": "polygon",
-       "visible": true,
-       "weight": 3
-      }
+     "bounds": [
+      [
+       36.0,
+       -5.31
+      ],
+      [
+       36.01,
+       -5.26
+      ]
      ],
+     "color": "#3388ff",
+     "color_col_stroke": true,
+     "feature_count": 3,
+     "fillOpacity": 0.2,
+     "id": "layer_2",
+     "layer_group": "Polygon Group",
+     "legend": {
+      "anchors": [
+       "#440154",
+       "#482878",
+       "#3e4989",
+       "#31688e",
+       "#26828e",
+       "#1f9e89",
+       "#35b779",
+       "#6ece58",
+       "#b5de2b",
+       "#fde725"
+      ],
+      "field": "count",
+      "kind": "ramp",
+      "vmax": 40,
+      "vmin": 4
+     },
      "name": "Cells",
-     "type": "group",
-     "visible": true
+     "opacity": 1.0,
+     "properties": {
+      "count": [
+       4,
+       21,
+       40
+      ]
+     },
+     "type": "polygon",
+     "visible": true,
+     "weight": 3
     },
     "op": "add"
    }
@@ -235,7 +142,7 @@
    ],
    "max_zoom": 15,
    "padding": 30,
-   "seq": 3,
+   "seq": 1,
    "zoom_offset": 0
   },
   "group_configs": {
@@ -273,145 +180,52 @@
    {
     "autobind_popup": true,
     "autobind_tooltip": true,
-    "id": "layer_5",
-    "layer_group": "Polygon Group",
-    "layers": [
-     {
-      "autobind_popup": true,
-      "autobind_tooltip": true,
-      "bounds": [
-       [
-        36.0,
-        -5.31
-       ],
-       [
-        36.01,
-        -5.3
-       ]
-      ],
-      "color": "#440154",
-      "fillColor": "#440154",
-      "fillOpacity": 0.2,
-      "id": "layer_2",
-      "legend": {
-       "anchors": [
-        "#440154",
-        "#482878",
-        "#3e4989",
-        "#31688e",
-        "#26828e",
-        "#1f9e89",
-        "#35b779",
-        "#6ece58",
-        "#b5de2b",
-        "#fde725"
-       ],
-       "field": "count",
-       "kind": "ramp",
-       "vmax": 40,
-       "vmin": 4
-      },
-      "name": "Cells",
-      "opacity": 1.0,
-      "properties": {
-       "count": 4
-      },
-      "type": "polygon",
-      "visible": true,
-      "weight": 3
-     },
-     {
-      "autobind_popup": true,
-      "autobind_tooltip": true,
-      "bounds": [
-       [
-        36.0,
-        -5.29
-       ],
-       [
-        36.01,
-        -5.28
-       ]
-      ],
-      "color": "#24898d",
-      "fillColor": "#24898d",
-      "fillOpacity": 0.2,
-      "id": "layer_3",
-      "legend": {
-       "anchors": [
-        "#440154",
-        "#482878",
-        "#3e4989",
-        "#31688e",
-        "#26828e",
-        "#1f9e89",
-        "#35b779",
-        "#6ece58",
-        "#b5de2b",
-        "#fde725"
-       ],
-       "field": "count",
-       "kind": "ramp",
-       "vmax": 40,
-       "vmin": 4
-      },
-      "name": "Cells",
-      "opacity": 1.0,
-      "properties": {
-       "count": 21
-      },
-      "type": "polygon",
-      "visible": true,
-      "weight": 3
-     },
-     {
-      "autobind_popup": true,
-      "autobind_tooltip": true,
-      "bounds": [
-       [
-        36.0,
-        -5.27
-       ],
-       [
-        36.01,
-        -5.26
-       ]
-      ],
-      "color": "#fde725",
-      "fillColor": "#fde725",
-      "fillOpacity": 0.2,
-      "id": "layer_4",
-      "legend": {
-       "anchors": [
-        "#440154",
-        "#482878",
-        "#3e4989",
-        "#31688e",
-        "#26828e",
-        "#1f9e89",
-        "#35b779",
-        "#6ece58",
-        "#b5de2b",
-        "#fde725"
-       ],
-       "field": "count",
-       "kind": "ramp",
-       "vmax": 40,
-       "vmin": 4
-      },
-      "name": "Cells",
-      "opacity": 1.0,
-      "properties": {
-       "count": 40
-      },
-      "type": "polygon",
-      "visible": true,
-      "weight": 3
-     }
+    "bounds": [
+     [
+      36.0,
+      -5.31
+     ],
+     [
+      36.01,
+      -5.26
+     ]
     ],
+    "color": "#3388ff",
+    "color_col_stroke": true,
+    "feature_count": 3,
+    "fillOpacity": 0.2,
+    "id": "layer_2",
+    "layer_group": "Polygon Group",
+    "legend": {
+     "anchors": [
+      "#440154",
+      "#482878",
+      "#3e4989",
+      "#31688e",
+      "#26828e",
+      "#1f9e89",
+      "#35b779",
+      "#6ece58",
+      "#b5de2b",
+      "#fde725"
+     ],
+     "field": "count",
+     "kind": "ramp",
+     "vmax": 40,
+     "vmin": 4
+    },
     "name": "Cells",
-    "type": "group",
-    "visible": true
+    "opacity": 1.0,
+    "properties": {
+     "count": [
+      4,
+      21,
+      40
+     ]
+    },
+    "type": "polygon",
+    "visible": true,
+    "weight": 3
    }
   ],
   "legend_config": {},
