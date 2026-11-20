@@ -79,6 +79,29 @@ function updateLayerById(layers, id, update) {
     return hit ? next : layers;
 }
 
+// A run of field updates -- `set` and `style` ops, id -> update functions in op
+// order -- applied in ONE walk of the layer tree. One walk per op made a select over
+// half of a 9,919-member fan cost 4,960 walks, each copying the group's member
+// array: 373 ms for one patch, growing with the square of the fan. Same rules as
+// updateLayerById -- nested ids land, untouched layers and groups keep their
+// identity, a run that matches nothing hands back the same array -- and a matched
+// group still has its members visited, as a later op addressed to one would.
+function updateLayersByIds(layers, updates) {
+    let hit = false;
+    const next = layers.map(l => {
+        let out = l;
+        const fns = updates.get(l.id);
+        if (fns) for (const fn of fns) out = fn(out);
+        if (out.type === "group" && Array.isArray(out.layers)) {
+            const subs = updateLayersByIds(out.layers, updates);
+            if (subs !== out.layers) out = { ...out, layers: subs };
+        }
+        if (out !== l) hit = true;
+        return out;
+    });
+    return hit ? next : layers;
+}
+
 // Every point layer, visible or not, with its effective visibility recorded -- the
 // GPU-visibility path keeps hidden layers in the bucket (stable ids, no rebuild on a
 // toggle) and hides them with a uniform instead. Mirrors collectWebglLayers' rules:
@@ -169,8 +192,25 @@ export function applySwiftmapPatch(state, ops, buffers) {
         }
         return bufferMap;
     };
+    // Consecutive `set` / `style` ops collect here and land in one tree walk,
+    // flushed before any op that reads or replaces layers and at the end. Buffer
+    // ops never touch layers, so a run survives them.
+    let run = null;
+    const queue = (id, fn) => {
+        if (!run) run = new Map();
+        const fns = run.get(id);
+        if (fns) fns.push(fn);
+        else run.set(id, [fn]);
+    };
+    const flush = () => {
+        if (run) {
+            layers = updateLayersByIds(layers, run);
+            run = null;
+        }
+    };
 
     for (const op of ops) {
+        if (op.op !== "set" && op.op !== "style" && !String(op.op).startsWith("buffer")) flush();
         if (op.op === "snapshot") {
             layers = op.layers || [];
             bufferMap = {};
@@ -200,14 +240,12 @@ export function applySwiftmapPatch(state, ops, buffers) {
             // Field-level update. "replace" carries the whole layer, so flipping `visible`
             // on a 50k-point layer resent every property it holds -- half a megabyte to
             // change one boolean, on every click of a checkbox.
-            layers = updateLayerById(layers, op.id, l => ({ ...l, ...(op.fields || {}) }));
+            queue(op.id, l => ({ ...l, ...(op.fields || {}) }));
         } else if (op.op === "style") {
             // Per-feature style overrides, replaced wholesale rather than merged: a
             // selection describes its complete state, so sending {} clears it and no
             // caller has to track what the previous highlight touched.
-            layers = updateLayerById(layers, op.id, l => ({
-                ...l, style_overrides: op.overrides || {},
-            }));
+            queue(op.id, l => ({ ...l, style_overrides: op.overrides || {} }));
         } else if (op.op === "remove") {
             layers = layers.filter(l => l.id !== op.id);
         } else if (op.op === "buffer") {
@@ -231,6 +269,7 @@ export function applySwiftmapPatch(state, ops, buffers) {
             delete writableBuffers()[op.id];
         }
     }
+    flush();
 
     return { layers, buffers: bufferMap };
 }

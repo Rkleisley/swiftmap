@@ -247,6 +247,60 @@ test("a patch without buffer ops hands back the same buffer map", () => {
     assert.equal(s.buffers, before, "identity unchanged means nothing downstream rebuilds");
 });
 
+test("set, replace, set on one id land in op order", () => {
+    const s = applySwiftmapPatch({ layers: [layer({ id: "a", name: "first" })], buffers: {} }, [
+        { op: "set", id: "a", fields: { visible: false, color: "#111" } },
+        { op: "replace", id: "a", layer: layer({ id: "a", name: "second" }) },
+        { op: "set", id: "a", fields: { color: "#222" } },
+    ], []);
+    const a = s.layers[0];
+    assert.equal(a.name, "second", "the replace came after the first set");
+    assert.equal(a.visible, true, "...so the first set's visible:false is gone with it");
+    assert.equal(a.color, "#222", "the last set lands on the replaced layer");
+});
+
+test("a set and a style on one id in one run both apply", () => {
+    const s = applySwiftmapPatch({ layers: [layer({ id: "a" })], buffers: {} }, [
+        { op: "set", id: "a", fields: { visible: false } },
+        { op: "style", id: "a", overrides: { 2: { color: "#f00" } } },
+        { op: "set", id: "a", fields: { opacity: 0.5 } },
+    ], []);
+    assert.equal(s.layers[0].visible, false);
+    assert.equal(s.layers[0].opacity, 0.5);
+    assert.deepEqual(s.layers[0].style_overrides, { 2: { color: "#f00" } });
+});
+
+test("a run of set ops leaves untouched siblings and groups alone", () => {
+    const keep = layer({ id: "k" });
+    const members = [layer({ id: "m1" }), layer({ id: "m2" })];
+    const group = { id: "g", type: "group", layers: members };
+    const s = applySwiftmapPatch({ layers: [keep, group], buffers: {} }, [
+        { op: "set", id: "m2", fields: { visible: false } },
+        { op: "set", id: "ghost", fields: { visible: false } },
+    ], []);
+    assert.equal(s.layers[0], keep, "an untouched top-level layer keeps its identity");
+    assert.equal(s.layers[1].layers[0], members[0], "an untouched member keeps its identity");
+    assert.equal(s.layers[1].layers[1].visible, false, "the nested id still lands");
+    const none = applySwiftmapPatch({ layers: [keep], buffers: {} },
+        [{ op: "set", id: "ghost", fields: { visible: false } }], []);
+    assert.equal(none.layers.length, 1);
+});
+
+test("a run of set ops is one walk, not one walk per op", () => {
+    // select() over half a fan sends one set per member. Each op walked the tree and
+    // copied the group's member array: 2,078 ms for this patch, against ~10 ms in one
+    // walk. The bound sits far from both, so it fails only on the per-op walk.
+    const members = Array.from({ length: 20000 }, (_, i) => layer({ id: `m${i}` }));
+    const state = { layers: [{ id: "g", type: "group", layers: members }], buffers: {} };
+    const ops = Array.from({ length: 10000 },
+        (_, i) => ({ op: "set", id: `m${i * 2}`, fields: { visible: false } }));
+    const t0 = performance.now();
+    const s = applySwiftmapPatch(state, ops, []);
+    const ms = performance.now() - t0;
+    assert.equal(s.layers[0].layers.filter(l => l.visible === false).length, 10000);
+    assert.ok(ms < 300, `10k set ops took ${ms.toFixed(0)} ms`);
+});
+
 test("a fan's buffers apply in linear time", () => {
     // One coordinate buffer per member of a 10k-polygon fan, in one patch. The
     // map was copied per op, O(n^2): 11 s for this patch, against ~5 ms copied
