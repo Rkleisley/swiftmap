@@ -23,6 +23,7 @@ export { loadLibraries, LIBRARY_URLS } from "./loader.js";
 export { applySwiftmapPatch, isLayerEffectiveVisible, collectWebglLayers,
          collectPointLayersAll } from "./patch.js";
 export { renderLayer, renderMergedGlLayer, styleFor, getIndexedProperties } from "./layers.js";
+export { isPacked, expandPacked, featureOffsets, drawUnits } from "./packed.js";
 export { renderSidebarControls, normalizeRadioLayers, getLayerBounds,
          sidebarCollapseState } from "./sidebar.js";
 export { deriveLegendSpec, renderLegend, formatBound } from "./legend.js";

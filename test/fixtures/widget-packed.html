@@ -1,0 +1,89 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>html,body,#host{margin:0;height:100%;width:100%}</style>
+<link rel="stylesheet" href="/swiftmap/static/widget.css">
+<div id="host"></div>
+<script type="module">
+// Packed vector layers (src/packed.js): many polygon or line features in ONE layer,
+// the way points are stored. The same geometry is also here as today's one-feature
+// layers, in a folder that starts hidden -- swapping the two folders must change
+// nothing on screen, in the GL instances, or in what a click reports beyond the
+// layer id and index. `?time` adds a packed layer with per-feature times instead.
+import widget, { createHostStub } from "/dist/anywidget.js";
+
+const makeModel = (state) => createHostStub(state, { comm: { comm_id: "test" } });
+const f64 = (a) => new DataView(new Float64Array(a).buffer);
+const u32 = (a) => new DataView(new Uint32Array(a).buffer);
+const u8 = (a) => new DataView(new Uint8Array(a).buffer);
+
+const TRI = [36.08, -5.34, 36.08, -5.30, 36.11, -5.32, 36.08, -5.34];
+const HOLED = [36.00, -5.34, 36.00, -5.26, 35.94, -5.26, 35.94, -5.34, 36.00, -5.34,
+               35.985, -5.32, 35.985, -5.28, 35.955, -5.28, 35.955, -5.32, 35.985, -5.32];
+const BOX = [36.00, -5.22, 36.00, -5.16, 35.95, -5.16, 35.95, -5.22, 36.00, -5.22];
+const LINE = [36.13, -5.34, 36.13, -5.26];
+const LEGS = [36.13, -5.22, 36.13, -5.18, 36.16, -5.22, 36.16, -5.18];
+const FILLS = ["#ff0000", "#00ff00", "#0000ff"];
+
+const area = { type: "polygon", visible: true, color: "#222222", weight: 3,
+               fillOpacity: 0.7, autobind_popup: true };
+const line = { type: "polyline", visible: true, color: "#ff6600", weight: 6,
+               opacity: 1, arrows: "end", autobind_popup: true };
+
+const timed = new URLSearchParams(location.search).has("time");
+const layers = [];
+const buffers = {};
+
+if (!timed) {
+  layers.push(
+    { ...area, id: "pz", name: "Zones", layer_group: "Packed", feature_count: 3,
+      properties: { zone: ["a", "b", "c"] }, rings: [null, [[5, 5]], null],
+      labels: ["A", "B", "C"], bounds: [[35.94, -5.34], [36.11, -5.16]] },
+    { ...line, id: "pl", name: "Routes", layer_group: "Packed", feature_count: 2,
+      properties: { route: ["r0", "r1"] }, parts: [null, [2, 2]],
+      bounds: [[36.13, -5.34], [36.16, -5.18]] },
+    // Today's format, the same features one layer each.
+    { ...area, id: "o0", name: "Zones", layer_group: "Old", properties: { zone: "a" },
+      fillColor: FILLS[0], label: "A" },
+    { ...area, id: "o1", name: "Zones", layer_group: "Old", properties: { zone: "b" },
+      fillColor: FILLS[1], label: "B", rings: [[5, 5]] },
+    { ...area, id: "o2", name: "Zones", layer_group: "Old", properties: { zone: "c" },
+      fillColor: FILLS[2], label: "C" },
+    { ...line, id: "o3", name: "Routes", layer_group: "Old", properties: { route: "r0" } },
+    { ...line, id: "o4", name: "Routes", layer_group: "Old", properties: { route: "r1" },
+      parts: [2, 2] },
+  );
+  Object.assign(buffers, {
+    pz: f64([...TRI, ...HOLED, ...BOX]),
+    "pz::offsets": u32([0, 4, 14, 19]),
+    "pz::colors": u8([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]),
+    pl: f64([...LINE, ...LEGS]),
+    "pl::offsets": u32([0, 2, 6]),
+    o0: f64(TRI), o1: f64(HOLED), o2: f64(BOX), o3: f64(LINE), o4: f64(LEGS),
+  });
+} else {
+  // Two boxes in one packed layer, one on day one and one on day three.
+  const day = (d) => Date.UTC(2026, 0, d);
+  layers.push(
+    { ...area, id: "pt", name: "Timed", layer_group: "Packed", feature_count: 2,
+      properties: { t: ["d1", "d3"] }, time: { field: "t", duration: "period" },
+      bounds: [[35.95, -5.34], [36.00, -5.16]] },
+  );
+  Object.assign(buffers, {
+    pt: f64([...BOX.map((v, i) => (i % 2 ? v - 0.18 : v)), ...BOX]),
+    "pt::offsets": u32([0, 5, 10]),
+    "pt::times": f64([day(1), day(1), day(3), day(3)]),
+  });
+}
+
+const model = makeModel({
+  layers,
+  group_configs: timed ? {} : { Old: { visible: false } },
+  coordinate_buffers: buffers,
+  center: [36.03, -5.25], zoom: 11, crs: "EPSG:3857",
+  auto_sync: true, sync_trigger: 0, show_logo: false,
+});
+
+window.__model = model;
+await widget.render({ model, el: document.getElementById("host") });
+window.__ready = true;
+</script>

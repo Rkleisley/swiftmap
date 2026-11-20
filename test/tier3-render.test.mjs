@@ -2395,3 +2395,133 @@ suite("a layer toggle is a uniform, not a rebuild", async () => {
         assert.deepEqual(errors, [], "no errors while toggling");
     }, "widget-time.html");
 });
+
+// --- packed vector layers (src/packed.js) -------------------------------------------
+// Shared by the packed suites: lat/lng -> page pixel at the fixture's own view.
+function packedHelpers(page) {
+    const at = async (lat, lng) => {
+        const box = await page.locator(".leaflet-container").boundingBox();
+        const off = await page.evaluate(([la, ln]) => {
+            const z = window.__model.get("zoom");
+            const c = window.__model.get("center");
+            const p = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(la, ln), z);
+            const pc = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(c[0], c[1]), z);
+            return [p.x - pc.x, p.y - pc.y];
+        }, [lat, lng]);
+        return [box.x + box.width / 2 + off[0], box.y + box.height / 2 + off[1]];
+    };
+    const shotAt = async (lat, lng, size) => {
+        const [x, y] = await at(lat, lng);
+        return page.screenshot({ clip: { x: x - size / 2, y: y - size / 2,
+                                         width: size, height: size } });
+    };
+    const clickAt = async (lat, lng) => {
+        const [x, y] = await at(lat, lng);
+        await page.mouse.click(x, y);
+        await page.waitForTimeout(400);
+        return page.evaluate(() => ({ id: window.__model.get("clicked_layer_id"),
+                                      index: window.__model.get("selected_index") }));
+    };
+    return { at, shotAt, clickAt };
+}
+
+suite("a packed layer draws exactly what the same features as separate layers draw", async () => {
+    await withPage(async (page, errors) => {
+        const warnings = [];
+        page.on("console", (m) => { if (m.type() === "warning") warnings.push(m.text()); });
+        const glState = () => page.evaluate(() => {
+            const shapes = window.L.glify.shapesInstances;
+            const lines = window.L.glify.linesInstances;
+            const s = shapes[shapes.length - 1];
+            const l = lines[lines.length - 1];
+            return {
+                shapeFeatures: s.settings.data.features.length,
+                shapeVertices: s.vertices.length,
+                lineFeatures: l.settings.data.features.length,
+                lineVertices: l.allVerticesTyped.length,
+                labels: [...document.querySelectorAll(".swiftmap-feature-label")]
+                    .map(e => e.textContent).sort(),
+            };
+        });
+        const showOnly = (folder) => page.evaluate((f) => {
+            window.__model.set("group_configs", {
+                Packed: { visible: f === "Packed" }, Old: { visible: f === "Old" } });
+        }, folder).then(() => page.waitForTimeout(1200));
+
+        // The Layers Control lists both folders with opposite checkboxes, so it is
+        // masked, and the container's own edge is clipped off (its border shading
+        // varies by a level between captures): what must match is the map inside.
+        const mapShot = async () => {
+            const b = await page.locator(".leaflet-container").boundingBox();
+            return page.screenshot({
+                clip: { x: b.x + 4, y: b.y + 4, width: b.width - 8, height: b.height - 12 },
+                mask: [page.locator(".swiftmap-sidebar")] });
+        };
+        const packed = await glState();
+        const packedShot = await mapShot();
+        await showOnly("Old");
+        const old = await glState();
+        const oldShot = await mapShot();
+        assert.deepEqual(packed, old,
+            "same fill and outline features, same GL vertices, same labels");
+        assert.deepEqual(packed.labels, ["A", "B", "C"]);
+        assert.equal(Buffer.compare(packedShot, oldShot), 0,
+            "pixel-identical: colours from ::colors, the hole, both legs, the end arrows");
+        await showOnly("Packed");
+        assert.deepEqual(warnings.filter(w => /layer (pz|pl)/.test(w)), [],
+            "the packed configs validate clean");
+        assert.deepEqual(errors, []);
+    }, "widget-packed.html", ".leaflet-polygons-pane canvas");
+});
+
+suite("a click on a packed feature reports its layer and its index", async () => {
+    await withPage(async (page, errors) => {
+        const { clickAt } = packedHelpers(page);
+        assert.deepEqual(await clickAt(35.975, -5.19), { id: "pz", index: 2 },
+            "the third polygon answers as feature 2 of the packed layer");
+        const popup = await page.locator(".leaflet-popup-content").first().innerText();
+        assert.match(popup, /\bc\b/, "the popup shows feature 2's own row");
+        assert.doesNotMatch(popup, /\ba\b|\bb\b/, "...and no other feature's");
+        assert.deepEqual(await clickAt(36.09, -5.32), { id: "pz", index: 0 });
+        assert.equal((await clickAt(35.97, -5.30)).id, "",
+            "a click in feature 1's hole falls through to the open map");
+        assert.deepEqual(await clickAt(35.97, -5.335), { id: "pz", index: 1 },
+            "the holed feature's ring answers as feature 1");
+        assert.deepEqual(await clickAt(36.16, -5.20), { id: "pl", index: 1 },
+            "a line's second part answers as feature 1 of the packed line");
+        assert.deepEqual(errors, []);
+    }, "widget-packed.html", ".leaflet-polygons-pane canvas");
+});
+
+suite("a packed layer's features keep their own times on the GPU path", async () => {
+    await withPage(async (page, errors) => {
+        const gpuMessages = [];
+        page.on("console", (m) => { if (/GPU time/.test(m.text())) gpuMessages.push(m.text()); });
+        const { shotAt } = packedHelpers(page);
+        const seek = (v) => page.evaluate((val) => {
+            const s = document.querySelector(".swiftmap-time-slider");
+            s.value = String(val); s.dispatchEvent(new Event("input"));
+        }, v).then(() => page.waitForTimeout(1200));
+        const instance = () => page.evaluate(() => {
+            const si = window.L.glify.shapesInstances;
+            window.__si = window.__si || si[si.length - 1];
+            return si[si.length - 1] === window.__si;
+        });
+        await instance();
+        await seek(0);
+        const d1First = await shotAt(35.975, -5.37, 12);
+        const d1Second = await shotAt(35.975, -5.19, 12);
+        const max = await page.evaluate(() =>
+            parseInt(document.querySelector(".swiftmap-time-slider").max, 10));
+        await seek(max);
+        const d3First = await shotAt(35.975, -5.37, 12);
+        const d3Second = await shotAt(35.975, -5.19, 12);
+        assert.notEqual(Buffer.compare(d1First, d3First), 0,
+            "feature 0 shows on day one and is gone on day three");
+        assert.notEqual(Buffer.compare(d1Second, d3Second), 0,
+            "feature 1 appears only on day three");
+        assert.ok(await instance(), "no rebuild across the seeks: the GPU path stayed engaged");
+        assert.deepEqual(gpuMessages, [], "no 'GPU time ... disabled' message");
+        assert.deepEqual(errors, []);
+    }, "widget-packed.html?time", ".leaflet-polygons-pane canvas");
+});

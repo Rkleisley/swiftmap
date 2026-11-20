@@ -806,7 +806,8 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
                 bufLen: coordinateBuffers[l.id]?.byteLength || 0,
                 // Identity of every buffer the bucket reads for this layer:
                 // same-length replacements must rebuild too.
-                bufSerial: [l.id, `${l.id}::colors`, `${l.id}::radii`, `${l.id}::times`]
+                bufSerial: [l.id, `${l.id}::colors`, `${l.id}::radii`, `${l.id}::times`,
+                            `${l.id}::offsets`]
                     .map(k => bufferSerial(coordinateBuffers[k])),
                 locLen: l.locations?.length || 0
             })));

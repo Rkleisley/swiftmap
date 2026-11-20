@@ -8,6 +8,7 @@
 import { isLayerEffectiveVisible } from "./patch.js";
 import { vectorCoords, lineParts } from "./layers.js";
 import { windowFor, featureInWindow, effectiveDuration, timesFor } from "./timecontrol.js";
+import { isPacked, expandPacked } from "./packed.js";
 
 // Whether a whole labelled feature is inside the current time window. NaN times
 // keep the label, matching the map: an unreadable time never hides data, so it
@@ -50,7 +51,15 @@ export function collectLabels(layers, buffers, groupConfigs, timeState = null) {
             out.push(...collectLabels(layer.layers || [], buffers, groupConfigs, timeState));
             continue;
         }
-        if (Array.isArray(layer.labels)) {
+        if (isPacked(layer)) {
+            // One label per feature, anchored exactly as a one-feature layer's would
+            // be: the views carry their own `label`, coordinates, parts and times,
+            // and no layer-wide bounds to pull every label to the middle. Checked
+            // BEFORE `labels`, which on a point layer means one per coordinate.
+            if (!Array.isArray(layer.labels)) continue;
+            const labelled = expandPacked(layer, buffers || {}).filter(v => v.label != null);
+            out.push(...collectLabels(labelled, buffers, groupConfigs, timeState));
+        } else if (Array.isArray(layer.labels)) {
             const raw = buffers && buffers[layer.id];
             if (!raw) continue;
             const coords = new Float64Array(raw.buffer || raw, raw.byteOffset || 0,

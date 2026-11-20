@@ -13,6 +13,7 @@
 // only the matrix uniform -- so extra attributes bound after setup persist, and uniform
 // updates take effect on the next redraw.
 import { parsePeriod, periodToMs, timesFor } from "./timecontrol.js";
+import { drawUnits } from "./packed.js";
 
 // Times travel as float32 on the GPU, whose integers are exact only to 2^24. Epoch ms is
 // hopeless at that precision, so times are rebased to the bucket's earliest start and
@@ -173,7 +174,12 @@ export function buildVectorTimeMeta(layersList, coordinateBuffers, periodMs) {
     }
     if (base === Infinity) base = 0;
 
-    const perFeature = layersList.map((layer, idx) => {
+    // One record per DRAWN feature, in draw order, each carrying its layer's slot:
+    // a packed layer is one slot holding many features (src/packed.js), and the
+    // renderer counts vertices over exactly these units.
+    const { units, slots } = drawUnits(layersList, coordinateBuffers);
+    const perFeature = units.map((layer, u) => {
+        const idx = slots[u];
         const times = layer.time ? timesFor(layer, coordinateBuffers) : null;
         const dur = layer.time ? durationSeconds(layer.time.duration, periodMs) : ALWAYS;
         const signedDur = layer.time && layer.time.fade ? -dur : dur;
@@ -222,6 +228,7 @@ export function buildVectorTimeMeta(layersList, coordinateBuffers, periodMs) {
 // A vector layer's vertex count from whichever transport carries its coordinates:
 // the binary buffer (2 float64 per vertex) or inline `locations`.
 function vertexCountOf(layer, coordinateBuffers) {
+    if (layer.__coords) return layer.__coords.length / 2;
     const raw = coordinateBuffers[layer.id];
     if (raw) return (raw.byteLength || raw.length || 0) / 16;
     return (layer.locations || []).length;

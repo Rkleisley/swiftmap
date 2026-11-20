@@ -12,6 +12,7 @@ import { lineDecoVertexShader, lineDecoFragmentShader, arrowVertexShader,
          ARROW_FRAGMENT, buildLineDistances, buildArrowPoints, arrowTimeAttrs,
          wireLineDeco, wireArrowDeco, combineTimeHandles } from "./linedeco.js";
 import { createClusterLayer, clusterMetaKey } from "./cluster.js";
+import { drawUnits, clickTarget } from "./packed.js";
 
 // How ONE point of a point layer looks: colour and size, per the precedence the
 // whole renderer agrees on -- selection overrides, then whole-layer highlight,
@@ -317,10 +318,15 @@ export async function renderLayer(map, layer, coordBuffer, coordinateBuffers = {
 // on the GPU path rarely do.
 export function vectorCoords(layer, coordinateBuffers) {
     if (layer.locations) return layer.locations;
-    const raw = coordinateBuffers[layer.id];
-    if (!raw) return null;
-    const flat = new Float64Array(raw.buffer || raw, raw.byteOffset || 0,
-        (raw.byteLength || raw.length) / 8);
+    // A packed layer's feature view holds its own slice of the layer's buffer; the
+    // buffer under its id is every feature's (src/packed.js).
+    let flat = layer.__coords;
+    if (!flat) {
+        const raw = coordinateBuffers[layer.id];
+        if (!raw) return null;
+        flat = new Float64Array(raw.buffer || raw, raw.byteOffset || 0,
+            (raw.byteLength || raw.length) / 8);
+    }
     const out = new Array(flat.length / 2);
     for (let i = 0; i < out.length; i++) {
         out[i] = [flat[i * 2], flat[i * 2 + 1]];
@@ -424,6 +430,12 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
     // widget passes a live lookup; the fallback covers plain-JS consumers with the
     // config's own flag.
     const visibleNow = isFeatureVisible || ((l) => l.visible !== false);
+    // A drawn unit asks about the layer it belongs to -- for a packed feature, its
+    // layer, and its own [start, end] pair when times are per feature.
+    const unitVisible = (unit) => {
+        const target = clickTarget(unit);
+        return visibleNow(target.layer, target.timeIndex);
+    };
     // Lines, polygons and circles are one geometry per layer. On the GPU path (map.js
     // passes vectorGpu when the bucket qualifies) every feature stays in the buffers and
     // the shader decides visibility per tick and per layer toggle -- a line-shaped track
@@ -434,14 +446,19 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
             timeState && timeState.period ? periodToMs(timeState.period) : null)
         : { hasTime: false };
     const vectorTime = Boolean(vectorMeta.hasTime);
-    if (timeState && !vectorTime && type !== "circle_markers" && type !== "markers") {
-        layersList = layersList.filter(l => layerInWindow(l, coordinateBuffers, timeState));
-        if (layersList.length === 0) return null;
+    // Lines and polygons draw FEATURES: a packed layer contributes each of its
+    // features as a view shaped like a one-feature layer (src/packed.js), in the
+    // same order buildVectorTimeMeta walks, so vertex counts and time records align.
+    const vectorType = type !== "circle_markers" && type !== "markers";
+    let units = vectorType ? drawUnits(layersList, coordinateBuffers).units : layersList;
+    if (timeState && !vectorTime && vectorType) {
+        units = units.filter(l => layerInWindow(l, coordinateBuffers, timeState));
+        if (units.length === 0) return null;
     }
     if (type === "polyline") {
         const features = [];
         const vertexCounts = [];
-        for (const layer of layersList) {
+        for (const layer of units) {
             const style = styleFor(layer, 0);
             const rgb = parseColor(style.color, "#3388ff");
 
@@ -533,9 +550,9 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                 // Any dash in the bucket switches to the decoration shader
                 // pair -- a superset of the time shader (same attribute
                 // contract), so the two compose instead of competing.
-                const anyDash = layersList.some(
+                const anyDash = units.some(
                     l => Array.isArray(l.dash) && l.dash.length >= 2);
-                const anyArrows = layersList.some(l => l.arrows);
+                const anyArrows = units.some(l => l.arrows);
                 const lineOptions = anyDash
                     ? { vertexShaderSource: () => lineDecoVertexShader(),
                         fragmentShaderSource: () => lineDecoFragmentShader() }
@@ -568,15 +585,17 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     click: (e, feature) => {
                         if (!feature || !feature.properties || feature.properties.isBorder
                                 || !feature.properties.layer
-                                || !visibleNow(feature.properties.layer)) return;
+                                || !unitVisible(feature.properties.layer)) return;
                         registerClickMatch(map, 2, () => {
                             if (feature && feature.properties && feature.properties.layer) {
                                 const layer = feature.properties.layer;
                                 bindPopup(map, e.latlng, layer.properties, layer);
                                 // Where the click landed: the host records "where"
-                                // and "on what" -- see onFeatureClick in core.js.
+                                // and "on what" -- see onFeatureClick in core.js. A
+                                // packed feature reports its layer and its index.
+                                const target = clickTarget(layer);
                                 onFeatureClick({
-                                    layer, index: 0,
+                                    layer: target.layer, index: target.index,
                                     latlng: [Math.round(e.latlng.wrap().lat * 1e5) / 1e5,
                                              Math.round(e.latlng.wrap().lng * 1e5) / 1e5],
                                 });
@@ -587,7 +606,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                         this._isHovering = true;
                         if (feature && feature.properties && !feature.properties.isBorder
                                 && feature.properties.layer
-                                && visibleNow(feature.properties.layer)) {
+                                && unitVisible(feature.properties.layer)) {
                             registerHoverMatch(map, 2, () => {
                                 const layer = feature.properties.layer;
                                 map.getContainer().style.cursor = 'pointer';
@@ -640,7 +659,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                             this._arrowDeco = wireArrowDeco(this.glArrows, arrows);
                             if (vectorTime) {
                                 const layerPos = new Map(
-                                    layersList.map((l, i) => [l, i]));
+                                    units.map((l, i) => [l, i]));
                                 arrowHandle = attachTimeToInstance(this.glArrows,
                                     arrowTimeAttrs(arrows, layerPos, vectorMeta));
                             }
@@ -688,7 +707,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
     if (type === "polygon") {
         const features = [];
         const vertexCounts = [];
-        for (const layer of layersList) {
+        for (const layer of units) {
             const parts = areaParts(layer, coordinateBuffers);
             if (parts.length === 0) {
                 vertexCounts.push(0);   // no feature, but the slot must stay aligned
@@ -769,15 +788,17 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     },
                     click: (e, feature) => {
                         if (!feature || !feature.properties || !feature.properties.layer
-                                || !visibleNow(feature.properties.layer)) return;
+                                || !unitVisible(feature.properties.layer)) return;
                         registerClickMatch(map, 3, () => {
                             if (feature && feature.properties && feature.properties.layer) {
                                 const layer = feature.properties.layer;
                                 bindPopup(map, e.latlng, layer.properties, layer);
                                 // Where the click landed: the host records "where"
-                                // and "on what" -- see onFeatureClick in core.js.
+                                // and "on what" -- see onFeatureClick in core.js. A
+                                // packed feature reports its layer and its index.
+                                const target = clickTarget(layer);
                                 onFeatureClick({
-                                    layer, index: 0,
+                                    layer: target.layer, index: target.index,
                                     latlng: [Math.round(e.latlng.wrap().lat * 1e5) / 1e5,
                                              Math.round(e.latlng.wrap().lng * 1e5) / 1e5],
                                 });
@@ -787,7 +808,7 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                     hover: (e, feature) => {
                         this._isHovering = true;
                         if (feature && feature.properties && feature.properties.layer
-                                && visibleNow(feature.properties.layer)) {
+                                && unitVisible(feature.properties.layer)) {
                             registerHoverMatch(map, 3, () => {
                                 const layer = feature.properties.layer;
                                 map.getContainer().style.cursor = 'pointer';

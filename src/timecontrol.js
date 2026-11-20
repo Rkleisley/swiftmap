@@ -130,6 +130,9 @@ export function featureInWindow(startMs, endMs, win) {
 // Times travel as a Float64Array of interleaved [start, end] pairs in the buffer map,
 // under "<layer id>::times" -- the same transport coordinates use.
 export function timesFor(layer, buffers) {
+    // A packed layer's feature view (src/packed.js) carries its own slice. The view
+    // shares the layer's id, so falling through would hand it EVERY feature's times.
+    if (layer.__packed) return layer.__times;
     const raw = buffers && buffers[`${layer.id}::times`];
     if (!raw) return null;
     return new Float64Array(raw.buffer || raw, raw.byteOffset || 0,
