@@ -224,6 +224,47 @@ test("a snapshot replaces everything", () => {
     assert.deepEqual(Object.keys(s.buffers), ["new"]);
 });
 
+test("buffer ops never mutate the map they were handed", () => {
+    const kept = new Float64Array([1]);
+    const before = { kept, gone: new Float64Array([2]) };
+    const s = applySwiftmapPatch({ layers: [], buffers: before }, [
+        { op: "buffer", id: "a", buffer_index: 0 },
+        { op: "buffer", id: "b", buffer_index: 1 },
+        { op: "buffer_append", id: "kept", buffer_index: 0 },
+        { op: "buffer_remove", id: "gone" },
+    ], [new Float64Array([3]), new Float64Array([4])]);
+    assert.deepEqual(Object.keys(before), ["kept", "gone"],
+        "the previous state is somebody's last render -- writing into it is a mutation");
+    assert.equal(before.kept, kept);
+    assert.notEqual(s.buffers, before);
+    assert.deepEqual(Object.keys(s.buffers).sort(), ["a", "b", "kept"]);
+});
+
+test("a patch without buffer ops hands back the same buffer map", () => {
+    const before = { a: new Float64Array([1]) };
+    const s = applySwiftmapPatch({ layers: [layer({ id: "a" })], buffers: before },
+        [{ op: "set", id: "a", fields: { visible: false } }], []);
+    assert.equal(s.buffers, before, "identity unchanged means nothing downstream rebuilds");
+});
+
+test("a fan's buffers apply in linear time", () => {
+    // One coordinate buffer per member of a 10k-polygon fan, in one patch. The
+    // map was copied per op, O(n^2): 11 s for this patch, against ~5 ms copied
+    // once. The bound sits far from both, so it fails only on the quadratic.
+    const n = 10000;
+    const ops = [];
+    const bufs = [];
+    for (let i = 0; i < n; i++) {
+        ops.push({ op: "buffer", id: `layer_${i}`, buffer_index: i });
+        bufs.push(new Float64Array(14));
+    }
+    const t0 = performance.now();
+    const s = applySwiftmapPatch({ layers: [], buffers: {} }, ops, bufs);
+    const ms = performance.now() - t0;
+    assert.equal(Object.keys(s.buffers).length, n);
+    assert.ok(ms < 1000, `10k buffer ops took ${ms.toFixed(0)} ms`);
+});
+
 // --- colour ------------------------------------------------------------------------
 test("hex colours parse without a DOM", () => {
     assert.deepEqual(parseColor("#ff0000"), { r: 1, g: 0, b: 0 });

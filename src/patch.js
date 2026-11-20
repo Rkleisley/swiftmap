@@ -155,11 +155,26 @@ function appendRows(layer, op) {
 export function applySwiftmapPatch(state, ops, buffers) {
     let layers = state.layers || [];
     let bufferMap = state.buffers || {};
+    // The buffer map is copied once per patch, on its first write, and written in
+    // place after that. Copying it per op made a fan of n coordinate buffers cost
+    // O(n^2) property copies: 9,919 H3 cells took 11 s here and 12.5 s in the
+    // widget handler, against 5 ms copied once. The input map is never mutated,
+    // and a patch with no buffer ops hands the same map back, so the GL meta key
+    // (and anything else comparing by identity) sees exactly what it did before.
+    let ownsBuffers = false;
+    const writableBuffers = () => {
+        if (!ownsBuffers) {
+            bufferMap = { ...bufferMap };
+            ownsBuffers = true;
+        }
+        return bufferMap;
+    };
 
     for (const op of ops) {
         if (op.op === "snapshot") {
             layers = op.layers || [];
             bufferMap = {};
+            ownsBuffers = true;
             (op.buffer_ids || []).forEach((id, i) => {
                 if (buffers && buffers[i]) bufferMap[id] = buffers[i];
             });
@@ -197,7 +212,7 @@ export function applySwiftmapPatch(state, ops, buffers) {
             layers = layers.filter(l => l.id !== op.id);
         } else if (op.op === "buffer") {
             const buf = buffers && buffers[op.buffer_index];
-            if (buf) bufferMap = { ...bufferMap, [op.id]: buf };
+            if (buf) writableBuffers()[op.id] = buf;
         } else if (op.op === "buffer_append") {
             // A tail for an existing buffer -- the feed primitive's wire shape,
             // proportional to the batch. Concatenation yields a NEW DataView, and
@@ -205,7 +220,7 @@ export function applySwiftmapPatch(state, ops, buffers) {
             const tail = buffers && buffers[op.buffer_index];
             if (tail) {
                 const head = bufferMap[op.id];
-                bufferMap = { ...bufferMap, [op.id]: head ? concatViews(head, tail) : tail };
+                writableBuffers()[op.id] = head ? concatViews(head, tail) : tail;
             }
         } else if (op.op === "append") {
             // New rows for the property lists (and other per-feature lists), after
@@ -213,8 +228,7 @@ export function applySwiftmapPatch(state, ops, buffers) {
             // as the Python side does, so a later popup reads the same table.
             layers = updateLayerById(layers, op.id, l => appendRows(l, op));
         } else if (op.op === "buffer_remove") {
-            bufferMap = { ...bufferMap };
-            delete bufferMap[op.id];
+            delete writableBuffers()[op.id];
         }
     }
 
