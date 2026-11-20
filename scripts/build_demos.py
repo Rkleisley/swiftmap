@@ -231,7 +231,8 @@ m.legend_add("Confidence", categories=["confirmed", "probable", "ruled out"])
               "because only the point layer is timed. Point time filtering runs "
               "on the GPU -- the per-point timestamps upload once as vertex "
               "attributes and each tick is a single uniform, so scrubbing "
-              "re-sends nothing.",
+              "re-sends nothing. <code>reference_time</code> calls out one moment "
+              "on the rail -- the past greys out to its left.",
         nb="06_time.ipynb",
         code='''\
 m = Map()
@@ -239,7 +240,8 @@ m.add_line(pings, line_id_col="vessel", order_col="timestamp",
            name="vessel", layer_group="Routes", color="#b0b7be", weight=2)
 m.add_circle_markers(pings, name="Pings", color_col="vessel", radius=7)
 m.make_time_layer("Pings", duration="PT6H", fade=True)
-m.configure_time(period="PT1H", speed=2, loop=True, position="bottom-center")
+m.configure_time(period="PT1H", speed=2, loop=True, position="bottom-center",
+                 reference_time="2026-08-01T12:00Z")       # "now", an incident...
 ''',
     ),
     dict(
@@ -252,6 +254,24 @@ m = Map()
 m.add_line(pings, line_id_col="vessel", order_col="timestamp",
            name="vessel", color_col="vessel", weight=3)
 m.configure_legend(show=True, title="Tracks")
+''',
+    ),
+    dict(
+        slug="arrows", title="Which way it went", api="arrows=",
+        blurb="Chevrons spaced in <em>screen pixels</em>, so the count you see holds "
+              "at every zoom instead of crowding or vanishing, and the end cap always "
+              "shows. <code>arrows=\"end\"</code> for caps only, "
+              "<code>dash=\"8 4\"</code> to pattern the stroke.",
+        nb="02_data_sources.ipynb",
+        code='''m = Map()
+sailed = pings[pings.vessel != "Vessel C"]
+planned = pings[pings.vessel == "Vessel C"]
+m.add_line(sailed, line_id_col="vessel", order_col="timestamp",
+           name="vessel", color_col="vessel", weight=3,
+           arrows=True, arrow_spacing=90)
+m.add_line(planned, line_id_col="vessel", order_col="timestamp",
+           name="Vessel C (planned)", color="#59a14f", weight=3,
+           dash="8 6", arrows="end")
 ''',
     ),
     dict(
@@ -283,6 +303,17 @@ survey = pd.DataFrame({
 })
 m = Map()
 m.add_collection(survey, name="label", layer_group="Survey")
+''',
+    ),
+    dict(
+        slug="cluster", title="Clustering: the folium question", api="cluster=True",
+        blurb="Count badges that split as you zoom in and dissolve into the points "
+              "themselves -- over 8,100 detections here, and the same WebGL layer "
+              "underneath, so clustering is a view of the data, not a second copy "
+              "of it. Zoom in to watch them come apart.",
+        nb="14_density.ipynb",
+        code='''m = Map()
+m.add_circle_markers(detections, name="Detections", cluster=True)
 ''',
     ),
     dict(
@@ -319,6 +350,23 @@ m = Map()
 m.add_heatmap(detections, cells="geohash", length=5, base=32,
               name="Geohash density")
 m.configure_legend(show=True, title="Detections per cell")
+''',
+    ),
+    dict(
+        slug="h3-table", title="A table of cell ids is a map", api="add_polygon(h3)",
+        blurb="<code>hexbin</code> returns an <code>h3</code> column and a count; "
+              "<code>add_polygon</code> draws each cell from its id -- no geometry, no "
+              "WKT. Unlike the density kernel these are ordinary features: one packed "
+              "layer, every hexagon clickable, real values in the popup and legend.",
+        nb="14_density.ipynb",
+        needs="h3",
+        code='''import swiftmap
+cells = swiftmap.hexbin(detections, resolution=6)    # columns: h3, count
+m = Map()
+m.add_polygon(cells, color_col="count", color_bins=[5, 25, 100, 300],
+              name="Cells", weight=1,
+              popup_fields=["h3", "count"], popup_names=["Cell", "Points"])
+m.configure_legend(show=True, title="Points per cell")
 ''',
     ),
     dict(
@@ -389,6 +437,21 @@ m.add_line(pings, line_id_col="vessel", order_col="timestamp",
            name="vessel", layer_group="Vessels", weight=3)
 m.select("North", scope="Dwells")       # hides South, leaves Vessels alone
 m.highlight("Vessel A", color="#ffcc00", lines={"weight": 6})
+''',
+    ),
+    dict(
+        slug="where", title="Select features, not layers", api="where=",
+        blurb="One layer holds all 600 sensors; <code>where=</code> draws only the rows "
+              "that match. The filter is a rule stored on the layer, not a list of "
+              "indices, so it keeps applying after <code>update_layer(data=...)</code> "
+              "-- a live feed stays filtered. In Python, "
+              "<code>m.clicked_feature()</code> hands back the clicked row.",
+        nb="05_layer_control.ipynb",
+        code='''m = Map()
+m.add_circle_markers(sensors, name="Sensors", color_col="status", radius=6,
+                     colormap={"Active": "#59a14f", "Idle": "#4e79a7",
+                               "Fault": "#e15759"})
+m.select("Sensors", where={"status": ["Fault", "Idle"]})   # Active rows: not drawn
 ''',
     ),
     dict(
@@ -672,6 +735,12 @@ def run(code, ns):
     if "m" not in scope:
         raise RuntimeError("a demo snippet must leave the map in `m`")
     return scope["m"]
+
+
+def _have(module):
+    """True when an optional dependency imports on this machine."""
+    import importlib.util
+    return importlib.util.find_spec(module) is not None
 
 
 def human(n):
@@ -1261,6 +1330,13 @@ def main():
     for card in CARDS:
         if wanted and card["slug"] not in wanted:
             continue
+        # `needs` names an optional dependency. A machine without it builds the
+        # rest of the site rather than failing -- the same bargain the notebooks
+        # strike, and the reason the gallery is safe to put on a release
+        # checklist. The card simply does not appear.
+        if card.get("needs") and not _have(card["needs"]):
+            print(f"  ! skipping {card['slug']}: needs {card['needs']}")
+            continue
         if card.get("needs") == "rasterio" and not dem_ok:
             continue
         code = card["code"]
@@ -1297,7 +1373,7 @@ def main():
     shutil.rmtree(scratch, ignore_errors=True)
 
     total = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
-    print(f"\ndocs/ written: {len(built)} cards, {len(tiers)} hero tiers, {human(total)} total")
+    print(f"\n{out} written: {len(built)} cards, {len(tiers)} hero tiers, {human(total)} total")
     print(f"  preview: python -m http.server -d {out} 8000")
 
 

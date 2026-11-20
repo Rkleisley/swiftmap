@@ -313,7 +313,7 @@ m.<span class="t-fn">legend_add</span>(<span class="t-str">&quot;Confidence&quot
       <article class="card">
         <header>
           <h3>A time slider over the same points <span class="api">make_time_layer</span></h3>
-          <p>Press play: the pings sweep along their routes, which stay put because only the point layer is timed. Point time filtering runs on the GPU -- the per-point timestamps upload once as vertex attributes and each tick is a single uniform, so scrubbing re-sends nothing.</p>
+          <p>Press play: the pings sweep along their routes, which stay put because only the point layer is timed. Point time filtering runs on the GPU -- the per-point timestamps upload once as vertex attributes and each tick is a single uniform, so scrubbing re-sends nothing. <code>reference_time</code> calls out one moment on the rail -- the past greys out to its left.</p>
         </header>
         <div class="map" data-demo="time"></div>
         <div class="code">
@@ -323,7 +323,8 @@ m.<span class="t-fn">add_line</span>(pings, <span class="t-kwa">line_id_col</spa
            <span class="t-kwa">name</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">layer_group</span>=<span class="t-str">&quot;Routes&quot;</span>, <span class="t-kwa">color</span>=<span class="t-str">&quot;#b0b7be&quot;</span>, <span class="t-kwa">weight</span>=<span class="t-num">2</span>)
 m.<span class="t-fn">add_circle_markers</span>(pings, <span class="t-kwa">name</span>=<span class="t-str">&quot;Pings&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">radius</span>=<span class="t-num">7</span>)
 m.<span class="t-fn">make_time_layer</span>(<span class="t-str">&quot;Pings&quot;</span>, <span class="t-kwa">duration</span>=<span class="t-str">&quot;PT6H&quot;</span>, <span class="t-kwa">fade</span>=<span class="t-kw">True</span>)
-m.<span class="t-fn">configure_time</span>(<span class="t-kwa">period</span>=<span class="t-str">&quot;PT1H&quot;</span>, <span class="t-kwa">speed</span>=<span class="t-num">2</span>, <span class="t-kwa">loop</span>=<span class="t-kw">True</span>, <span class="t-kwa">position</span>=<span class="t-str">&quot;bottom-center&quot;</span>)</code></pre>
+m.<span class="t-fn">configure_time</span>(<span class="t-kwa">period</span>=<span class="t-str">&quot;PT1H&quot;</span>, <span class="t-kwa">speed</span>=<span class="t-num">2</span>, <span class="t-kwa">loop</span>=<span class="t-kw">True</span>, <span class="t-kwa">position</span>=<span class="t-str">&quot;bottom-center&quot;</span>,
+                 <span class="t-kwa">reference_time</span>=<span class="t-str">&quot;2026-08-01T12:00Z&quot;</span>)       <span class="t-com"># &quot;now&quot;, an incident...</span></code></pre>
         </div>
         <footer>
           <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/06_time.ipynb">examples/06_time.ipynb</a>
@@ -347,6 +348,30 @@ m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<sp
         <footer>
           <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/02_data_sources.ipynb">examples/02_data_sources.ipynb</a>
           <span>8.5 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Which way it went <span class="api">arrows=</span></h3>
+          <p>Chevrons spaced in <em>screen pixels</em>, so the count you see holds at every zoom instead of crowding or vanishing, and the end cap always shows. <code>arrows="end"</code> for caps only, <code>dash="8 4"</code> to pattern the stroke.</p>
+        </header>
+        <div class="map" data-demo="arrows"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+<span class="t-kwa">sailed</span> = pings[pings.vessel != <span class="t-str">&quot;Vessel C&quot;</span>]
+<span class="t-kwa">planned</span> = pings[pings.vessel == <span class="t-str">&quot;Vessel C&quot;</span>]
+m.<span class="t-fn">add_line</span>(sailed, <span class="t-kwa">line_id_col</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">order_col</span>=<span class="t-str">&quot;timestamp&quot;</span>,
+           <span class="t-kwa">name</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">weight</span>=<span class="t-num">3</span>,
+           <span class="t-kwa">arrows</span>=<span class="t-kw">True</span>, <span class="t-kwa">arrow_spacing</span>=<span class="t-num">90</span>)
+m.<span class="t-fn">add_line</span>(planned, <span class="t-kwa">line_id_col</span>=<span class="t-str">&quot;vessel&quot;</span>, <span class="t-kwa">order_col</span>=<span class="t-str">&quot;timestamp&quot;</span>,
+           <span class="t-kwa">name</span>=<span class="t-str">&quot;Vessel C (planned)&quot;</span>, <span class="t-kwa">color</span>=<span class="t-str">&quot;#59a14f&quot;</span>, <span class="t-kwa">weight</span>=<span class="t-num">3</span>,
+           <span class="t-kwa">dash</span>=<span class="t-str">&quot;8 6&quot;</span>, <span class="t-kwa">arrows</span>=<span class="t-str">&quot;end&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/02_data_sources.ipynb">examples/02_data_sources.ipynb</a>
+          <span>8.3 KB on the wire</span>
         </footer>
       </article>
 
@@ -391,6 +416,23 @@ m.<span class="t-fn">add_collection</span>(survey, <span class="t-kwa">name</spa
         <footer>
           <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/02_data_sources.ipynb">examples/02_data_sources.ipynb</a>
           <span>3.0 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Clustering: the folium question <span class="api">cluster=True</span></h3>
+          <p>Count badges that split as you zoom in and dissolve into the points themselves -- over 8,100 detections here, and the same WebGL layer underneath, so clustering is a view of the data, not a second copy of it. Zoom in to watch them come apart.</p>
+        </header>
+        <div class="map" data-demo="cluster"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(detections, <span class="t-kwa">name</span>=<span class="t-str">&quot;Detections&quot;</span>, <span class="t-kwa">cluster</span>=<span class="t-kw">True</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/14_density.ipynb">examples/14_density.ipynb</a>
+          <span>282.1 KB on the wire</span>
         </footer>
       </article>
 
@@ -447,6 +489,28 @@ m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<sp
         <footer>
           <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/14_density.ipynb">examples/14_density.ipynb</a>
           <span>11.3 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>A table of cell ids is a map <span class="api">add_polygon(h3)</span></h3>
+          <p><code>hexbin</code> returns an <code>h3</code> column and a count; <code>add_polygon</code> draws each cell from its id -- no geometry, no WKT. Unlike the density kernel these are ordinary features: one packed layer, every hexagon clickable, real values in the popup and legend.</p>
+        </header>
+        <div class="map" data-demo="h3-table"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kw">import</span> swiftmap
+<span class="t-kwa">cells</span> = swiftmap.<span class="t-fn">hexbin</span>(detections, <span class="t-kwa">resolution</span>=<span class="t-num">6</span>)    <span class="t-com"># columns: h3, count</span>
+<span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_polygon</span>(cells, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;count&quot;</span>, <span class="t-kwa">color_bins</span>=[<span class="t-num">5</span>, <span class="t-num">25</span>, <span class="t-num">100</span>, <span class="t-num">300</span>],
+              <span class="t-kwa">name</span>=<span class="t-str">&quot;Cells&quot;</span>, <span class="t-kwa">weight</span>=<span class="t-num">1</span>,
+              <span class="t-kwa">popup_fields</span>=[<span class="t-str">&quot;h3&quot;</span>, <span class="t-str">&quot;count&quot;</span>], <span class="t-kwa">popup_names</span>=[<span class="t-str">&quot;Cell&quot;</span>, <span class="t-str">&quot;Points&quot;</span>])
+m.<span class="t-fn">configure_legend</span>(<span class="t-kwa">show</span>=<span class="t-kw">True</span>, <span class="t-kwa">title</span>=<span class="t-str">&quot;Points per cell&quot;</span>)</code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/14_density.ipynb">examples/14_density.ipynb</a>
+          <span>11.2 KB on the wire</span>
         </footer>
       </article>
 
@@ -547,6 +611,26 @@ m.<span class="t-fn">highlight</span>(<span class="t-str">&quot;Vessel A&quot;</
         <footer>
           <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/05_layer_control.ipynb">examples/05_layer_control.ipynb</a>
           <span>9.3 KB on the wire</span>
+        </footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>Select features, not layers <span class="api">where=</span></h3>
+          <p>One layer holds all 600 sensors; <code>where=</code> draws only the rows that match. The filter is a rule stored on the layer, not a list of indices, so it keeps applying after <code>update_layer(data=...)</code> -- a live feed stays filtered. In Python, <code>m.clicked_feature()</code> hands back the clicked row.</p>
+        </header>
+        <div class="map" data-demo="where"></div>
+        <div class="code">
+          <button class="copy" type="button">copy</button>
+          <pre><code><span class="t-kwa">m</span> = <span class="t-fn">Map</span>()
+m.<span class="t-fn">add_circle_markers</span>(sensors, <span class="t-kwa">name</span>=<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-kwa">color_col</span>=<span class="t-str">&quot;status&quot;</span>, <span class="t-kwa">radius</span>=<span class="t-num">6</span>,
+                     <span class="t-kwa">colormap</span>={<span class="t-str">&quot;Active&quot;</span>: <span class="t-str">&quot;#59a14f&quot;</span>, <span class="t-str">&quot;Idle&quot;</span>: <span class="t-str">&quot;#4e79a7&quot;</span>,
+                               <span class="t-str">&quot;Fault&quot;</span>: <span class="t-str">&quot;#e15759&quot;</span>})
+m.<span class="t-fn">select</span>(<span class="t-str">&quot;Sensors&quot;</span>, <span class="t-kwa">where</span>={<span class="t-str">&quot;status&quot;</span>: [<span class="t-str">&quot;Fault&quot;</span>, <span class="t-str">&quot;Idle&quot;</span>]})   <span class="t-com"># Active rows: not drawn</span></code></pre>
+        </div>
+        <footer>
+          <a href="https://github.com/Rkleisley/swiftmap/blob/main/examples/05_layer_control.ipynb">examples/05_layer_control.ipynb</a>
+          <span>40.8 KB on the wire</span>
         </footer>
       </article>
 
