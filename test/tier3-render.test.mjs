@@ -1137,6 +1137,50 @@ suite("a multi-part line leaves its gap unpainted and keeps GPU time", async () 
     }, "widget-vector.html", ".leaflet-polylines-pane canvas");
 });
 
+suite("a line with arrows still answers clicks next to its arrowheads", async () => {
+    // The arrows are a glify points instance, and glify's points dispatch runs
+    // before lines and treats a click near any point as handled. The arrows once
+    // passed `picking: false` -- not a glify option -- so every click near an
+    // arrowhead was swallowed and the line under it never answered.
+    await withPage(async (page, errors) => {
+        const box = await page.locator(".leaflet-container").boundingBox();
+        const at = async (lat, lng) => {
+            const off = await page.evaluate(([la, ln]) => {
+                const z = window.__model.get("zoom");
+                const c = window.__model.get("center");
+                const p = window.L.CRS.EPSG3857.latLngToPoint(window.L.latLng(la, ln), z);
+                const pc = window.L.CRS.EPSG3857.latLngToPoint(
+                    window.L.latLng(c[0], c[1]), z);
+                return [p.x - pc.x, p.y - pc.y];
+            }, [lat, lng]);
+            return [box.x + box.width / 2 + off[0], box.y + box.height / 2 + off[1]];
+        };
+        const clickAt = async (lat, lng) => {
+            const [x, y] = await at(lat, lng);
+            await page.mouse.click(x, y);
+            await page.waitForTimeout(400);
+            return page.evaluate(() => window.__model.get("clicked_layer_id"));
+        };
+        for (const mode of ["end", "segments"]) {
+            await page.evaluate((a) => {
+                const m = window.__model;
+                m.set("layers", m.get("layers").map(l =>
+                    l.id === "ln" ? { ...l, arrows: a } : l));
+            }, mode);
+            await page.waitForTimeout(1200);
+            assert.equal(await page.evaluate(() =>
+                window.L.glify.pointsInstances.some(p => p.active === false)), true,
+                `${mode}: the arrow glyphs exist and are inert`);
+            // The route runs (36.00, -5.35) -> (36.10, -5.15): its middle, and a
+            // point a few pixels short of its end arrowhead.
+            assert.equal(await clickAt(36.05, -5.25), "ln", `${mode}: mid-line answers`);
+            assert.equal(await clickAt(36.095, -5.16), "ln",
+                `${mode}: right beside the arrowhead still answers`);
+        }
+        assert.deepEqual(errors, []);
+    }, "widget-vector.html", ".leaflet-polylines-pane canvas");
+});
+
 suite("an in-place data update repaints the new positions and keeps visibility", async () => {
     // update_layer(data=...) sends a buffer op plus a replace for an EXISTING id.
     // The GL meta key used to carry only the buffer's byte length, so moving two

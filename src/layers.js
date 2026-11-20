@@ -623,12 +623,19 @@ export async function renderMergedGlLayer(map, type, layersList, coordinateBuffe
                                 pane: "polylinesPane",
                                 size: (i) => arrows.sizes[i],
                                 color: (i) => arrows.colors[i],
-                                // Decoration, not a click target: arrows must
-                                // never win a click from the line under them.
-                                picking: false,
                                 vertexShaderSource: () => arrowVertexShader(),
                                 fragmentShaderSource: () => ARROW_FRAGMENT,
                             });
+                            // Decoration, not a click target: arrows must never
+                            // win a click from the line under them. glify has no
+                            // `picking` option -- the `picking: false` this used to
+                            // pass was silently ignored -- and its points dispatch
+                            // runs before lines and counts a click within a point's
+                            // size as HANDLED even when the handler returns nothing,
+                            // so every click or hover near an arrow was swallowed
+                            // and the line never heard it. `active` gates only
+                            // glify's click/hover lookups, never drawing.
+                            this.glArrows.active = false;
                             setupGlifyProjection(this.glArrows);
                             this._arrowDeco = wireArrowDeco(this.glArrows, arrows);
                             if (vectorTime) {
