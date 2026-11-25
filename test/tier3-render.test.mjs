@@ -2747,3 +2747,36 @@ suite("collapsed= folds a panel from the start; a user's click then stands", asy
         assert.deepEqual(errors, []);
     });
 });
+
+suite("the Layers Control goes to any anchor and folds within it", async () => {
+    await withPage(async (page, errors) => {
+        const map = await page.locator(".leaflet-container").boundingBox();
+        const rect = () => page.locator(".swiftmap-sidebar").boundingBox();
+        const place = (position) => page.evaluate(
+            (p) => window.__model.set("layers_control_config", { position: p }), position)
+            .then(() => page.waitForTimeout(600));
+        const toggle = () => page.locator(".swiftmap-sidebar .swiftmap-panel-toggle").click()
+            .then(() => page.waitForTimeout(300));
+        const near = (a, b, what) => assert.ok(Math.abs(a - b) <= 2, `${what}: ${a} vs ${b}`);
+
+        const open0 = await rect();
+        near(open0.x + open0.width, map.x + map.width - 10, "default: right edge 10px in");
+        near(open0.y, map.y + 10, "default: top edge 10px in");
+
+        await place("bottom-left");
+        let open = await rect();
+        near(open.x, map.x + 10, "bottom-left: left edge");
+        near(open.y + open.height, map.y + map.height - 10, "bottom-left: bottom edge");
+        await toggle();
+        let shut = await rect();
+        near(shut.x, open.x, "folded: left edge holds");
+        near(shut.y + shut.height, open.y + open.height, "folded: bottom edge holds");
+        await toggle();
+
+        await place("top-center");
+        open = await rect();
+        near(open.x + open.width / 2, map.x + map.width / 2, "top-center: centred");
+        near(open.y, map.y + 10, "top-center: top edge");
+        assert.deepEqual(errors, []);
+    });
+});

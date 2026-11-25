@@ -959,7 +959,12 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
             }
         }
 
-        applyCollapsedSetting(sidebar, (host.get("layers_control_config") || {}).collapsed);
+        const controlCfg = host.get("layers_control_config") || {};
+        // The control's anchor, re-applied every sync like the legend's: any of
+        // the legend's eight positions, top-right when unset.
+        const controlPos = POSITIONS[controlCfg.position] || POSITIONS["top-right"];
+        for (const [prop, value] of Object.entries(controlPos)) sidebar.style[prop] = value;
+        applyCollapsedSetting(sidebar, controlCfg.collapsed);
         renderSidebarControls(sidebar, layers, {
             groupConfigs,
             coordinateBuffers,

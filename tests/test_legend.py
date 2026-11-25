@@ -45,6 +45,15 @@ def test_both_panels_can_start_folded_to_their_title():
     assert state["layers_control_config"] == {"collapsed": False},         "the export, Streamlit and the change counter carry it"
 
 
+def test_the_layers_control_takes_any_of_the_eight_anchors():
+    m = Map()
+    m.configure_layers_control(position="bottom-left")
+    assert m.layers_control_config == {"position": "bottom-left"}
+    with pytest.warns(SwiftMapWarning, match="unknown position 'middle'"):
+        m.configure_layers_control(position="middle")
+    assert m.layers_control_config == {"position": "bottom-left"}, "a bad value changes nothing"
+
+
 def test_bad_position_and_scope_warn_and_are_ignored():
     m = Map()
     with pytest.warns(SwiftMapWarning, match="unknown position"):

@@ -397,7 +397,7 @@ const SCENARIOS = {
         const m = createMapModel();
         m.configureLegend({ show: true, title: "Key", position: "bottom-right",
                             scope: "visible", collapsed: true });
-        m.configureLayersControl({ collapsed: true });
+        m.configureLayersControl({ collapsed: true, position: "bottom-right" });
         m.configureScale({ show: true, units: "nautical", maxWidth: 160 });
         m.configureDraw({ show: true, tools: ["rectangle", "polygon"],
                           position: "top-right" });

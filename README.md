@@ -392,7 +392,9 @@ m.add_markers(df, name="site",                 # each point named from its own r
 Toggling a folder toggles everything nested under it. The button in the Layers Control's
 title row folds the whole control to its title, in its corner; the legend's does the same
 wherever the legend is placed. `m.configure_layers_control(collapsed=True)` and
-`m.configure_legend(collapsed=True)` start them folded. Both scroll when they are taller
+`m.configure_legend(collapsed=True)` start them folded, and both take a `position` --
+any of eight anchors (`"top-right"` for the control and `"bottom-left"` for the legend
+by default). Both scroll when they are taller
 than the map. Configure a folder's behaviour with:
 
 ```python

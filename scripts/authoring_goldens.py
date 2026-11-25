@@ -584,7 +584,7 @@ def scenario_configures():
     m = Map(show_logo=False)
     m.configure_legend(show=True, title="Key", position="bottom-right", scope="visible",
                        collapsed=True)
-    m.configure_layers_control(collapsed=True)
+    m.configure_layers_control(collapsed=True, position="bottom-right")
     m.configure_scale(show=True, units="nautical", max_width=160)
     m.configure_draw(show=True, tools=["rectangle", "polygon"], position="top-right")
     m.configure_group("Feeds", collapsed=True)

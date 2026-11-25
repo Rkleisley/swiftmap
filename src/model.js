@@ -1127,10 +1127,19 @@ export function createMapModel(options = {}) {
     const DRAW_TOOLS = new Set(["marker", "polyline", "rectangle", "polygon", "circle"]);
 
     // The Layers Control's settings -- Python's configure_layers_control.
-    // `collapsed` is the starting fold; the core applies it when it changes.
+    // `collapsed` is the starting fold (the core applies it when it changes);
+    // `position` is one of the legend's eight anchors.
     function configureLayersControl(options = {}) {
         const cfg = { ...state.layers_control_config };
         if (options.collapsed != null) cfg.collapsed = !!options.collapsed;
+        if (options.position != null) {
+            if (!TIME_POSITIONS.has(options.position)) {
+                console.warn(`swiftmap: configureLayersControl: unknown position `
+                    + `'${options.position}'. Ignored.`);
+            } else {
+                cfg.position = options.position;
+            }
+        }
         state.layers_control_config = cfg;
         return model;
     }

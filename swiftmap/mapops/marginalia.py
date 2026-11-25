@@ -232,7 +232,8 @@ def configure_logo(self, company: Any = None, parent_company: Any = None, *,
     return self
 
 
-def configure_layers_control(self, *, collapsed: Optional[bool] = None) -> "Map":
+def configure_layers_control(self, *, collapsed: Optional[bool] = None,
+                             position: Optional[str] = None) -> "Map":
     """
     Configures the Layers Control, the panel of layer and folder toggles. Only the
     options given change.
@@ -240,10 +241,16 @@ def configure_layers_control(self, *, collapsed: Optional[bool] = None) -> "Map"
     Parameters
     ----------
     collapsed : bool, optional
-        Fold the control to its title, in its corner (top right). The button in
-        its title row unfolds it. This is the starting state: a user's own click
-        stands from then on, and calling again with a different value folds or
-        unfolds it from Python.
+        Fold the control to its title, in its corner. The button in its title row
+        unfolds it. This is the starting state: a user's own click stands from
+        then on, and calling again with a different value folds or unfolds it
+        from Python.
+    position : str, optional
+        One of the legend's eight anchors ('top-right' default): 'top-left',
+        'top-center', 'top-right', 'left-center', 'right-center', 'bottom-left',
+        'bottom-center', 'bottom-right'. Folded, the control sits in the same
+        anchor. Leaflet's zoom buttons sit top-left and the legend defaults
+        bottom-left; move one of a pair that would share a corner.
 
     Returns
     -------
@@ -253,9 +260,16 @@ def configure_layers_control(self, *, collapsed: Optional[bool] = None) -> "Map"
     Examples
     --------
     >>> m.configure_layers_control(collapsed=True)
+    >>> m.configure_layers_control(position="bottom-right")
     """
     cfg = dict(self.layers_control_config)
     if collapsed is not None:
         cfg["collapsed"] = bool(collapsed)
+    if position is not None:
+        if position not in self._LEGEND_POSITIONS:
+            warn(f"configure_layers_control: unknown position {position!r}; expected "
+                 f"one of {', '.join(sorted(self._LEGEND_POSITIONS))}. Ignored.")
+        else:
+            cfg["position"] = position
     self.layers_control_config = cfg
     return self

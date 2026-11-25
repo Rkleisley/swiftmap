@@ -89,7 +89,8 @@
    }
   ],
   "layers_control_config": {
-   "collapsed": true
+   "collapsed": true,
+   "position": "bottom-right"
   },
   "legend_config": {
    "collapsed": true,
