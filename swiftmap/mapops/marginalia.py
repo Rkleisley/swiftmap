@@ -94,8 +94,7 @@ def configure_scale(self, *, show: Optional[bool] = None,
     position : str, optional
         A corner: 'top-left', 'top-right', 'bottom-left' (default),
         'bottom-right'. Corners only -- Leaflet controls do not anchor to edge
-        centres. The legend also defaults bottom-left; move one of them when
-        both are on.
+        centres. A legend or other panel in the same corner sits above the bar.
     max_width : int, optional
         The bar's maximum width in pixels. Default 120.
 
@@ -249,8 +248,10 @@ def configure_layers_control(self, *, collapsed: Optional[bool] = None,
         One of the legend's eight anchors ('top-right' default): 'top-left',
         'top-center', 'top-right', 'left-center', 'right-center', 'bottom-left',
         'bottom-center', 'bottom-right'. Folded, the control sits in the same
-        anchor. Leaflet's zoom buttons sit top-left and the legend defaults
-        bottom-left; move one of a pair that would share a corner.
+        anchor. In a corner it sits clear of Leaflet's own controls there (the
+        zoom buttons, the attribution, a scale bar); two of swiftmap's panels in
+        one corner -- this and the legend, say -- still overlap, so give them
+        different anchors.
 
     Returns
     -------

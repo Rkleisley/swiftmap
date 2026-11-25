@@ -1,7 +1,7 @@
 import { L, provideLeaflet, requireLeaflet } from "./libs.js";
 import { warnLayerProblems } from "./validate.js";
 import { renderSidebarControls, normalizeRadioLayers, sidebarCollapseState } from "./sidebar.js";
-import { setPanelCollapsed } from "./panel.js";
+import { setPanelCollapsed, placePanel } from "./panel.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
 import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey,
@@ -523,6 +523,27 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
     logoDiv.style.display = "none";
     container.appendChild(logoDiv);
 
+    // Every overlay panel to its anchor -- the Layers Control, the legend, the
+    // logo, the time slider -- and, in a corner, clear of the Leaflet controls
+    // stacked there (placePanel, src/panel.js). Run after each sync, and whenever
+    // a corner's stack can change without one: a scale bar or draw toolbar
+    // toggled, the map resized (a long basemap credit wraps).
+    function placePanels() {
+        const anchorOf = (position, fallback) => (POSITIONS[position] ? position : fallback);
+        const control = anchorOf((host.get("layers_control_config") || {}).position, "top-right");
+        placePanel(sidebar, control, POSITIONS[control]);
+        const legend = anchorOf((host.get("legend_config") || {}).position, "bottom-left");
+        placePanel(legendDiv, legend, POSITIONS[legend]);
+        const logoCfg = host.get("logo_config") || {};
+        const logo = LOGO_POSITIONS.has(logoCfg.position) ? logoCfg.position : "bottom-right";
+        placePanel(logoDiv, logo, POSITIONS[logo]);
+        const timeEl = el.querySelector(".swiftmap-time-control");
+        if (timeEl) {
+            const time = anchorOf(timeUI.position, "top-center");
+            placePanel(timeEl, time, POSITIONS[time]);
+        }
+    }
+
     function syncLogo() {
         const show = Boolean(host.get("show_logo"));
         logoDiv.style.display = show ? "block" : "none";
@@ -530,10 +551,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         if (!show) return;
         const cfg = host.get("logo_config") || {};
         const height = Number(cfg.height) > 0 ? Number(cfg.height) : 35;
-        const position = LOGO_POSITIONS.has(cfg.position) ? cfg.position : "bottom-right";
-        for (const side of ["top", "bottom", "left", "right"]) logoDiv.style[side] = "";
-        logoDiv.style[position.startsWith("top") ? "top" : "bottom"] = "10px";
-        logoDiv.style[position.endsWith("left") ? "left" : "right"] = "10px";
+        placePanels();
         const slots = [cfg.company, cfg.parent_company].filter(s => s && s.url);
         const images = slots.length ? slots : [{ url: DEFAULT_LOGO, alt: "swiftmap" }];
         const row = document.createElement("div");
@@ -959,12 +977,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
             }
         }
 
-        const controlCfg = host.get("layers_control_config") || {};
-        // The control's anchor, re-applied every sync like the legend's: any of
-        // the legend's eight positions, top-right when unset.
-        const controlPos = POSITIONS[controlCfg.position] || POSITIONS["top-right"];
-        for (const [prop, value] of Object.entries(controlPos)) sidebar.style[prop] = value;
-        applyCollapsedSetting(sidebar, controlCfg.collapsed);
+        applyCollapsedSetting(sidebar, (host.get("layers_control_config") || {}).collapsed);
         renderSidebarControls(sidebar, layers, {
             groupConfigs,
             coordinateBuffers,
@@ -994,14 +1007,12 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
             applyCollapsedSetting(legendDiv, legendCfg.collapsed);
             renderLegend(legendDiv, spec,
                 { dimHidden: legendCfg.dim_hidden !== false });
-            const pos = POSITIONS[legendCfg.position] || POSITIONS["bottom-left"];
-            for (const [prop, value] of Object.entries(pos)) {
-                legendDiv.style[prop] = value;
-            }
             legendDiv.style.display = spec.groups.length > 0 ? "block" : "none";
         } else {
             legendDiv.style.display = "none";
         }
+        // Last, once everything that sits in a corner is in place.
+        placePanels();
         console.timeEnd("[Performance] syncMapState Total");
     }
 
@@ -1118,6 +1129,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         } else {
             map.pm.removeControls();
         }
+        placePanels();      // the toolbar joins or leaves a corner's stack
     }
     syncDraw();
     listen("change:show_draw", syncDraw);
@@ -1150,7 +1162,10 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
             scaleControl.remove();
             scaleControl = null;
         }
-        if (!host.get("show_scale")) return;
+        if (!host.get("show_scale")) {
+            placePanels();  // the bar left its corner's stack
+            return;
+        }
         const cfg = host.get("scale_config") || {};
         const units = cfg.units || "metric";
         const options = {
@@ -1163,10 +1178,13 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
             ? new NauticalScale(options)
             : L.control.scale(options);
         scaleControl.addTo(map);
+        placePanels();      // the bar joined its corner's stack
     }
     syncScale();
     listen("change:show_scale", syncScale);
     listen("change:scale_config", syncScale);
+    // A long basemap credit can wrap when the map narrows: re-measure.
+    map.on("resize", placePanels);
 
     // Empty-map clicks: report where. Registered through the same arbitration the
     // feature handlers use, at the lowest priority, so a click that hit a feature

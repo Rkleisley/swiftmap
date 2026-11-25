@@ -1380,8 +1380,17 @@ suite("the logo card is app-supplied, off by default, and carries data URIs", as
         assert.equal(state.imgs[0].alt, "Acme");
         assert.equal(state.imgs[0].height, "40px", "height is the configured pixels");
         assert.ok(state.imgs[0].ok, "the image decoded");
-        assert.deepEqual([state.pos.top, state.pos.left, state.pos.bottom, state.pos.right],
-            ["10px", "10px", "", ""], "anchored top-left");
+        assert.deepEqual([state.pos.left, state.pos.bottom, state.pos.right],
+            ["10px", "", ""], "anchored top-left");
+        // ...and below the zoom buttons, not over them: a corner panel clears the
+        // Leaflet controls stacked in its corner (src/panel.js placePanel).
+        const zoomBottom = await page.evaluate(() => {
+            const z = document.querySelector(".leaflet-control-zoom").getBoundingClientRect();
+            const c = document.querySelector(".leaflet-container").getBoundingClientRect();
+            return z.bottom - c.top;
+        });
+        assert.ok(parseFloat(state.pos.top) >= zoomBottom,
+            `top-left, under the zoom buttons: ${state.pos.top} vs ${zoomBottom}px`);
 
         // Live toggle, both ways.
         await set("show_logo", false);
@@ -1396,8 +1405,14 @@ suite("the logo card is app-supplied, off by default, and carries data URIs", as
         assert.equal(state.imgs.length, 1);
         assert.equal(state.imgs[0].scheme, "data:image/svg+xml", "the built-in mark is inline SVG");
         assert.ok(state.imgs[0].ok, "and it decodes");
-        assert.deepEqual([state.pos.bottom, state.pos.right], ["10px", "10px"],
-            "default corner is bottom-right");
+        assert.equal(state.pos.right, "10px", "default corner is bottom-right");
+        const clear = await page.evaluate(() => {
+            const logo = document.querySelector(".swiftmap-logo").getBoundingClientRect();
+            const credit = document.querySelector(".leaflet-control-attribution")
+                .getBoundingClientRect();
+            return logo.bottom <= credit.top;
+        });
+        assert.ok(clear, "...sitting above the attribution, never over the map's credit");
         assert.deepEqual(stray, [], "no request ever went to the old placeholder host");
         assert.deepEqual(errors, [], "no errors through the logo states");
     }, "widget.html");
@@ -2777,6 +2792,44 @@ suite("the Layers Control goes to any anchor and folds within it", async () => {
         open = await rect();
         near(open.x + open.width / 2, map.x + map.width / 2, "top-center: centred");
         near(open.y, map.y + 10, "top-center: top edge");
+        assert.deepEqual(errors, []);
+    });
+});
+
+suite("a panel in a corner clears the Leaflet controls stacked there", async () => {
+    // At a flat 10px a bottom-right panel covered the attribution -- the
+    // OpenStreetMap credit the tiles' licence requires on screen -- a bottom-left
+    // legend the scale bar, a top-left panel the zoom buttons.
+    await withPage(async (page, errors) => {
+        const box = (sel) => page.evaluate((s) => {
+            const r = document.querySelector(s).getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+        }, sel);
+        const set = (k, v) => page.evaluate(([key, value]) => window.__model.set(key, value),
+                                            [k, v]).then(() => page.waitForTimeout(600));
+
+        await set("layers_control_config", { position: "bottom-right" });
+        const control = await box(".swiftmap-sidebar");
+        const credit = await box(".leaflet-control-attribution");
+        assert.ok(control.bottom <= credit.top,
+            `the control sits above the credit: ${control.bottom} vs ${credit.top}`);
+
+        await set("show_legend", true);
+        await set("show_scale", true);
+        let legend = await box(".swiftmap-legend");
+        const scale = await box(".leaflet-control-scale");
+        assert.ok(legend.bottom <= scale.top,
+            `the legend sits above the scale bar: ${legend.bottom} vs ${scale.top}`);
+        await set("show_scale", false);
+        const map = await box(".leaflet-container");
+        legend = await box(".swiftmap-legend");
+        assert.ok(Math.abs(map.bottom - legend.bottom - 10) <= 1,
+            "with the bar gone, back down to 10px -- re-placed without a sync");
+
+        await set("layers_control_config", { position: "top-left" });
+        const zoom = await box(".leaflet-control-zoom");
+        assert.ok((await box(".swiftmap-sidebar")).top >= zoom.bottom,
+            "a top-left control sits under the zoom buttons");
         assert.deepEqual(errors, []);
     });
 });

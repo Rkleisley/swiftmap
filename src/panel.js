@@ -53,3 +53,25 @@ export function panelHeader(panel, title, rerender, { gap = "8px" } = {}) {
     });
     return header;
 }
+
+// Where a panel goes. `styles` is the anchor's offsets (timecontrol.js POSITIONS:
+// 10px in from the map's edges, a translate for the centred ones). In a CORNER the
+// panel also clears whatever Leaflet stacks there -- the zoom buttons top-left,
+// the attribution bottom-right, a scale bar, the draw toolbar -- measured live.
+// At a flat 10px a bottom-right panel covered the OpenStreetMap credit the tiles'
+// licence requires on screen, a top-left one the zoom buttons, a bottom-left
+// legend the scale bar.
+export function placePanel(panel, position, styles) {
+    for (const [prop, value] of Object.entries(styles)) panel.style[prop] = value;
+    const corner = /^(top|bottom)-(left|right)$/.exec(position || "");
+    if (!corner) return;
+    const [, vertical, horizontal] = corner;
+    const parent = panel.parentElement;
+    if (!parent) return;
+    const mapEl = parent.classList.contains("leaflet-container") ? parent
+        : parent.querySelector(".leaflet-container");
+    const stack = mapEl && mapEl.querySelector(
+        `.leaflet-control-container > .leaflet-${vertical}.leaflet-${horizontal}`);
+    const height = stack ? stack.getBoundingClientRect().height : 0;
+    if (height > 0) panel.style[vertical] = `${Math.ceil(height) + 10}px`;
+}

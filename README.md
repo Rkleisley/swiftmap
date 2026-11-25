@@ -394,7 +394,8 @@ title row folds the whole control to its title, in its corner; the legend's does
 wherever the legend is placed. `m.configure_layers_control(collapsed=True)` and
 `m.configure_legend(collapsed=True)` start them folded, and both take a `position` --
 any of eight anchors (`"top-right"` for the control and `"bottom-left"` for the legend
-by default). Both scroll when they are taller
+by default). In a corner, a panel sits clear of the map's own controls there — the zoom
+buttons, the attribution, a scale bar. Both scroll when they are taller
 than the map. Configure a folder's behaviour with:
 
 ```python

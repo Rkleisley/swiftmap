@@ -12,6 +12,8 @@
 
 // --- ISO8601 periods ---------------------------------------------------------------
 // Mirrors is_valid_period() in swiftmap/layers/_time.py; the grammar must not drift.
+import { placePanel } from "./panel.js";
+
 const PERIOD_RE =
     /^P(?!$)(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?!$)(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/;
 
@@ -216,10 +218,8 @@ export const POSITIONS = {
 };
 
 function applyPosition(el, position) {
-    const styles = POSITIONS[position] || POSITIONS["top-center"];
-    for (const [prop, value] of Object.entries(styles)) {
-        el.style[prop] = value;
-    }
+    const anchor = POSITIONS[position] ? position : "top-center";
+    placePanel(el, anchor, POSITIONS[anchor]);
 }
 
 function formatUTC(ms) {
