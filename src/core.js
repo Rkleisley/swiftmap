@@ -476,6 +476,19 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
     legendDiv.style.display = "none";
     container.appendChild(legendDiv);
 
+    // Both panels live INSIDE the Leaflet container, so every wheel over them
+    // reached the map's scroll-zoom handler -- which zooms and cancels the event:
+    // a long Layers Control or legend never scrolled, the map zoomed instead. A
+    // press bled through the same way (dragging a panel's scrollbar panned the map)
+    // and so did a click (it registered as a click on open map). Leaflet's own
+    // controls opt out exactly like this. overscroll-behavior keeps a panel
+    // scrolled to its end from scrolling the page or notebook around the map.
+    for (const panel of [sidebar, legendDiv]) {
+        L.DomEvent.disableScrollPropagation(panel);
+        L.DomEvent.disableClickPropagation(panel);
+        panel.style.overscrollBehavior = "contain";
+    }
+
     // Logo
     // The logo card: two app-supplied slots from logo_config, no branding of
     // its own. With the card on and neither slot set, swiftmap's own mark stands in

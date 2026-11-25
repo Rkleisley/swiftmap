@@ -2605,3 +2605,55 @@ suite("a where= filter on a point layer draws only the kept points", async () =>
         assert.deepEqual(errors, []);
     });
 });
+
+// --- panels over the map: the Layers Control and the legend -------------------------
+suite("the Layers Control and the legend scroll themselves, and keep the map still", async () => {
+    // Both panels live INSIDE the Leaflet container, so a wheel over either reached
+    // the map's scroll-zoom handler -- which zooms and cancels the event: the panel
+    // never scrolled and the map zoomed instead. A press or click bled through too.
+    await withPage(async (page, errors) => {
+        // Short enough to overflow with the fixture's few rows; the legend gets
+        // tall content of its own (its rows come from layer data otherwise).
+        await page.evaluate(() => {
+            const sidebar = document.querySelector(".swiftmap-sidebar");
+            sidebar.style.maxHeight = "60px";
+            const legend = document.querySelector(".swiftmap-legend");
+            legend.style.display = "block";
+            legend.style.bottom = "10px";
+            legend.style.left = "10px";
+            legend.style.maxHeight = "60px";
+            legend.innerHTML = Array.from({ length: 30 }, (_, i) => `<div>row ${i}</div>`).join("");
+        });
+        const view = () => page.evaluate(() => ({
+            zoom: window.__model.get("zoom"),
+            center: window.__model.get("center"),
+            seq: window.__model.get("click_seq") || 0,
+        }));
+        for (const selector of [".swiftmap-sidebar", ".swiftmap-legend"]) {
+            const box = await page.locator(selector).boundingBox();
+            const x = box.x + box.width / 2, y = box.y + box.height / 2;
+            const before = await view();
+            await page.mouse.move(x, y);
+            await page.mouse.wheel(0, 200);
+            await page.waitForTimeout(600);
+            const scrolled = await page.evaluate((s) => document.querySelector(s).scrollTop, selector);
+            assert.ok(scrolled > 0, `${selector}: the wheel scrolls the panel`);
+            const afterWheel = await view();
+            assert.equal(afterWheel.zoom, before.zoom, `${selector}: the map does not zoom`);
+
+            await page.mouse.click(box.x + 4, box.y + 4);
+            await page.waitForTimeout(400);
+            assert.equal((await view()).seq, before.seq,
+                `${selector}: a click on the panel is not a click on open map`);
+
+            await page.mouse.move(x, y);
+            await page.mouse.down();
+            await page.mouse.move(x - 120, y + 80, { steps: 8 });
+            await page.mouse.up();
+            await page.waitForTimeout(600);
+            assert.deepEqual((await view()).center, before.center,
+                `${selector}: dragging on the panel does not pan the map`);
+        }
+        assert.deepEqual(errors, []);
+    });
+});
