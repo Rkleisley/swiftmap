@@ -30,7 +30,7 @@ from .mapops.transport import (
     _layers_update_many, _set_layer_buffer, _append_layer_buffer, _remove_layer_buffers)
 from .mapops.marginalia import (
     _DRAW_TOOLS, _DRAW_POSITIONS, _SCALE_UNITS, _SCALE_POSITIONS, _LOGO_POSITIONS,
-    configure_draw, clear_drawings, configure_scale, configure_logo)
+    configure_draw, clear_drawings, configure_scale, configure_layers_control, configure_logo)
 from .mapops.legend import (
     _LEGEND_POSITIONS, configure_legend, legend_add, legend_remove,
     legend_clear, legend_html)
@@ -151,6 +151,7 @@ class Map(anywidget.AnyWidget):
     configure_draw = configure_draw
     clear_drawings = clear_drawings
     configure_scale = configure_scale
+    configure_layers_control = configure_layers_control
     _LOGO_POSITIONS = _LOGO_POSITIONS
     configure_logo = configure_logo
 
@@ -253,6 +254,9 @@ class Map(anywidget.AnyWidget):
     # (adds and persistent remove-matchers). Derivation and rendering live in
     # src/legend.js; Python only writes this.
     legend_config = traitlets.Dict({}).tag(sync=True)
+    # The Layers Control's settings (configure_layers_control): `collapsed`, the
+    # starting fold. A dict like legend_config, so more can follow without a trait each.
+    layers_control_config = traitlets.Dict({}).tag(sync=True)
     # Shared time-slider settings and its current position (epoch ms). One slider serves
     # every time layer, so its configuration is map state rather than layer state.
     time_config = traitlets.Dict({}).tag(sync=True)

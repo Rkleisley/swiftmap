@@ -146,6 +146,7 @@ function App() {
                       center={view.center} zoom={view.zoom} crs={view.crs}
                       height={`${px}px`}
                       showLegend={view.show_legend} legendConfig={view.legend_config}
+                      layersControlConfig={view.layers_control_config}
                       showScale={view.show_scale} scaleConfig={view.scale_config}
                       showDraw={view.show_draw} drawConfig={view.draw_config}
                       drawings={view.drawings}

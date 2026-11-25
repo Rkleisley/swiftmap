@@ -1,6 +1,6 @@
 {
  "buffers": {},
- "doc": "The marginalia surface: legend, scale, draw, group, logo -- only the\n    options given change, validated as in the frontend.",
+ "doc": "The marginalia surface: legend, scale, draw, group, logo, the Layers\n    Control -- only the options given change, validated as in the frontend.",
  "ops": [
   {
    "buffer": null,
@@ -88,7 +88,11 @@
     "visible": false
    }
   ],
+  "layers_control_config": {
+   "collapsed": true
+  },
   "legend_config": {
+   "collapsed": true,
    "position": "bottom-right",
    "scope": "visible",
    "title": "Key"

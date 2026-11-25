@@ -2712,3 +2712,38 @@ suite("a collapsed panel folds to its title, in its own corner", async () => {
         assert.deepEqual(errors, []);
     });
 });
+
+suite("collapsed= folds a panel from the start; a user's click then stands", async () => {
+    await withPage(async (page, errors) => {
+        const set = (key, value) => page.evaluate(([k, v]) => window.__model.set(k, v),
+                                                  [key, value])
+            .then(() => page.waitForTimeout(600));
+        const open = (sel) => page.locator(`${sel} .swiftmap-panel-toggle`)
+            .getAttribute("aria-expanded").then(v => v === "true");
+        const redraw = () => page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === "poly" ? { ...l, visible: !(l.visible !== false) } : l));
+        }).then(() => page.waitForTimeout(600));
+
+        await set("layers_control_config", { collapsed: true });
+        assert.equal(await open(".swiftmap-sidebar"), false, "the setting folds it");
+        assert.equal(await page.locator(".swiftmap-sidebar input").count(), 0);
+
+        await page.locator(".swiftmap-sidebar .swiftmap-panel-toggle").click();
+        await redraw();
+        assert.equal(await open(".swiftmap-sidebar"), true,
+            "the user's unfold survives a redraw; the unchanged setting is not re-applied");
+
+        await set("layers_control_config", { collapsed: false });
+        await set("layers_control_config", { collapsed: true });
+        assert.equal(await open(".swiftmap-sidebar"), false,
+            "a changed setting folds it again from Python");
+
+        await set("show_legend", true);
+        await set("legend_config", { collapsed: true });
+        assert.equal(await open(".swiftmap-legend"), false, "the legend's setting too");
+        assert.match(await page.locator(".swiftmap-legend").innerText(), /^Legend/);
+        assert.deepEqual(errors, []);
+    });
+});

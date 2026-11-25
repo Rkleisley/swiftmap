@@ -71,7 +71,7 @@ STATE_KEYS = (
     "layers", "group_configs", "center", "zoom", "crs", "show_logo", "logo_config",
     "show_legend", "show_click_coordinates", "show_scale", "scale_config", "show_draw",
     "draw_config", "drawings", "height", "legend_config", "fit_bounds_request",
-    "time_config", "time_current",
+    "time_config", "time_current", "layers_control_config",
 )
 
 

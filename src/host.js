@@ -14,7 +14,8 @@
  *
  * The core reads these keys through get(): layers, coordinate_buffers, group_configs,
  * center, zoom, crs, height, auto_sync, sync_trigger, show_logo, logo_config,
- * show_legend, legend_config, show_scale, scale_config, show_draw, draw_config,
+ * show_legend, legend_config, layers_control_config, show_scale, scale_config,
+ * show_draw, draw_config,
  * drawings, draw_seq, show_click_coordinates, time_config, time_current,
  * fit_bounds_request, js_console_logs. It writes back through set(): center, zoom,
  * clicked_layer_id, selected_index, clicked_latlng, click_seq, drawings, draw_seq,

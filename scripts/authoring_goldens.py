@@ -579,10 +579,12 @@ def scenario_point_name_column():
 
 
 def scenario_configures():
-    """The marginalia surface: legend, scale, draw, group, logo -- only the
-    options given change, validated as in the frontend."""
+    """The marginalia surface: legend, scale, draw, group, logo, the Layers
+    Control -- only the options given change, validated as in the frontend."""
     m = Map(show_logo=False)
-    m.configure_legend(show=True, title="Key", position="bottom-right", scope="visible")
+    m.configure_legend(show=True, title="Key", position="bottom-right", scope="visible",
+                       collapsed=True)
+    m.configure_layers_control(collapsed=True)
     m.configure_scale(show=True, units="nautical", max_width=160)
     m.configure_draw(show=True, tools=["rectangle", "polygon"], position="top-right")
     m.configure_group("Feeds", collapsed=True)

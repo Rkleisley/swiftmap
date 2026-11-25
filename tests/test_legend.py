@@ -30,6 +30,21 @@ def test_configure_legend_show_flips_the_trait():
     assert m.show_legend is True
 
 
+def test_both_panels_can_start_folded_to_their_title():
+    from swiftmap.export import compose_state
+    m = Map()
+    m.configure_legend(show=True, collapsed=True)
+    m.configure_layers_control(collapsed=True)
+    assert m.legend_config["collapsed"] is True
+    assert m.layers_control_config == {"collapsed": True}
+    m.configure_legend(title="Key")
+    assert m.legend_config["collapsed"] is True, "only the options given change"
+    m.configure_layers_control(collapsed=0)
+    assert m.layers_control_config == {"collapsed": False}, "coerced like every flag"
+    state = compose_state(m)
+    assert state["layers_control_config"] == {"collapsed": False},         "the export, Streamlit and the change counter carry it"
+
+
 def test_bad_position_and_scope_warn_and_are_ignored():
     m = Map()
     with pytest.warns(SwiftMapWarning, match="unknown position"):

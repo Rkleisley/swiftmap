@@ -1,6 +1,7 @@
 import { L, provideLeaflet, requireLeaflet } from "./libs.js";
 import { warnLayerProblems } from "./validate.js";
 import { renderSidebarControls, normalizeRadioLayers, sidebarCollapseState } from "./sidebar.js";
+import { setPanelCollapsed } from "./panel.js";
 import { deriveLegendSpec, renderLegend } from "./legend.js";
 import { renderLabels } from "./labels.js";
 import { renderLayer, renderMergedGlLayer, registerClickMatch, imageMetaKey,
@@ -489,6 +490,18 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         panel.style.overscrollBehavior = "contain";
     }
 
+    // The panels' `collapsed` SETTING (configure_layers_control /
+    // configure_legend), applied only when its value changes: it is the starting
+    // fold, a user's own click stands from then on -- through every redraw -- and
+    // a later call with a different value folds or unfolds the panel. Unset
+    // leaves the panel as it is.
+    const appliedCollapse = new WeakMap();
+    function applyCollapsedSetting(panel, value) {
+        if (typeof value !== "boolean" || appliedCollapse.get(panel) === value) return;
+        appliedCollapse.set(panel, value);
+        setPanelCollapsed(panel, value);
+    }
+
     // Logo
     // The logo card: two app-supplied slots from logo_config, no branding of
     // its own. With the card on and neither slot set, swiftmap's own mark stands in
@@ -946,6 +959,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
             }
         }
 
+        applyCollapsedSetting(sidebar, (host.get("layers_control_config") || {}).collapsed);
         renderSidebarControls(sidebar, layers, {
             groupConfigs,
             coordinateBuffers,
@@ -972,6 +986,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
         const legendCfg = host.get("legend_config") || {};
         if (host.get("show_legend")) {
             const spec = deriveLegendSpec(layers, groupConfigs, legendCfg);
+            applyCollapsedSetting(legendDiv, legendCfg.collapsed);
             renderLegend(legendDiv, spec,
                 { dimHidden: legendCfg.dim_hidden !== false });
             const pos = POSITIONS[legendCfg.position] || POSITIONS["bottom-left"];
@@ -1382,6 +1397,7 @@ export async function createSwiftMap({ host, el, leaflet = null }) {
     listen("change:show_logo", queueSync);
     listen("change:show_legend", queueSync);
     listen("change:legend_config", queueSync);
+    listen("change:layers_control_config", queueSync);
     // Live resizes (a Shiny layout, a notebook cell): Leaflet caches its box, so
     // it must be told to re-measure or tiles render for the old size.
     listen("change:height", () => {

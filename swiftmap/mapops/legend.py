@@ -16,6 +16,7 @@ def configure_legend(self, *, title: Optional[str] = None,
                      auto: Optional[bool] = None,
                      scope: Optional[str] = None,
                      dim_hidden: Optional[bool] = None,
+                     collapsed: Optional[bool] = None,
                      show: Optional[bool] = None) -> "Map":
     """
     Configures the legend overlay. Only the options given change.
@@ -38,6 +39,10 @@ def configure_legend(self, *, title: Optional[str] = None,
     dim_hidden : bool, optional
         Under scope 'all', whether hidden layers render dimmed. Default True;
         False gives the print-style static legend.
+    collapsed : bool, optional
+        Fold the legend to its title, in its corner. The button in its title row
+        unfolds it. This is the starting state: a user's own click stands from then
+        on, and calling again with a different value folds or unfolds it from Python.
     show : bool, optional
         Convenience for setting `show_legend`.
 
@@ -45,6 +50,7 @@ def configure_legend(self, *, title: Optional[str] = None,
     --------
     >>> m.configure_legend(show=True, position="bottom-right", title="Key")
     >>> m.configure_legend(auto=False)     # manual entries only
+    >>> m.configure_legend(show=True, collapsed=True)
     """
     cfg = dict(self.legend_config)
     if title is not None:
@@ -65,6 +71,8 @@ def configure_legend(self, *, title: Optional[str] = None,
             cfg["scope"] = scope
     if dim_hidden is not None:
         cfg["dim_hidden"] = bool(dim_hidden)
+    if collapsed is not None:
+        cfg["collapsed"] = bool(collapsed)
     self.legend_config = cfg
     if show is not None:
         self.show_legend = bool(show)

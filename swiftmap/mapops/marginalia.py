@@ -230,3 +230,32 @@ def configure_logo(self, company: Any = None, parent_company: Any = None, *,
     if show is not None:
         self.show_logo = bool(show)
     return self
+
+
+def configure_layers_control(self, *, collapsed: Optional[bool] = None) -> "Map":
+    """
+    Configures the Layers Control, the panel of layer and folder toggles. Only the
+    options given change.
+
+    Parameters
+    ----------
+    collapsed : bool, optional
+        Fold the control to its title, in its corner (top right). The button in
+        its title row unfolds it. This is the starting state: a user's own click
+        stands from then on, and calling again with a different value folds or
+        unfolds it from Python.
+
+    Returns
+    -------
+    Map
+        Self reference for method chaining.
+
+    Examples
+    --------
+    >>> m.configure_layers_control(collapsed=True)
+    """
+    cfg = dict(self.layers_control_config)
+    if collapsed is not None:
+        cfg["collapsed"] = bool(collapsed)
+    self.layers_control_config = cfg
+    return self

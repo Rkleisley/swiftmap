@@ -239,6 +239,7 @@ export function createMapModel(options = {}) {
         auto_sync: true, sync_trigger: 0,
         show_logo: false, logo_config: {},
         show_legend: opt(options, "showLegend", "show_legend", false), legend_config: {},
+        layers_control_config: {},
         show_scale: opt(options, "showScale", "show_scale", false), scale_config: {},
         show_draw: opt(options, "showDraw", "show_draw", false), draw_config: {},
         drawings: [], draw_seq: 0,
@@ -1125,6 +1126,15 @@ export function createMapModel(options = {}) {
     const SCALE_UNITS = new Set(["metric", "imperial", "both", "nautical"]);
     const DRAW_TOOLS = new Set(["marker", "polyline", "rectangle", "polygon", "circle"]);
 
+    // The Layers Control's settings -- Python's configure_layers_control.
+    // `collapsed` is the starting fold; the core applies it when it changes.
+    function configureLayersControl(options = {}) {
+        const cfg = { ...state.layers_control_config };
+        if (options.collapsed != null) cfg.collapsed = !!options.collapsed;
+        state.layers_control_config = cfg;
+        return model;
+    }
+
     function configureLegend(options = {}) {
         const cfg = { ...state.legend_config };
         if (options.title != null) cfg.title = options.title;
@@ -1145,6 +1155,7 @@ export function createMapModel(options = {}) {
         }
         const dimHidden = opt(options, "dimHidden", "dim_hidden");
         if (dimHidden != null) cfg.dim_hidden = !!dimHidden;
+        if (options.collapsed != null) cfg.collapsed = !!options.collapsed;
         state.legend_config = cfg;
         if (options.show != null) state.show_legend = !!options.show;
         else if (Object.keys(options).length && !state.show_legend) {
@@ -2360,6 +2371,7 @@ export function createMapModel(options = {}) {
             center: state.center, zoom: state.zoom, crs: state.crs,
             height: state.height || undefined,
             showLegend: state.show_legend, legendConfig: state.legend_config,
+            layersControlConfig: state.layers_control_config,
             showScale: state.show_scale, scaleConfig: state.scale_config,
             showDraw: state.show_draw, drawConfig: state.draw_config,
             drawings: state.drawings,
@@ -2374,6 +2386,7 @@ export function createMapModel(options = {}) {
         addHeatmap,
         addBasemap, listBasemaps, subscribe,
         configureLegend, configureScale, configureDraw, configureLogo,
+        configureLayersControl,
         configureGroup, clearDrawings, fitBounds,
         makeTimeLayer, clearTimeLayer, configureTime,
         findLayers, getLayer,
