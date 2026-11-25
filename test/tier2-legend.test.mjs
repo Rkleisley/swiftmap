@@ -156,3 +156,21 @@ test("a size key is a statement, not a drawing", () => {
         .filter(d => d.style.borderRadius === "50%").length, 0,
         "no sample circles -- legend pixels are not map pixels at any zoom");
 });
+
+test("the legend collapses to its title and stays collapsed across re-renders", () => {
+    const dom = new JSDOM("<!doctype html><div id='legend'></div>");
+    globalThis.document = dom.window.document;
+    const el = dom.window.document.getElementById("legend");
+    const spec = { title: "Key", groups: [{ name: "Feeds", entries: [swatch("Sites")] }] };
+    renderLegend(el, spec);
+    const toggle = () => el.querySelector(".swiftmap-panel-toggle");
+    assert.equal(toggle().getAttribute("aria-label"), "Collapse Key");
+    toggle().dispatchEvent(new dom.window.Event("click", { bubbles: true }));
+    assert.ok(el.textContent.includes("Key"), "the title stays");
+    assert.ok(!el.textContent.includes("Feeds") && !el.textContent.includes("Sites"));
+    assert.equal(toggle().getAttribute("aria-label"), "Expand Key");
+    renderLegend(el, spec);
+    assert.ok(!el.textContent.includes("Sites"), "still collapsed after a sync");
+    toggle().dispatchEvent(new dom.window.Event("click", { bubbles: true }));
+    assert.ok(el.textContent.includes("Sites"));
+});

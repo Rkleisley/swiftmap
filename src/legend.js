@@ -12,6 +12,7 @@
 // manual entries at legend_add), so there is no anchor table to drift.
 
 import { isLayerEffectiveVisible } from "./patch.js";
+import { panelHeader, isPanelCollapsed } from "./panel.js";
 
 const GLYPHS = {
     circle_markers: "circle",
@@ -316,10 +317,10 @@ export function renderLegend(container, spec, options = {}) {
         collapsed = new Set();
         legendCollapsedByContainer.set(container, collapsed);
     }
-    container.appendChild(div({
-        fontSize: "13px", fontWeight: "bold", borderBottom: "2px solid #eee",
-        paddingBottom: "4px", marginBottom: "4px",
-    }, spec.title));
+    // The title row folds the legend to its title, in its corner (src/panel.js).
+    container.appendChild(panelHeader(container, spec.title,
+        () => renderLegend(container, spec, options), { gap: "4px" }));
+    if (isPanelCollapsed(container)) return container;
 
     for (const group of spec.groups) {
         const isCollapsed = group.name && collapsed.has(group.name);

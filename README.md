@@ -389,7 +389,10 @@ m.add_markers(df, name="site",                 # each point named from its own r
 # -> Sensor Feeds / EMEA / Active, Sensor Feeds / EMEA / Inactive, ...
 ```
 
-Toggling a folder toggles everything nested under it. Configure a folder's behaviour with:
+Toggling a folder toggles everything nested under it. The button in the Layers Control's
+title row folds the whole control to its title, in its corner; the legend's does the same
+wherever the legend is placed. Both scroll when they are taller than the map. Configure a
+folder's behaviour with:
 
 ```python
 m.configure_group("Sensor Feeds", collapsed=True)

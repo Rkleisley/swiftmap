@@ -2657,3 +2657,58 @@ suite("the Layers Control and the legend scroll themselves, and keep the map sti
         assert.deepEqual(errors, []);
     });
 });
+
+suite("a collapsed panel folds to its title, in its own corner", async () => {
+    await withPage(async (page, errors) => {
+        await page.evaluate(() => window.__model.set("show_legend", true));
+        await page.waitForTimeout(800);
+        const rect = (sel) => page.locator(sel).boundingBox();
+        const toggle = (sel) => page.locator(`${sel} .swiftmap-panel-toggle`).click()
+            .then(() => page.waitForTimeout(300));
+        const near = (a, b, what) => assert.ok(Math.abs(a - b) <= 1, `${what}: ${a} vs ${b}`);
+
+        // The legend, at three of its eight anchors: each edge it is pinned by
+        // must not move when it folds -- it shrinks INTO its corner.
+        const anchors = {
+            "bottom-left": (o, s) => { near(s.x, o.x, "left edge");
+                                       near(s.y + s.height, o.y + o.height, "bottom edge"); },
+            "top-center": (o, s) => { near(s.y, o.y, "top edge");
+                                      near(s.x + s.width / 2, o.x + o.width / 2, "centre"); },
+            "right-center": (o, s) => { near(s.x + s.width, o.x + o.width, "right edge");
+                                        near(s.y + s.height / 2, o.y + o.height / 2, "middle"); },
+        };
+        for (const [position, check] of Object.entries(anchors)) {
+            await page.evaluate((p) => window.__model.set("legend_config", { position: p }),
+                                position);
+            await page.waitForTimeout(500);
+            const open = await rect(".swiftmap-legend");
+            await toggle(".swiftmap-legend");
+            const shut = await rect(".swiftmap-legend");
+            assert.ok(shut.height < open.height, `${position}: it folds`);
+            check(open, shut);
+            const text = await page.locator(".swiftmap-legend").innerText();
+            assert.match(text, /^Legend/, `${position}: the title is what remains`);
+            assert.doesNotMatch(text, /Sites/);
+            await toggle(".swiftmap-legend");
+        }
+
+        // The Layers Control, pinned top-right; and the fold survives a re-render.
+        const open = await rect(".swiftmap-sidebar");
+        await toggle(".swiftmap-sidebar");
+        const shut = await rect(".swiftmap-sidebar");
+        near(shut.y, open.y, "top edge");
+        near(shut.x + shut.width, open.x + open.width, "right edge");
+        assert.ok(shut.width < open.width && shut.height < open.height);
+        await page.evaluate(() => {
+            const m = window.__model;
+            m.set("layers", m.get("layers").map(l =>
+                l.id === "poly" ? { ...l, visible: false } : l));
+        });
+        await page.waitForTimeout(800);
+        assert.equal(await page.locator(".swiftmap-sidebar input").count(), 0,
+            "still collapsed after a sync re-rendered it");
+        await toggle(".swiftmap-sidebar");
+        assert.ok(await page.locator(".swiftmap-sidebar input").count() > 0, "expands again");
+        assert.deepEqual(errors, []);
+    });
+});

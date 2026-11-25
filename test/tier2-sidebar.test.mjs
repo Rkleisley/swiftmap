@@ -573,3 +573,32 @@ test("a merged entry's checkbox reads what the entry draws (round-4 gap J)", () 
     assert.equal(box("dk1").checked, false, "an entry drawing nothing reads unchecked");
     assert.equal(box("lt1").checked, true, "an entry drawing something reads checked");
 });
+// --- collapsing the whole control to its title ----------------------------------------
+test("the control collapses to its title and stays collapsed across re-renders", () => {
+    const layers = [layer({ id: "1", name: "Alpha", layer_group: "Layers" })];
+    const { el, model, map, dom } = mount(layers);
+    const toggle = () => el.querySelector(".swiftmap-panel-toggle");
+    assert.equal(toggle().getAttribute("aria-expanded"), "true");
+    toggle().dispatchEvent(new dom.window.Event("click", { bubbles: true }));
+    assert.ok(el.textContent.includes("Layers Control"), "the title stays");
+    assert.ok(!el.textContent.includes("Alpha"), "the tree is gone");
+    assert.equal(inputs(el).length, 0);
+    assert.equal(el.style.width, "auto", "the box takes the title's width, not the tree's");
+    assert.equal(toggle().getAttribute("aria-expanded"), "false");
+    // Every sync re-renders the control from scratch; the fold must survive it.
+    renderSidebarControls(el, layers, contextFor(model), map, () => {});
+    assert.ok(!el.textContent.includes("Alpha"), "still collapsed after a sync");
+    toggle().dispatchEvent(new dom.window.Event("click", { bubbles: true }));
+    assert.ok(el.textContent.includes("Alpha"), "expanding brings the tree back");
+    assert.equal(el.style.width, "", "and the stylesheet's width");
+});
+
+test("collapsing one map's control leaves another map's open", () => {
+    const layers = [layer({ id: "1", name: "Alpha", layer_group: "Layers" })];
+    const a = mount(layers);
+    const b = mount(layers);
+    a.el.querySelector(".swiftmap-panel-toggle")
+        .dispatchEvent(new a.dom.window.Event("click", { bubbles: true }));
+    assert.ok(!a.el.textContent.includes("Alpha"));
+    assert.ok(b.el.textContent.includes("Alpha"));
+});

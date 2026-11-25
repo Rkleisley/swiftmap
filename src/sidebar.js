@@ -1,3 +1,5 @@
+import { panelHeader, isPanelCollapsed } from "./panel.js";
+
 // Folder collapse state, PER SIDEBAR. It used to be one module-level object, so
 // two maps on one page shared it -- collapsing a folder in one collapsed it in
 // the other. Keyed by the container element, exactly as the legend keeps its own
@@ -192,7 +194,14 @@ export function normalizeRadioLayers(layers, groupConfigs, collapsedPaths = {}) 
 //   onLayerWrite(changes)  targeted visibility flips to send on
 //   onGroupConfigsChange(groupConfigs)  the folder flags to commit
 export function renderSidebarControls(sidebar, layers, ctx, map, onLayerToggle) {
-    sidebar.innerHTML = "<b style='font-size: 13px; border-bottom: 2px solid #eee; padding-bottom: 4px; display: block; margin-bottom: 8px;'>Layers Control</b>";
+    sidebar.innerHTML = "";
+    // The title row folds the whole control to its title, in its corner
+    // (src/panel.js); collapsed, nothing below it is built.
+    sidebar.appendChild(panelHeader(sidebar, "Layers Control",
+        () => renderSidebarControls(sidebar, layers, ctx, map, onLayerToggle)));
+    const panelCollapsed = isPanelCollapsed(sidebar);
+    // The fixed width is for the tree; the title alone takes only its own.
+    sidebar.style.width = panelCollapsed ? "auto" : "";
 
     const collapsedPaths = sidebarCollapseState(sidebar);
     const groupConfigs = (ctx && ctx.groupConfigs) || {};
@@ -204,6 +213,7 @@ export function renderSidebarControls(sidebar, layers, ctx, map, onLayerToggle) 
     if (!groupConfigs[""]) {
         groupConfigs[""] = { multi_select: true, visible: true };
     }
+    if (panelCollapsed) return;
 
     layers.forEach(l => {
         const pathStr = l.layer_group || "Layers";
